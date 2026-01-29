@@ -5,7 +5,7 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "4000:4000"
     volumes:
       # Persistencia de datos (Ajusta la ruta de la izquierda según tu NAS)
       - ./data:/app/data
