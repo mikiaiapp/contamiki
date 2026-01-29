@@ -8,7 +8,7 @@ services:
       - "4000:4000"
     volumes:
       # Persistencia de datos (Ajusta la ruta de la izquierda según tu NAS)
-      - ./data:/app/data
+      - /volume1/docker/contamiki/data:/app/data
     environment:
       # Tu API Key de Google Gemini
       - API_KEY=AIzaSyByt2qp5UYhL-bhf1me82AM81PEJ7MJyYE
