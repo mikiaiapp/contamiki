@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { AppState, Account, Family, Category } from '../types';
-import { Plus, Trash2, Edit2, Upload, X } from 'lucide-react';
+import { Plus, Trash2, Edit2, Upload, X, RotateCcw, FileSpreadsheet, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface SettingsViewProps {
   data: AppState;
@@ -19,7 +20,7 @@ const ICON_KEYWORDS: Record<string, string> = {
 };
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }) => {
-  const [activeTab, setActiveTab] = useState<'HIERARCHY' | 'ACCOUNTS'>('HIERARCHY');
+  const [activeTab, setActiveTab] = useState<'HIERARCHY' | 'ACCOUNTS' | 'IMPORT'>('HIERARCHY');
   
   // -- Helper para Redimensionar Imágenes --
   const resizeImage = (file: File): Promise<string> => {
@@ -45,7 +46,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       for (const [key, emoji] of Object.entries(ICON_KEYWORDS)) {
           if (lower.includes(key)) return emoji;
       }
-      return '';
+      // Default icon if no match found
+      return '📝';
   };
 
   // --- CUENTAS STATE ---
@@ -142,8 +144,109 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       setCatId(null); setCatName(''); setCatIcon('🏷️');
   };
 
+  // --- HANDLERS IMPORT ---
+  const downloadTemplate = () => {
+      const headers = ['Tipo', 'Nombre', 'Grupo', 'Naturaleza', 'Saldo', 'Icono'];
+      const rows = [
+          ['Familia', 'Vivienda', '', 'Gasto', '', '🏠'],
+          ['Categoria', 'Alquiler', 'Vivienda', '', '', '🔑'],
+          ['Cuenta', 'Mi Banco', '', '', '1000', '🏦'],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Plantilla");
+      XLSX.writeFile(wb, "contamiki_plantilla.xlsx");
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+          try {
+              const bstr = evt.target?.result;
+              const wb = XLSX.read(bstr, { type: 'binary' });
+              const wsname = wb.SheetNames[0];
+              const ws = wb.Sheets[wsname];
+              const jsonData = XLSX.utils.sheet_to_json(ws) as any[];
+
+              const newFamilies: Family[] = [...data.families];
+              const newCategories: Category[] = [...data.categories];
+              const newAccounts: Account[] = [...data.accounts];
+
+              // 1. Process Families & Accounts first
+              jsonData.forEach(row => {
+                  const type = (row.Tipo || '').toLowerCase().trim();
+                  const name = (row.Nombre || '').trim();
+                  if (!name) return;
+
+                  if (type === 'familia') {
+                      if (!newFamilies.find(f => f.name.toLowerCase() === name.toLowerCase())) {
+                          newFamilies.push({
+                              id: crypto.randomUUID(),
+                              name,
+                              type: (row.Naturaleza || 'Gasto').toLowerCase().includes('ingreso') ? 'INCOME' : 'EXPENSE',
+                              icon: row.Icono || suggestIcon(name)
+                          });
+                      }
+                  } else if (type === 'cuenta') {
+                      if (!newAccounts.find(a => a.name.toLowerCase() === name.toLowerCase())) {
+                          newAccounts.push({
+                              id: crypto.randomUUID(),
+                              name,
+                              initialBalance: parseFloat(row.Saldo) || 0,
+                              currency: 'EUR',
+                              icon: row.Icono || suggestIcon(name)
+                          });
+                      }
+                  }
+              });
+
+              // 2. Process Categories (Need Families to exist)
+              jsonData.forEach(row => {
+                  const type = (row.Tipo || '').toLowerCase().trim();
+                  if (type === 'categoria') {
+                      const name = (row.Nombre || '').trim();
+                      const parentName = (row.Grupo || '').trim();
+                      if (!name || !parentName) return;
+
+                      // Find parent family in the UPDATED list
+                      const family = newFamilies.find(f => f.name.toLowerCase() === parentName.toLowerCase());
+                      
+                      if (family) {
+                           // Check duplicates in THIS family
+                           if (!newCategories.find(c => c.name.toLowerCase() === name.toLowerCase() && c.familyId === family.id)) {
+                               newCategories.push({
+                                   id: crypto.randomUUID(),
+                                   name,
+                                   familyId: family.id,
+                                   icon: row.Icono || suggestIcon(name)
+                               });
+                           }
+                      }
+                  }
+              });
+
+              onUpdateData({
+                  families: newFamilies,
+                  accounts: newAccounts,
+                  categories: newCategories
+              });
+              
+              alert('Datos importados correctamente.');
+              if(e.target) e.target.value = ''; // Reset input
+
+          } catch (err) {
+              console.error(err);
+              alert('Error al leer el archivo. Asegúrate de usar el formato correcto.');
+          }
+      };
+      reader.readAsBinaryString(file);
+  };
+
   // --- Generic Render Icon Input ---
-  const renderIconInput = (icon: string, setIcon: (s: string) => void, nameRef: string, fileRef: React.RefObject<HTMLInputElement>) => {
+  const renderIconInput = (icon: string, setIcon: (s: string) => void, nameForReset: string, fileRef: React.RefObject<HTMLInputElement>) => {
       const isImage = icon.startsWith('data:image');
       return (
           <div className="flex gap-2 items-center">
@@ -161,6 +264,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                    onChange={e => setIcon(e.target.value)}
                    disabled={isImage}
                />
+               <button 
+                  onClick={() => setIcon(suggestIcon(nameForReset))} 
+                  className="p-2 text-slate-500 hover:text-emerald-600 bg-slate-100 rounded-lg"
+                  title="Restablecer icono sugerido"
+               >
+                  <RotateCcw size={18} />
+               </button>
                <input type="file" ref={fileRef} className="hidden" accept="image/*" onChange={(e) => handleIconUpload(e, setIcon)} />
                {isImage && <button onClick={() => setIcon('❓')} className="text-red-500"><X size={16}/></button>}
           </div>
@@ -170,10 +280,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   // --- Auto Suggest Effect ---
   const handleNameChange = (val: string, setName: (s: string) => void, setIcon: (s: string) => void, currentIcon: string) => {
       setName(val);
-      // Only suggest if not an image and current icon is default or empty
+      // Only suggest if not an image and current icon is default or empty or generic
       if (!currentIcon.startsWith('data:image')) {
           const suggestion = suggestIcon(val);
-          if (suggestion) setIcon(suggestion);
+          // Only override if we found a good match, otherwise keep typing
+          // To be less intrusive, we only override if the current icon is generic '📝' or previous suggestion. 
+          // But user requested "default allow reset". 
+          // The request implies: "Reset" button manual, but auto-suggest on type is also good.
+          if (suggestion && suggestion !== '📝') setIcon(suggestion);
       }
   }
 
@@ -194,6 +308,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             onClick={() => setActiveTab('ACCOUNTS')}
         >
             Cuentas
+        </button>
+        <button 
+            className={`px-6 py-3 font-medium transition-colors whitespace-nowrap ${activeTab === 'IMPORT' ? 'border-b-2 border-emerald-500 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+            onClick={() => setActiveTab('IMPORT')}
+        >
+            Importar Datos
         </button>
       </div>
 
@@ -353,6 +473,56 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                              )
                         })}
                   </div>
+              </div>
+          </div>
+      )}
+
+      {activeTab === 'IMPORT' && (
+          <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100 max-w-2xl mx-auto text-center">
+              <div className="mb-6">
+                  <div className="bg-emerald-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <FileSpreadsheet className="text-emerald-600" size={32} />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">Importar Datos Masivos</h3>
+                  <p className="text-slate-500">
+                      Sube un archivo Excel (.xlsx) o CSV para crear familias, categorías y cuentas rápidamente.
+                      Las filas se añadirán a tu configuración actual.
+                  </p>
+              </div>
+
+              <div className="space-y-4">
+                  <button 
+                      onClick={downloadTemplate}
+                      className="flex items-center justify-center gap-2 w-full py-3 border-2 border-slate-200 rounded-xl text-slate-600 hover:border-emerald-500 hover:text-emerald-600 transition-all font-medium"
+                  >
+                      <Download size={20} />
+                      Descargar Plantilla de Ejemplo
+                  </button>
+
+                  <div className="relative">
+                      <input 
+                          type="file" 
+                          accept=".xlsx, .xls, .csv" 
+                          onChange={handleImport}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <div className="flex items-center justify-center gap-2 w-full py-3 bg-emerald-600 text-white rounded-xl shadow-md hover:bg-emerald-700 transition-colors font-bold cursor-pointer">
+                          <Upload size={20} />
+                          Seleccionar Archivo y Procesar
+                      </div>
+                  </div>
+              </div>
+
+              <div className="mt-8 text-left bg-slate-50 p-4 rounded-lg text-sm text-slate-500 border border-slate-200">
+                  <p className="font-semibold mb-2">Formato esperado (Columnas):</p>
+                  <ul className="list-disc list-inside space-y-1">
+                      <li><strong>Tipo:</strong> 'Familia', 'Categoria' o 'Cuenta'.</li>
+                      <li><strong>Nombre:</strong> Nombre del elemento.</li>
+                      <li><strong>Grupo:</strong> (Solo para Categoría) Nombre exacto de la Familia padre.</li>
+                      <li><strong>Naturaleza:</strong> (Solo para Familia) 'Gasto' o 'Ingreso'.</li>
+                      <li><strong>Saldo:</strong> (Solo para Cuenta) Saldo inicial numérico.</li>
+                      <li><strong>Icono:</strong> (Opcional) Emoji para el elemento.</li>
+                  </ul>
               </div>
           </div>
       )}
