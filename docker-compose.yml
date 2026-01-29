@@ -10,6 +10,7 @@ services:
       # Persistencia de datos (Ajusta la ruta de la izquierda según tu NAS)
       - /volume1/docker/contamiki/data:/app/data
     environment:
+      - PORT=4000
       # Tu API Key de Google Gemini
       - API_KEY=AIzaSyByt2qp5UYhL-bhf1me82AM81PEJ7MJyYE
       # Clave secreta para las sesiones (Cámbiala por seguridad)
