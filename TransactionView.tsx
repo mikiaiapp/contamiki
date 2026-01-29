@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { AppState, Transaction, TransactionType } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, Calendar as CalendarIcon, Tag } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, Calendar as CalendarIcon, Filter, X } from 'lucide-react';
 
 interface TransactionViewProps {
   data: AppState;
@@ -27,251 +28,144 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                  data.categories.find(c => c.id === t.categoryId)?.name.toLowerCase().includes(filter.toLowerCase()))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!amount || !description || !accountId) return;
-
-    let newTx: Transaction;
-    if (type === 'TRANSFER') {
-        if (!transferDestId || accountId === transferDestId) {
-            alert("Selecciona una cuenta destino diferente");
-            return;
-        }
-        newTx = {
-            id: crypto.randomUUID(),
-            date,
-            amount: parseFloat(amount),
-            description: `Traspaso: ${description}`,
-            accountId,
-            transferAccountId: transferDestId,
-            familyId: '', 
-            categoryId: '',
-            type: 'TRANSFER'
-        };
-    } else {
-        if (!selectedCategoryId) return;
-        const category = data.categories.find(c => c.id === selectedCategoryId);
-        if (!category) return;
-        newTx = { id: crypto.randomUUID(), date, amount: parseFloat(amount), description, accountId, familyId: category.familyId, categoryId: selectedCategoryId, type };
-    }
-
-    onAddTransaction(newTx);
-    setIsModalOpen(false);
-    resetForm();
-  };
-
   const resetForm = () => {
       setAmount(''); setDescription(''); setDate(new Date().toISOString().split('T')[0]);
       setSelectedFamilyId(''); setSelectedCategoryId(''); setTransferDestId('');
   };
 
-  const renderIcon = (iconStr: string, className = "w-5 h-5") => {
+  const renderIcon = (iconStr: string, className = "w-10 h-10") => {
       if (!iconStr) return null;
-      if (iconStr.startsWith('data:image')) {
-          return <img src={iconStr} alt="icon" className={`${className} object-contain inline-block mr-2 align-middle`} />;
+      if (iconStr.startsWith('data:image') || iconStr.startsWith('http')) {
+          return <img src={iconStr} alt="icon" className={`${className} object-contain`} />;
       }
-      return <span className={`mr-2 ${className} inline-flex items-center justify-center`}>{iconStr}</span>;
+      return <span className={`text-2xl`}>{iconStr}</span>;
   }
 
-  const availableFamilies = data.families.filter(f => f.type === type);
-  const availableCategories = data.categories.filter(c => c.familyId === selectedFamilyId);
-
   return (
-    <div className="space-y-4 md:space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-800">Movimientos</h2>
+    <div className="space-y-12">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
+        <div className="space-y-4">
+            <p className="text-indigo-600 font-black uppercase tracking-[0.4em] text-xs">Libro Diario</p>
+            <h2 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tighter leading-none">Movimientos.</h2>
+        </div>
         <button 
           onClick={() => setIsModalOpen(true)}
-          className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
+          className="bg-slate-900 text-white px-10 py-6 rounded-[2rem] font-black uppercase tracking-widest text-xs shadow-2xl hover:bg-indigo-600 hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
         >
-          <Plus size={20} /> <span className="font-semibold">Nuevo</span>
+          <Plus size={20} /> Nuevo Registro
         </button>
       </div>
 
-      <div className="bg-white p-3 md:p-4 rounded-xl shadow-sm border border-slate-100">
-        <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-                type="text" 
-                placeholder="Buscar por descripción..." 
-                className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm md:text-base"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-            />
+      <div className="relative group">
+        <div className="absolute left-10 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors">
+            <Search size={32} />
         </div>
+        <input 
+            type="text" 
+            placeholder="Rastrear transacción por nombre, familia o detalle..." 
+            className="w-full pl-24 pr-10 py-10 bg-white border-4 border-slate-100 rounded-[3.5rem] focus:outline-none focus:ring-[24px] focus:ring-indigo-500/5 focus:border-indigo-500 text-2xl font-black tracking-tight placeholder:text-slate-200 transition-all shadow-sm"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+        />
       </div>
 
-      {/* Desktop Table View */}
-      <div className="hidden lg:block bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
-            <tr>
-              <th className="px-6 py-4">Fecha</th>
-              <th className="px-6 py-4">Descripción</th>
-              <th className="px-6 py-4">Detalle</th>
-              <th className="px-6 py-4">Cuenta</th>
-              <th className="px-6 py-4 text-right">Importe</th>
-              <th className="px-6 py-4 text-center">Acción</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredTransactions.map(t => {
-                const category = data.categories.find(c => c.id === t.categoryId);
-                const family = data.families.find(f => f.id === t.familyId);
-                const account = data.accounts.find(a => a.id === t.accountId);
-                const isTransfer = t.type === 'TRANSFER';
-                const destAccount = isTransfer ? data.accounts.find(a => a.id === t.transferAccountId) : null;
-
-                return (
-                    <tr key={t.id} className="hover:bg-slate-50">
-                        <td className="px-6 py-4 text-sm text-slate-500">{t.date}</td>
-                        <td className="px-6 py-4 font-medium">{t.description}</td>
-                        <td className="px-6 py-4 text-sm text-slate-700">
-                            {isTransfer ? <span className="text-blue-500 flex items-center gap-1"><ArrowRightLeft size={14}/> Traspaso</span> : <>{renderIcon(family?.icon || '')} {category?.name}</>}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-slate-500">
-                           {renderIcon(account?.icon || '')} {account?.name}
-                           {isTransfer && destAccount && <><span className="mx-1">→</span>{renderIcon(destAccount.icon)}{destAccount.name}</>}
-                        </td>
-                        <td className={`px-6 py-4 text-right font-bold ${t.type === 'INCOME' ? 'text-emerald-600' : t.type === 'TRANSFER' ? 'text-slate-600' : 'text-rose-600'}`}>
-                            {t.type === 'INCOME' ? '+' : t.type === 'EXPENSE' ? '-' : ''}{t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                            <button onClick={() => onDeleteTransaction(t.id)} className="text-slate-400 hover:text-red-500 p-2"><Trash2 size={18} /></button>
-                        </td>
-                    </tr>
-                );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Mobile Card View */}
-      <div className="lg:hidden space-y-3">
+      {/* Vista de Transacciones */}
+      <div className="grid grid-cols-1 gap-6">
         {filteredTransactions.map(t => {
             const category = data.categories.find(c => c.id === t.categoryId);
             const family = data.families.find(f => f.id === t.familyId);
             const account = data.accounts.find(a => a.id === t.accountId);
             const isTransfer = t.type === 'TRANSFER';
-            
+            const destAccount = isTransfer ? data.accounts.find(a => a.id === t.transferAccountId) : null;
+
             return (
-              <div key={t.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-2">
-                <div className="flex justify-between items-start">
-                  <div className="flex flex-col">
-                    <span className="text-xs text-slate-400 flex items-center gap-1 mb-1">
-                      <CalendarIcon size={12} /> {t.date}
-                    </span>
-                    <span className="font-bold text-slate-800 leading-tight">{t.description}</span>
-                  </div>
-                  <span className={`text-lg font-black ${t.type === 'INCOME' ? 'text-emerald-600' : t.type === 'TRANSFER' ? 'text-slate-600' : 'text-rose-600'}`}>
-                    {t.type === 'INCOME' ? '+' : t.type === 'EXPENSE' ? '-' : ''}{t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                  </span>
+              <div key={t.id} className="bg-white p-8 md:p-10 rounded-[3.5rem] shadow-sm border border-slate-100 group hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 flex flex-col md:flex-row items-center gap-8 md:gap-12">
+                <div className="w-24 h-24 bg-slate-50 rounded-[2.5rem] flex items-center justify-center border-2 border-white shadow-inner flex-shrink-0 group-hover:rotate-6 transition-transform">
+                   {isTransfer ? <ArrowRightLeft className="text-indigo-400" size={32} /> : renderIcon(family?.icon || '')}
                 </div>
                 
-                <div className="flex justify-between items-center mt-1 pt-2 border-t border-slate-50">
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <div className="bg-slate-50 p-1.5 rounded-md flex items-center">
-                      {isTransfer ? <ArrowRightLeft size={12} className="text-blue-500"/> : renderIcon(family?.icon || '', "w-4 h-4")}
-                      <span className="ml-1 font-medium">{isTransfer ? 'Traspaso' : category?.name}</span>
+                <div className="flex-1 text-center md:text-left">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1">{t.date}</p>
+                    <h4 className="text-3xl font-black text-slate-800 tracking-tighter mb-2">{t.description}</h4>
+                    <div className="flex flex-wrap justify-center md:justify-start gap-3">
+                        <span className="bg-slate-50 px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest text-slate-500 border border-slate-100">
+                           {isTransfer ? 'Transferencia' : category?.name}
+                        </span>
+                        <span className="bg-slate-50 px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest text-slate-500 border border-slate-100">
+                           {account?.name} {isTransfer && `→ ${destAccount?.name}`}
+                        </span>
                     </div>
-                    <div className="bg-slate-50 p-1.5 rounded-md flex items-center">
-                      {renderIcon(account?.icon || '', "w-4 h-4")}
-                      <span className="ml-1 font-medium">{account?.name}</span>
-                    </div>
-                  </div>
-                  <button onClick={() => onDeleteTransaction(t.id)} className="text-slate-300 hover:text-rose-500 p-1">
-                    <Trash2 size={16} />
-                  </button>
+                </div>
+
+                <div className="text-center md:text-right">
+                    <p className={`text-4xl font-black tracking-tighter mb-2 ${t.type === 'INCOME' ? 'text-emerald-600' : t.type === 'TRANSFER' ? 'text-slate-400' : 'text-rose-600'}`}>
+                        {t.type === 'INCOME' ? '+' : t.type === 'EXPENSE' ? '-' : ''}{t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                    </p>
+                    <button onClick={() => onDeleteTransaction(t.id)} className="p-4 text-slate-200 hover:text-rose-500 hover:bg-rose-50 rounded-2xl transition-all"><Trash2 size={24} /></button>
                 </div>
               </div>
             );
         })}
-        {filteredTransactions.length === 0 && (
-          <div className="py-12 text-center text-slate-400 bg-white rounded-xl border border-dashed border-slate-200">
-            No hay movimientos para mostrar.
-          </div>
-        )}
       </div>
 
-      {/* Modal Ajustado para Móvil */}
+      {/* Modal - Rediseño Total */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-end sm:items-center justify-center z-[100] p-0 sm:p-4">
-            <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl font-bold text-slate-800">Añadir Movimiento</h3>
-                  <button onClick={() => setIsModalOpen(false)} className="text-slate-400 p-2"><Plus className="rotate-45" size={24}/></button>
-                </div>
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center z-[100] p-6 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[4rem] shadow-2xl w-full max-w-2xl p-12 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <button onClick={() => setIsModalOpen(false)} className="absolute top-10 right-10 p-4 bg-slate-100 text-slate-400 rounded-full hover:bg-rose-50 hover:text-rose-600 transition-all active:scale-90"><X size={28}/></button>
                 
-                <form onSubmit={handleSubmit} className="space-y-5 pb-6">
-                    <div className="flex bg-slate-100 p-1 rounded-xl">
-                        <button type="button" className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${type === 'EXPENSE' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`} onClick={() => { setType('EXPENSE'); resetForm(); }}>Gasto</button>
-                        <button type="button" className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${type === 'INCOME' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`} onClick={() => { setType('INCOME'); resetForm(); }}>Ingreso</button>
-                        <button type="button" className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${type === 'TRANSFER' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`} onClick={() => { setType('TRANSFER'); resetForm(); }}>Traspaso</button>
+                <div className="mb-12">
+                    <h3 className="text-4xl font-black text-slate-900 tracking-tighter">Crear Apunte.</h3>
+                    <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] mt-2">Detalla tu nuevo flujo económico</p>
+                </div>
+
+                <form onSubmit={(e) => e.preventDefault()} className="space-y-10">
+                    <div className="bg-slate-100 p-2.5 rounded-[2.5rem] flex gap-2">
+                        {['EXPENSE', 'INCOME', 'TRANSFER'].map((m) => (
+                            <button key={m} type="button" onClick={() => setType(m as any)} className={`flex-1 py-5 text-[11px] font-black uppercase tracking-widest rounded-[2rem] transition-all ${type === m ? 'bg-white text-indigo-600 shadow-xl' : 'text-slate-400'}`}>
+                                {m === 'EXPENSE' ? '🔴 Gasto' : m === 'INCOME' ? '🟢 Ingreso' : '🔵 Traspaso'}
+                            </button>
+                        ))}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 ml-1">Importe (€)</label>
-                            <input type="number" step="0.01" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-lg font-bold" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-3">
+                            <label className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.3em] ml-3">Importe (€)</label>
+                            <input type="number" step="0.01" className="w-full px-10 py-7 bg-indigo-50/30 border-2 border-indigo-100/50 rounded-[2.5rem] text-3xl font-black outline-none focus:border-indigo-600 transition-all" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" />
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 ml-1">Fecha</label>
-                            <input type="date" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" value={date} onChange={e => setDate(e.target.value)} />
+                        <div className="space-y-3">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-3">Fecha</label>
+                            <input type="date" className="w-full px-10 py-7 bg-slate-50 border-2 border-slate-100 rounded-[2.5rem] text-xl font-black outline-none focus:border-indigo-600 transition-all" value={date} onChange={e => setDate(e.target.value)} />
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 ml-1">Descripción</label>
-                        <input type="text" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" value={description} onChange={e => setDescription(e.target.value)} placeholder="Ej. Compra semanal" />
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-3">Descripción</label>
+                        <input type="text" className="w-full px-10 py-7 bg-slate-50 border-2 border-slate-100 rounded-[2.5rem] text-xl font-black outline-none focus:border-indigo-600 transition-all" value={description} onChange={e => setDescription(e.target.value)} placeholder="Ej. Almuerzo corporativo" />
                     </div>
 
-                    {type !== 'TRANSFER' ? (
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 ml-1">Familia</label>
-                                    <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" value={selectedFamilyId} onChange={e => { setSelectedFamilyId(e.target.value); setSelectedCategoryId(''); }} required>
-                                        <option value="">Grupo...</option>
-                                        {availableFamilies.map(f => <option key={f.id} value={f.id}>{!f.icon.startsWith('data:') && f.icon} {f.name}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 ml-1">Categoría</label>
-                                    <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" value={selectedCategoryId} onChange={e => setSelectedCategoryId(e.target.value)} disabled={!selectedFamilyId} required>
-                                        <option value="">Detalle...</option>
-                                        {availableCategories.map(c => <option key={c.id} value={c.id}>{!c.icon.startsWith('data:') && c.icon} {c.name}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 ml-1">Cuenta</label>
-                                <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" value={accountId} onChange={e => setAccountId(e.target.value)}>
-                                    {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 ml-1">Origen</label>
-                                <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" value={accountId} onChange={e => setAccountId(e.target.value)}>
-                                    {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 ml-1">Destino</label>
-                                <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" value={transferDestId} onChange={e => setTransferDestId(e.target.value)} required>
-                                    <option value="">Elegir...</option>
-                                    {data.accounts.filter(a => a.id !== accountId).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="flex gap-3 pt-4">
-                        <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-bold text-slate-500 hover:bg-slate-50">Cancelar</button>
-                        <button type="submit" className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg shadow-emerald-200 active:scale-95 transition-all">Guardar</button>
-                    </div>
+                    <button 
+                        type="button"
+                        onClick={() => {
+                            if (!amount || !description) return;
+                            const newTx: any = { id: crypto.randomUUID(), date, amount: parseFloat(amount), description, accountId, type };
+                            if (type === 'TRANSFER') {
+                                if (accountId === transferDestId) return;
+                                newTx.transferAccountId = transferDestId;
+                            } else {
+                                const category = data.categories.find(c => c.id === selectedCategoryId);
+                                if (!category) return;
+                                newTx.familyId = category.familyId;
+                                newTx.categoryId = selectedCategoryId;
+                            }
+                            onAddTransaction(newTx);
+                            setIsModalOpen(false);
+                            resetForm();
+                        }}
+                        className="w-full py-10 bg-slate-900 text-white rounded-[3rem] font-black uppercase tracking-[0.4em] text-sm shadow-2xl hover:bg-indigo-600 transition-all active:scale-95"
+                    >
+                        Confirmar Movimiento
+                    </button>
                 </form>
             </div>
         </div>

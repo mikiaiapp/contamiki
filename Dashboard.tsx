@@ -1,13 +1,14 @@
+
 import React, { useMemo, useState } from 'react';
 import { AppState, Family, Category } from './types';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
-import { TrendingUp, TrendingDown, Banknote, ChevronDown, ChevronRight, ChevronLeft, ListFilter, Scale } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { TrendingUp, TrendingDown, Banknote, ChevronDown, ChevronRight, ChevronLeft, ListFilter, Scale, Calendar } from 'lucide-react';
 
 interface DashboardProps {
   data: AppState;
 }
 
-const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
+const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#3b82f6'];
 
 type TimeRange = 'MONTH' | 'QUARTER' | 'YEAR' | 'CUSTOM';
 
@@ -61,21 +62,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       const quarter = Math.floor(referenceDate.getMonth() / 3) + 1;
       return `${quarter}º Trimestre ${referenceDate.getFullYear()}`;
     }
-    if (timeRange === 'YEAR') {
-      return `${referenceDate.getFullYear()}`;
-    }
+    if (timeRange === 'YEAR') return `${referenceDate.getFullYear()}`;
     if (timeRange === 'CUSTOM') {
       return `${dateFilter.start.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} - ${dateFilter.end.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`;
     }
     return '';
   }, [timeRange, referenceDate, dateFilter]);
-
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter(t => {
-      const tDate = new Date(t.date);
-      return tDate >= dateFilter.start && tDate <= dateFilter.end;
-    });
-  }, [transactions, dateFilter]);
 
   const globalStats = useMemo(() => {
     const currentTotalBalance = accounts.reduce((acc, account) => {
@@ -92,62 +84,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
 
     let periodIncome = 0;
     let periodExpense = 0;
-    filteredTransactions.forEach(t => {
+    transactions.filter(t => {
+      const tDate = new Date(t.date);
+      return tDate >= dateFilter.start && tDate <= dateFilter.end;
+    }).forEach(t => {
       if (t.type === 'INCOME') periodIncome += t.amount;
       if (t.type === 'EXPENSE') periodExpense += t.amount;
     });
     
-    const periodBalance = periodIncome - periodExpense;
-
-    return { 
-      income: periodIncome, 
-      expense: periodExpense, 
-      balance: currentTotalBalance,
-      periodBalance: periodBalance
-    };
-  }, [transactions, filteredTransactions, accounts]);
+    return { income: periodIncome, expense: periodExpense, balance: currentTotalBalance, periodBalance: periodIncome - periodExpense };
+  }, [transactions, dateFilter, accounts]);
 
   const expenseByFamilyData = useMemo(() => {
     const map = new Map<string, number>();
-    filteredTransactions.filter(t => t.type === 'EXPENSE').forEach(t => {
+    transactions.filter(t => {
+      const tDate = new Date(t.date);
+      return tDate >= dateFilter.start && tDate <= dateFilter.end && t.type === 'EXPENSE';
+    }).forEach(t => {
       const family = families.find(f => f.id === t.familyId);
       const name = family ? family.name : 'Otros';
       map.set(name, (map.get(name) || 0) + t.amount);
     });
-    return Array.from(map.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a,b) => b.value - a.value);
-  }, [filteredTransactions, families]);
-
-  const trendData = useMemo(() => {
-      const map = new Map<string, {income: number, expense: number}>();
-      const start = new Date(dateFilter.start);
-      const end = new Date(dateFilter.end);
-      const loop = new Date(start);
-      while(loop <= end) {
-          const key = loop.toLocaleString('es-ES', { month: 'short', year: '2-digit' });
-          if(!map.has(key)) map.set(key, {income: 0, expense: 0});
-          loop.setMonth(loop.getMonth() + 1);
-      }
-      filteredTransactions.forEach(t => {
-         const tDate = new Date(t.date);
-         const key = tDate.toLocaleString('es-ES', { month: 'short', year: '2-digit' });
-         if (map.has(key)) {
-             const entry = map.get(key)!;
-             if(t.type === 'INCOME') entry.income += t.amount;
-             if(t.type === 'EXPENSE') entry.expense += t.amount;
-         }
-      });
-      return Array.from(map.entries()).map(([name, val]) => ({ name, Ingresos: val.income, Gastos: val.expense }));
-  }, [filteredTransactions, dateFilter]);
+    return Array.from(map.entries()).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
+  }, [transactions, dateFilter, families]);
 
   const hierarchicalData = useMemo(() => {
-      const data: { family: Family, total: number, categories: { category: Category, total: number }[] }[] = [];
+      const data: any[] = [];
+      const periodTxs = transactions.filter(t => {
+          const tDate = new Date(t.date);
+          return tDate >= dateFilter.start && tDate <= dateFilter.end;
+      });
+
       families.forEach(fam => {
-          const famTxs = filteredTransactions.filter(t => t.familyId === fam.id);
+          const famTxs = periodTxs.filter(t => t.familyId === fam.id);
           const totalFam = famTxs.reduce((sum, t) => sum + t.amount, 0);
-          if (totalFam > 0 || famTxs.length > 0) {
-              const famCats: { category: Category, total: number }[] = [];
+          if (totalFam > 0) {
+              const famCats: any[] = [];
               categories.filter(c => c.familyId === fam.id).forEach(cat => {
                   const catTotal = famTxs.filter(t => t.categoryId === cat.id).reduce((sum, t) => sum + t.amount, 0);
                   if (catTotal > 0) famCats.push({ category: cat, total: catTotal });
@@ -157,177 +129,147 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
           }
       });
       return data.sort((a,b) => b.total - a.total);
-  }, [families, categories, filteredTransactions]);
+  }, [families, categories, transactions, dateFilter]);
 
-  const renderIcon = (iconStr: string) => {
-      if (iconStr.startsWith('data:image')) return <img src={iconStr} className="w-5 h-5 object-contain inline-block mr-2" />;
-      return <span className="mr-2">{iconStr}</span>;
+  const renderIcon = (iconStr: string, size = "w-8 h-8", textSize = "text-2xl") => {
+      if (iconStr.startsWith('data:image') || iconStr.startsWith('http')) return <img src={iconStr} className={`${size} object-contain`} />;
+      return <span className={textSize}>{iconStr}</span>;
   }
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      {/* Date Range Picker */}
-      <div className="bg-white p-3 md:p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-            <div className="flex items-center gap-2">
-              {timeRange !== 'CUSTOM' && (
-                <button 
-                  onClick={() => navigatePeriod('prev')}
-                  className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-emerald-600 transition-colors"
-                  title="Periodo anterior"
-                >
-                  <ChevronLeft size={24} />
-                </button>
-              )}
-              
-              <div>
-                <h2 className="text-xl md:text-2xl font-black text-slate-800">Resumen</h2>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                  {periodLabel}
-                </p>
-              </div>
-
-              {timeRange !== 'CUSTOM' && (
-                <button 
-                  onClick={() => navigatePeriod('next')}
-                  className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-emerald-600 transition-colors"
-                  title="Siguiente periodo"
-                >
-                  <ChevronRight size={24} />
-                </button>
-              )}
+    <div className="space-y-12">
+      {/* Header Sección con Control de Tiempo */}
+      <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-10">
+        <div className="space-y-4">
+            <div className="flex items-center gap-4 text-indigo-600 font-black uppercase tracking-[0.4em] text-xs">
+                <Calendar size={18} /> Control Temporal
             </div>
-            
-            <div className="flex overflow-x-auto pb-1 sm:pb-0 gap-1 bg-slate-100 p-1 rounded-xl scrollbar-hide">
-                <button onClick={() => { setTimeRange('MONTH'); setReferenceDate(new Date()); }} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap ${timeRange === 'MONTH' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500'}`}>Mes</button>
-                <button onClick={() => { setTimeRange('QUARTER'); setReferenceDate(new Date()); }} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap ${timeRange === 'QUARTER' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500'}`}>Trimestre</button>
-                <button onClick={() => { setTimeRange('YEAR'); setReferenceDate(new Date()); }} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap ${timeRange === 'YEAR' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500'}`}>Año</button>
-                <button onClick={() => setTimeRange('CUSTOM')} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap ${timeRange === 'CUSTOM' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500'}`}>Otro</button>
-            </div>
-          </div>
-          {timeRange === 'CUSTOM' && (
-              <div className="flex flex-col sm:flex-row gap-2 animate-in fade-in duration-300">
-                  <input type="date" className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} />
-                  <input type="date" className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} />
-              </div>
-          )}
-      </div>
-
-      {/* Stats Cards - Updated Grid to 4 columns on large screens */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 xl:gap-6">
-        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Saldo Global</p>
-            <p className="text-xl md:text-2xl font-black text-slate-800 leading-tight">{globalStats.balance.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-          </div>
-          <div className="bg-blue-50 p-3 rounded-2xl text-blue-600"><Banknote size={24} /></div>
-        </div>
-        
-        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Ingresos</p>
-            <p className="text-xl md:text-2xl font-black text-emerald-600 leading-tight">+{globalStats.income.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-          </div>
-          <div className="bg-emerald-50 p-3 rounded-2xl text-emerald-600"><TrendingUp size={24} /></div>
-        </div>
-        
-        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Gastos</p>
-            <p className="text-xl md:text-2xl font-black text-rose-600 leading-tight">-{globalStats.expense.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-          </div>
-          <div className="bg-rose-50 p-3 rounded-2xl text-rose-600"><TrendingDown size={24} /></div>
-        </div>
-
-        <div className={`bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between overflow-hidden relative`}>
-          <div className={`absolute top-0 left-0 w-1 h-full ${globalStats.periodBalance >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Ahorro Periodo</p>
-            <p className={`text-xl md:text-2xl font-black leading-tight ${globalStats.periodBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-              {globalStats.periodBalance.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', signDisplay: 'always' })}
-            </p>
-          </div>
-          <div className={`p-3 rounded-2xl ${globalStats.periodBalance >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-            <Scale size={24} />
-          </div>
-        </div>
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
-           <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-widest flex items-center gap-2"><TrendingUp size={16} className="text-emerald-500"/> Evolución</h3>
-           <div className="h-[250px] md:h-[300px]">
-             <ResponsiveContainer width="100%" height="100%">
-               <BarChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700}} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                  <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
-                  <Bar dataKey="Ingresos" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} />
-               </BarChart>
-             </ResponsiveContainer>
-           </div>
-        </div>
-
-        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-widest flex items-center gap-2"><ListFilter size={16} className="text-blue-500"/> Gastos por Familia</h3>
-            <div className="h-[250px] md:h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={expenseByFamilyData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                      {expenseByFamilyData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-            </div>
-        </div>
-      </div>
-
-      {/* Detailed Table Hierarchy */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-              <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Desglose Detallado</h3>
-          </div>
-          <div className="divide-y divide-slate-100">
-              {hierarchicalData.map((item) => (
-                  <div key={item.family.id} className="bg-white">
-                      <div className="flex items-center justify-between p-4 cursor-pointer active:bg-slate-50 transition-colors" onClick={() => setExpandedFamilies(p => ({...p, [item.family.id]: !p[item.family.id]}))}>
-                          <div className="flex items-center gap-3">
-                              <div className="p-1.5 bg-slate-100 rounded-lg">{renderIcon(item.family.icon)}</div>
-                              <div className="flex flex-col">
-                                <span className="font-bold text-slate-800 text-sm">{item.family.name}</span>
-                                <span className={`text-[10px] font-black uppercase ${item.family.type === 'INCOME' ? 'text-emerald-500' : 'text-rose-500'}`}>{item.family.type === 'INCOME' ? 'Ingreso' : 'Gasto'}</span>
-                              </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-black text-slate-800">{item.total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
-                            {expandedFamilies[item.family.id] ? <ChevronDown size={18} className="text-slate-300"/> : <ChevronRight size={18} className="text-slate-300"/>}
-                          </div>
-                      </div>
-                      {expandedFamilies[item.family.id] && (
-                          <div className="bg-slate-50/50 border-t border-slate-50 animate-in slide-in-from-top-2 duration-200">
-                              {item.categories.map(sub => (
-                                  <div key={sub.category.id} className="flex items-center justify-between py-3 pl-14 pr-4 text-xs hover:bg-slate-100">
-                                      <div className="flex items-center gap-2">
-                                          {renderIcon(sub.category.icon)}
-                                          <span className="text-slate-600 font-medium">{sub.category.name}</span>
-                                      </div>
-                                      <span className="text-slate-700 font-bold">{sub.total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
-                                  </div>
-                              ))}
-                          </div>
-                      )}
-                  </div>
-              ))}
-              {hierarchicalData.length === 0 && (
-                <div className="p-12 text-center text-slate-400 italic">
-                  No hay datos para este periodo.
+            <h2 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tighter leading-none">
+                Estado <br className="hidden md:block"/> Financiero.
+            </h2>
+            <div className="flex items-center gap-6 mt-4">
+                <div className="flex items-center gap-3">
+                    <button onClick={() => navigatePeriod('prev')} className="w-14 h-14 flex items-center justify-center bg-white border-2 border-slate-100 rounded-2xl hover:bg-slate-50 transition-all shadow-sm active:scale-90"><ChevronLeft size={28} /></button>
+                    <button onClick={() => navigatePeriod('next')} className="w-14 h-14 flex items-center justify-center bg-white border-2 border-slate-100 rounded-2xl hover:bg-slate-50 transition-all shadow-sm active:scale-90"><ChevronRight size={28} /></button>
                 </div>
-              )}
-          </div>
+                <div>
+                    <p className="text-2xl font-black text-slate-800 tracking-tight">{periodLabel}</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Periodo de análisis actual</p>
+                </div>
+            </div>
+        </div>
+
+        <div className="bg-slate-100/80 p-2 rounded-[2rem] flex flex-wrap gap-1 shadow-inner backdrop-blur-sm border border-slate-200/50 w-fit">
+            {['MONTH', 'QUARTER', 'YEAR', 'CUSTOM'].map((range) => (
+                <button 
+                    key={range}
+                    onClick={() => { setTimeRange(range as any); if(range !== 'CUSTOM') setReferenceDate(new Date()); }}
+                    className={`px-8 py-4 text-xs font-black uppercase tracking-widest rounded-[1.5rem] transition-all ${timeRange === range ? 'bg-white text-indigo-600 shadow-xl' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                    {range === 'MONTH' ? 'Mes' : range === 'QUARTER' ? 'Trimestre' : range === 'YEAR' ? 'Año' : 'Personalizar'}
+                </button>
+            ))}
+        </div>
+      </div>
+
+      {/* Grid de Estadísticas con diseño neumórfico sutil */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        {[
+            { label: 'Balance Global', val: globalStats.balance, color: 'text-indigo-600', icon: <Banknote size={32}/>, bg: 'bg-indigo-50' },
+            { label: 'Ingresos', val: globalStats.income, color: 'text-emerald-600', icon: <TrendingUp size={32}/>, bg: 'bg-emerald-50', prefix: '+' },
+            { label: 'Gastos', val: globalStats.expense, color: 'text-rose-600', icon: <TrendingDown size={32}/>, bg: 'bg-rose-50', prefix: '-' },
+            { label: 'Margen Neto', val: globalStats.periodBalance, color: globalStats.periodBalance >= 0 ? 'text-indigo-600' : 'text-rose-600', icon: <Scale size={32}/>, bg: globalStats.periodBalance >= 0 ? 'bg-indigo-50' : 'bg-rose-50' }
+        ].map((stat, i) => (
+            <div key={i} className="bg-white p-10 rounded-[3.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.02)] border border-slate-100 flex flex-col justify-between min-h-[220px] group hover:-translate-y-2 transition-transform duration-500">
+                <div className={`${stat.bg} ${stat.color} w-20 h-20 rounded-[2rem] flex items-center justify-center shadow-inner mb-6`}>
+                    {stat.icon}
+                </div>
+                <div>
+                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2">{stat.label}</p>
+                    <p className={`text-3xl md:text-4xl font-black tracking-tighter ${stat.color}`}>
+                        {stat.prefix}{stat.val.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                    </p>
+                </div>
+            </div>
+        ))}
+      </div>
+
+      {/* Gráficos de Gran Formato */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        <div className="lg:col-span-2 bg-white p-12 rounded-[4.5rem] shadow-sm border border-slate-100">
+            <h3 className="text-xl font-black text-slate-800 mb-10 uppercase tracking-widest flex items-center gap-4">
+                <ListFilter className="text-indigo-500" /> Desglose por Agrupadores
+            </h3>
+            <div className="space-y-8">
+                {hierarchicalData.map((item) => (
+                    <div key={item.family.id} className="group">
+                        <div 
+                            className="flex items-center justify-between p-8 rounded-[2.5rem] bg-slate-50/50 hover:bg-white hover:shadow-2xl hover:scale-[1.02] cursor-pointer transition-all border border-transparent hover:border-indigo-100"
+                            onClick={() => setExpandedFamilies(p => ({...p, [item.family.id]: !p[item.family.id]}))}
+                        >
+                            <div className="flex items-center gap-6">
+                                <div className="w-20 h-20 bg-white rounded-3xl shadow-lg flex items-center justify-center border border-slate-50 group-hover:rotate-3 transition-transform">
+                                    {renderIcon(item.family.icon)}
+                                </div>
+                                <div>
+                                    <p className="text-2xl font-black text-slate-900 tracking-tighter">{item.family.name}</p>
+                                    <p className={`text-xs font-bold uppercase tracking-widest ${item.family.type === 'INCOME' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                        {item.family.type === 'INCOME' ? 'Flujo de Entrada' : 'Flujo de Salida'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-6">
+                                <span className="text-2xl font-black text-slate-800 tracking-tight">
+                                    {item.total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                                </span>
+                                <div className={`w-10 h-10 rounded-full bg-white border border-slate-100 flex items-center justify-center transition-transform ${expandedFamilies[item.family.id] ? 'rotate-180' : ''}`}>
+                                    <ChevronDown size={20} className="text-slate-400" />
+                                </div>
+                            </div>
+                        </div>
+                        {expandedFamilies[item.family.id] && (
+                            <div className="mt-4 px-8 space-y-4 animate-in slide-in-from-top-4 duration-300">
+                                {item.categories.map((sub: any) => (
+                                    <div key={sub.category.id} className="flex items-center justify-between p-6 bg-white border-2 border-slate-50 rounded-3xl hover:border-indigo-100 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            {renderIcon(sub.category.icon, "w-6 h-6", "text-lg")}
+                                            <span className="font-bold text-slate-600">{sub.category.name}</span>
+                                        </div>
+                                        <span className="font-black text-slate-800">{sub.total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+
+        <div className="bg-slate-900 p-12 rounded-[4.5rem] shadow-2xl flex flex-col items-center justify-center text-center space-y-10">
+            <h3 className="text-indigo-400 text-xs font-black uppercase tracking-[0.5em]">Composición de Gastos</h3>
+            <div className="h-[400px] w-full relative">
+                <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                        <Pie data={expenseByFamilyData} cx="50%" cy="50%" innerRadius={100} outerRadius={140} paddingAngle={8} dataKey="value">
+                            {expenseByFamilyData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip contentStyle={{ borderRadius: '24px', border: 'none', background: '#fff', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }} />
+                    </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">Total Gastado</p>
+                    <p className="text-white text-3xl font-black tracking-tighter">-{globalStats.expense.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}</p>
+                </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 w-full">
+                {expenseByFamilyData.slice(0, 4).map((item, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
+                        <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest truncate">{item.name}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
       </div>
     </div>
   );

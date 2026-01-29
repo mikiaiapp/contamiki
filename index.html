@@ -1,11 +1,20 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://cdn-icons-png.flaticon.com/512/2910/2910296.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ContaMiki</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>ContaMiki | Finanzas Inteligentes</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { font-family: 'Inter', sans-serif; }
+      .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+    </style>
   <script type="importmap">
 {
   "imports": {
@@ -27,7 +36,7 @@
 }
 </script>
 </head>
-  <body>
+  <body class="bg-slate-50 antialiased overflow-x-hidden">
     <div id="root"></div>
     <script type="module" src="/bundle.js"></script>
   </body>
