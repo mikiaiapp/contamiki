@@ -16,7 +16,7 @@ COPY . .
 RUN npm run build
 
 # Exponer el puerto
-EXPOSE 3000
+EXPOSE 4000
 
 # Iniciar el servidor
 CMD ["npm", "start"]
