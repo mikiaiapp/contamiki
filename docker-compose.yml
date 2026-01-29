@@ -20,4 +20,4 @@ services:
       # Tu API Key de Google Gemini
       - API_KEY=AIzaSyByt2qp5UYhL-bhf1me82AM81PEJ7MJyYE
       # Clave secreta para las sesiones (Cámbiala por seguridad)
-      - JWT_SECRET= nasMAJU1505
+      - JWT_SECRET=nasMAJU1505
