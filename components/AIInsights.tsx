@@ -18,7 +18,6 @@ export const AIInsights: React.FC<AIInsightsProps> = ({ data }) => {
       return;
     }
     setLoading(true);
-    // Ahora pasamos categorías también
     const result = await generateFinancialAdvice(data.transactions, data.families, data.accounts, data.categories);
     setAdvice(result);
     setLoading(false);

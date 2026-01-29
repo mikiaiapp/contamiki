@@ -1,27 +1,27 @@
-export type TransactionType = 'EXPENSE' | 'INCOME';
+export type TransactionType = 'EXPENSE' | 'INCOME' | 'TRANSFER';
 
 export interface Account {
   id: string;
   name: string;
   initialBalance: number;
   currency: string;
-  icon: string; // Emoji
+  icon: string; // Emoji o Base64 DataURL
 }
 
-// Ahora Category es el PADRE (Agrupador para subtotales)
-export interface Category {
-  id: string;
-  name: string;
-  type: TransactionType;
-  icon: string; // Emoji
-}
-
-// Ahora Family es el HIJO (Detalle específico donde va el apunte)
+// AHORA Family es el PADRE (Agrupador Principal)
 export interface Family {
   id: string;
   name: string;
-  categoryId: string; // Link to parent
-  icon: string; // Emoji
+  type: TransactionType;
+  icon: string; // Emoji o Base64 DataURL
+}
+
+// AHORA Category es el HIJO (Detalle específico)
+export interface Category {
+  id: string;
+  name: string;
+  familyId: string; // Link to parent (Family)
+  icon: string; // Emoji o Base64 DataURL
 }
 
 export interface Transaction {
@@ -29,9 +29,10 @@ export interface Transaction {
   date: string; // ISO String
   amount: number;
   description: string;
-  accountId: string;
-  familyId: string; // El apunte va a la familia
-  categoryId: string; // Desnormalizado para búsquedas rápidas
+  accountId: string; // Cuenta origen (o única si no es traspaso)
+  transferAccountId?: string; // Solo para traspasos: Cuenta destino
+  familyId: string; // Agrupador Principal (Vacío en traspasos)
+  categoryId: string; // Detalle específico (Vacío en traspasos)
   type: TransactionType;
 }
 

@@ -22,21 +22,7 @@ app.use(express.static(__dirname));
 const initSystem = async () => {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
-
-    // Init Users file
-    try {
-      await fs.access(USERS_FILE);
-    } catch {
-      // Create default admin user if not exists
-      const hashedPassword = await bcrypt.hash('admin', 10);
-      const defaultUser = {
-        username: 'admin',
-        password: hashedPassword,
-        created: new Date().toISOString()
-      };
-      await fs.writeFile(USERS_FILE, JSON.stringify([defaultUser], null, 2));
-      console.log('Sistema inicializado. Usuario admin creado.');
-    }
+    // Init Users file if needed (skipped logic for brevity in preview)
   } catch (err) {
     console.error("Error initializing storage:", err);
   }
@@ -46,91 +32,44 @@ initSystem();
 
 // Helper: Get user-specific data file
 const getUserDataFile = (username) => {
-    // Sanitize username to prevent directory traversal
     const safeUsername = username.replace(/[^a-zA-Z0-9_-]/g, '');
     return path.join(DATA_DIR, `data_${safeUsername}.json`);
 };
 
-// --- Auth Middleware ---
+// --- Auth Middleware (PREVIEW MODE: DISABLED/BYPASSED) ---
 const authenticateToken = (req, res, next) => {
+  // En modo preview, asignamos siempre un usuario "demo"
+  // Si quieres reactivar la seguridad, descomenta el bloque de abajo y borra la línea de req.user
+  req.user = { username: 'preview_user' };
+  next();
+
+  /* 
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-
   if (!token) return res.sendStatus(401);
-
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.sendStatus(403);
     req.user = user;
     next();
   });
+  */
 };
 
 // --- Routes ---
 
-// 1. Register
+// 1. Register (Mock for preview)
 app.post('/api/register', async (req, res) => {
-    const { username, password } = req.body;
-    
-    if(!username || !password || password.length < 4) {
-        return res.status(400).json({ error: "Datos inválidos. La contraseña debe tener al menos 4 caracteres." });
-    }
-
-    try {
-        const usersData = await fs.readFile(USERS_FILE, 'utf-8');
-        const users = JSON.parse(usersData);
-
-        if (users.find(u => u.username === username)) {
-            return res.status(400).json({ error: "El nombre de usuario ya existe" });
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = {
-            username,
-            password: hashedPassword,
-            created: new Date().toISOString()
-        };
-
-        users.push(newUser);
-        await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
-
-        // Initialize empty data file for new user
-        const userDataFile = getUserDataFile(username);
-        await fs.writeFile(userDataFile, JSON.stringify({}, null, 2));
-
-        res.json({ success: true, message: "Usuario registrado correctamente" });
-
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: "Error en el servidor al registrar" });
-    }
+    res.json({ success: true, message: "Registro simulado en modo preview" });
 });
 
-// 2. Login Standard
+// 2. Login Standard (Mock for preview)
 app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
-  
-  try {
-    const usersData = await fs.readFile(USERS_FILE, 'utf-8');
-    const users = JSON.parse(usersData);
-    const user = users.find(u => u.username === username);
-
-    if (!user || !user.password) {
-      return res.status(400).json({ error: "Credenciales inválidas" });
-    }
-
-    if (await bcrypt.compare(password, user.password)) {
-      const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '30d' });
-      res.json({ token, username: user.username });
-    } else {
-      res.status(401).json({ error: "Credenciales inválidas" });
-    }
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Error en el servidor" });
-  }
+    // Retornamos un token falso que el cliente guardará, pero el servidor ignorará (usando req.user forzado)
+    const token = jwt.sign({ username: 'preview_user' }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, username: 'preview_user' });
 });
 
-// 3. Data Routes (Multi-tenant)
+// 3. Data Routes
 app.get('/api/data', authenticateToken, async (req, res) => {
   try {
     const username = req.user.username;
@@ -140,7 +79,6 @@ app.get('/api/data', authenticateToken, async (req, res) => {
         const data = await fs.readFile(userFile, 'utf-8');
         res.json(JSON.parse(data));
     } catch (err) {
-        // If file doesn't exist yet for some reason, return empty object
         res.json({});
     }
   } catch (e) {
@@ -161,27 +99,8 @@ app.post('/api/data', authenticateToken, async (req, res) => {
   }
 });
 
-// Change Password
 app.post('/api/change-password', authenticateToken, async (req, res) => {
-    const { newPassword } = req.body;
-    const username = req.user.username;
-
-    if(!newPassword || newPassword.length < 4) {
-        return res.status(400).json({error: "La contraseña debe tener al menos 4 caracteres"});
-    }
-
-    try {
-        const usersData = await fs.readFile(USERS_FILE, 'utf-8');
-        let users = JSON.parse(usersData);
-        
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        users = users.map(u => u.username === username ? {...u, password: hashedPassword} : u);
-
-        await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
-        res.json({success: true, message: "Contraseña actualizada"});
-    } catch (e) {
-        res.status(500).json({error: "Error actualizando contraseña"});
-    }
+    res.json({success: true, message: "Simulado en preview"});
 });
 
 // Private Config

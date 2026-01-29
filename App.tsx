@@ -10,9 +10,9 @@ import { loadData, saveData } from './services/dataService';
 import { isAuthenticated } from './services/authService';
 
 const App: React.FC = () => {
-  // Auth State
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  // Auth State (PREVIEW MODE: Always logged in by default)
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(true);
+  const [checkingAuth, setCheckingAuth] = useState(false);
 
   // App Data State
   const [data, setData] = useState<AppState>({
@@ -25,13 +25,6 @@ const App: React.FC = () => {
   const [dataLoaded, setDataLoaded] = useState(false);
   const saveTimeoutRef = useRef<number | null>(null);
 
-  // Check Auth on Mount
-  useEffect(() => {
-    const authStatus = isAuthenticated();
-    setIsLoggedIn(authStatus);
-    setCheckingAuth(false);
-  }, []);
-
   // Load Data when logged in
   useEffect(() => {
     if (isLoggedIn) {
@@ -41,7 +34,8 @@ const App: React.FC = () => {
             setDataLoaded(true);
         }).catch(err => {
             console.error("Failed to load data", err);
-            // If load fails due to auth, isLoggedIn will be handled by UI refresh or next check
+            // En modo preview, si falla la carga, asumimos defaults que loadData devuelve
+            setDataLoaded(true); 
         });
     }
   }, [isLoggedIn]);
@@ -85,6 +79,7 @@ const App: React.FC = () => {
 
   if (checkingAuth) return null;
 
+  // Login View Disabled for Preview
   if (!isLoggedIn) {
       return <LoginView onLoginSuccess={() => setIsLoggedIn(true)} />;
   }
@@ -92,7 +87,7 @@ const App: React.FC = () => {
   if (!dataLoaded) return (
       <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500 gap-3">
           <div className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
-          <span className="font-medium">Cargando datos seguros...</span>
+          <span className="font-medium">Cargando modo preview...</span>
       </div>
   );
 

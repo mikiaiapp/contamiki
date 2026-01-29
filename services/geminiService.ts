@@ -5,9 +5,10 @@ import { getToken } from "./authService";
 // Helper to get the AI instance lazily
 const getAIClient = async () => {
     try {
-        const token = getToken();
-        if(!token) throw new Error("No autenticado");
-
+        const token = getToken() || "preview_token";
+        
+        // En preview mode es posible que la API Key no se lea si auth falla, 
+        // pero intentamos llamar al config endpoint de todas formas
         const res = await fetch('/api/config', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -35,15 +36,18 @@ export const generateFinancialAdvice = async (
 
     // Prepare a summary
     const recentTransactions = transactions.slice(0, 50).map(t => {
+      // Family is Parent (Group)
       const fam = families.find(f => f.id === t.familyId);
-      const cat = categories.find(c => c.id === fam?.categoryId);
+      // Category is Child (Detail)
+      const cat = categories.find(c => c.id === t.categoryId);
+      
       return {
         date: t.date,
         amount: t.amount,
         type: t.type,
         desc: t.description,
-        item: fam?.name || 'Desconocido',
-        group: cat?.name || 'Desconocido'
+        group: fam?.name || 'Desconocido',
+        item: cat?.name || 'Desconocido'
       };
     });
 
@@ -61,7 +65,7 @@ export const generateFinancialAdvice = async (
       Transacciones Recientes: ${JSON.stringify(recentTransactions)}
 
       Analiza los hábitos de gasto. 
-      1. Identifica la Categoría (Grupo) con mayor gasto y qué familia específica dentro de ella contribuye más.
+      1. Identifica la Familia (Grupo) con mayor gasto y qué categoría específica (Detalle) contribuye más.
       2. Detecta gastos recurrentes que podrían reducirse.
       3. Da 3 consejos específicos y accionables para ahorrar dinero.
       
