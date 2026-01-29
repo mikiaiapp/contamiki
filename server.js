@@ -1,3 +1,4 @@
+
 import express from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -12,17 +13,21 @@ const DATA_DIR = path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
 // Configs
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_fallback_key_change_me';
+const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_master_key_conta_miki';
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(__dirname));
 
-// Initialize
+// Initialize System Files
 const initSystem = async () => {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
-    // Init Users file if needed (skipped logic for brevity in preview)
+    try {
+      await fs.access(USERS_FILE);
+    } catch {
+      await fs.writeFile(USERS_FILE, JSON.stringify([]));
+    }
   } catch (err) {
     console.error("Error initializing storage:", err);
   }
@@ -36,37 +41,69 @@ const getUserDataFile = (username) => {
     return path.join(DATA_DIR, `data_${safeUsername}.json`);
 };
 
-// --- Auth Middleware (PREVIEW MODE: DISABLED/BYPASSED) ---
-const authenticateToken = (req, res, next) => {
-  // En modo preview, asignamos siempre un usuario "demo"
-  // Si quieres reactivar la seguridad, descomenta el bloque de abajo y borra la línea de req.user
-  req.user = { username: 'preview_user' };
-  next();
+// Helper: Read users
+const readUsers = async () => {
+    try {
+        const content = await fs.readFile(USERS_FILE, 'utf-8');
+        return JSON.parse(content);
+    } catch {
+        return [];
+    }
+};
 
-  /* 
+// --- Auth Middleware (REAL SECURITY) ---
+const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.sendStatus(401);
+  
+  if (!token) return res.status(401).json({ error: "No autorizado" });
+
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403);
+    if (err) return res.status(403).json({ error: "Token inválido o expirado" });
     req.user = user;
     next();
   });
-  */
 };
 
 // --- Routes ---
 
-// 1. Register (Mock for preview)
+// 1. Register User
 app.post('/api/register', async (req, res) => {
-    res.json({ success: true, message: "Registro simulado en modo preview" });
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: "Usuario y contraseña requeridos" });
+
+    try {
+        const users = await readUsers();
+        if (users.find(u => u.username === username)) {
+            return res.status(400).json({ error: "El usuario ya existe" });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        users.push({ username, password: hashedPassword });
+        await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
+
+        res.json({ success: true, message: "Usuario registrado correctamente" });
+    } catch (err) {
+        res.status(500).json({ error: "Error en el servidor al registrar" });
+    }
 });
 
-// 2. Login Standard (Mock for preview)
+// 2. Login User
 app.post('/api/login', async (req, res) => {
-    // Retornamos un token falso que el cliente guardará, pero el servidor ignorará (usando req.user forzado)
-    const token = jwt.sign({ username: 'preview_user' }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, username: 'preview_user' });
+    const { username, password } = req.body;
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.username === username);
+
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res.status(401).json({ error: "Credenciales inválidas" });
+        }
+
+        const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '30d' });
+        res.json({ token, username: user.username });
+    } catch (err) {
+        res.status(500).json({ error: "Error en el servidor al iniciar sesión" });
+    }
 });
 
 // 3. Data Routes
@@ -79,11 +116,12 @@ app.get('/api/data', authenticateToken, async (req, res) => {
         const data = await fs.readFile(userFile, 'utf-8');
         res.json(JSON.parse(data));
     } catch (err) {
+        // Si el archivo no existe, enviamos un estado inicial vacío
         res.json({});
     }
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "Error reading user data" });
+    res.status(500).json({ error: "Error leyendo datos del usuario" });
   }
 });
 
@@ -95,15 +133,28 @@ app.post('/api/data', authenticateToken, async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "Error saving user data" });
+    res.status(500).json({ error: "Error guardando datos del usuario" });
   }
 });
 
 app.post('/api/change-password', authenticateToken, async (req, res) => {
-    res.json({success: true, message: "Simulado en preview"});
+    const { newPassword } = req.body;
+    const username = req.user.username;
+    try {
+        const users = await readUsers();
+        const userIndex = users.findIndex(u => u.username === username);
+        if (userIndex === -1) return res.status(404).json({ error: "Usuario no encontrado" });
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        users[userIndex].password = hashedPassword;
+        await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
+        res.json({ success: true, message: "Contraseña actualizada" });
+    } catch (err) {
+        res.status(500).json({ error: "Error actualizando contraseña" });
+    }
 });
 
-// Private Config
+// Private Config for Gemini
 app.get('/api/config', authenticateToken, (req, res) => {
     res.json({ 
         apiKey: process.env.API_KEY || '' 
@@ -115,5 +166,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`ContaMiki Server running on port ${PORT}`);
 });
