@@ -18,20 +18,25 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [accountId, setAccountId] = useState(data.accounts[0]?.id || '');
-  const [familyId, setFamilyId] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [entityId, setEntityId] = useState(''); // Contrapartida
+  
+  // Hierarchy Selection
+  const [selectedCategoryId, setSelectedCategoryId] = useState(''); // First select parent
+  const [selectedFamilyId, setSelectedFamilyId] = useState(''); // Then select child (target)
 
   // Filtered Logic
   const filteredTransactions = data.transactions
     .filter(t => t.description.toLowerCase().includes(filter.toLowerCase()) || 
-                 data.categories.find(c => c.id === t.categoryId)?.name.toLowerCase().includes(filter.toLowerCase()) ||
-                 (t.entityId && data.entities?.find(e => e.id === t.entityId)?.name.toLowerCase().includes(filter.toLowerCase())))
+                 data.families.find(f => f.id === t.familyId)?.name.toLowerCase().includes(filter.toLowerCase()) ||
+                 data.categories.find(c => c.id === t.categoryId)?.name.toLowerCase().includes(filter.toLowerCase()))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || !description || !accountId || !categoryId) return;
+    if (!amount || !description || !accountId || !selectedFamilyId) return;
+
+    // We store the familyId (User selection) and the categoryId (Parent of family)
+    const family = data.families.find(f => f.id === selectedFamilyId);
+    if (!family) return;
 
     const newTx: Transaction = {
       id: crypto.randomUUID(),
@@ -39,9 +44,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       amount: parseFloat(amount),
       description,
       accountId,
-      categoryId,
-      familyId, // Persist family ID for easier querying later
-      entityId,
+      familyId: selectedFamilyId,
+      categoryId: family.categoryId,
       type
     };
 
@@ -54,14 +58,15 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       setAmount('');
       setDescription('');
       setDate(new Date().toISOString().split('T')[0]);
-      setFamilyId('');
-      setCategoryId('');
-      setEntityId('');
+      setSelectedCategoryId('');
+      setSelectedFamilyId('');
   };
 
-  // Derived options based on selections
-  const availableFamilies = data.families.filter(f => f.type === type);
-  const availableCategories = data.categories.filter(c => c.familyId === familyId);
+  // 1. Filtrar Categorías por Tipo (Ingreso/Gasto)
+  const availableCategories = data.categories.filter(c => c.type === type);
+  
+  // 2. Filtrar Familias por la Categoría seleccionada
+  const availableFamilies = data.families.filter(f => f.categoryId === selectedCategoryId);
 
   return (
     <div className="space-y-6">
@@ -87,9 +92,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 onChange={(e) => setFilter(e.target.value)}
             />
         </div>
-        <button className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 flex items-center gap-2">
-            <Filter size={18} /> Filtrar
-        </button>
       </div>
 
       {/* Transactions Table */}
@@ -99,8 +101,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             <tr>
               <th className="px-6 py-4">Fecha</th>
               <th className="px-6 py-4">Descripción</th>
-              <th className="px-6 py-4">Contrapartida</th>
-              <th className="px-6 py-4">Familia / Categoría</th>
+              <th className="px-6 py-4">Categoría (Grupo)</th>
+              <th className="px-6 py-4">Familia (Detalle)</th>
               <th className="px-6 py-4">Cuenta</th>
               <th className="px-6 py-4 text-right">Importe</th>
               <th className="px-6 py-4 text-center">Acción</th>
@@ -111,24 +113,20 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 const category = data.categories.find(c => c.id === t.categoryId);
                 const family = data.families.find(f => f.id === t.familyId);
                 const account = data.accounts.find(a => a.id === t.accountId);
-                const entity = data.entities?.find(e => e.id === t.entityId);
                 
                 return (
                     <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 text-sm text-slate-600">{t.date}</td>
                         <td className="px-6 py-4 font-medium text-slate-800">{t.description}</td>
-                        <td className="px-6 py-4 text-sm text-slate-600">
-                            {entity ? (
-                                <span className="inline-flex items-center px-2 py-1 rounded bg-indigo-50 text-indigo-700 text-xs font-medium">
-                                    {entity.name}
-                                </span>
-                            ) : '-'}
+                        <td className="px-6 py-4 text-sm text-slate-500">
+                           {category ? `${category.icon} ${category.name}` : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-700 font-medium">
+                            {family ? `${family.icon} ${family.name}` : '-'}
                         </td>
                         <td className="px-6 py-4 text-sm text-slate-500">
-                            <span className="inline-block bg-slate-100 px-2 py-1 rounded text-xs font-semibold mr-2">{family?.name}</span>
-                            {category?.name}
+                           {account ? `${account.icon} ${account.name}` : '-'}
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-500">{account?.name}</td>
                         <td className={`px-6 py-4 text-right font-bold ${t.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
                             {t.type === 'INCOME' ? '+' : '-'}{t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
                         </td>
@@ -165,14 +163,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         <button 
                             type="button"
                             className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${type === 'EXPENSE' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}
-                            onClick={() => { setType('EXPENSE'); setFamilyId(''); setCategoryId(''); }}
+                            onClick={() => { setType('EXPENSE'); setSelectedCategoryId(''); setSelectedFamilyId(''); }}
                         >
                             Gasto
                         </button>
                         <button 
                             type="button"
                             className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${type === 'INCOME' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}
-                            onClick={() => { setType('INCOME'); setFamilyId(''); setCategoryId(''); }}
+                            onClick={() => { setType('INCOME'); setSelectedCategoryId(''); setSelectedFamilyId(''); }}
                         >
                             Ingreso
                         </button>
@@ -206,54 +204,43 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         />
                     </div>
 
-                    {/* Contrapartida Selection */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Contrapartida (Tercero)</label>
-                        <select 
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                            value={entityId} onChange={e => setEntityId(e.target.value)}
-                        >
-                            <option value="">-- Sin contrapartida específica --</option>
-                            {(data.entities || []).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                        </select>
-                        <p className="text-xs text-slate-400 mt-1">Opcional. Selecciona quién recibe o envía el dinero.</p>
-                    </div>
-
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Cuenta Bancaria / Caja</label>
                         <select 
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                             value={accountId} onChange={e => setAccountId(e.target.value)}
                         >
-                            {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            {data.accounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
                         </select>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Familia</label>
-                            <select 
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                value={familyId} 
-                                onChange={e => { setFamilyId(e.target.value); setCategoryId(''); }}
-                                required
-                            >
-                                <option value="">Seleccionar...</option>
-                                {availableFamilies.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                            </select>
-                        </div>
-                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Categoría</label>
                             <select 
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                value={categoryId} 
-                                onChange={e => setCategoryId(e.target.value)}
-                                disabled={!familyId}
+                                value={selectedCategoryId} 
+                                onChange={e => { setSelectedCategoryId(e.target.value); setSelectedFamilyId(''); }}
                                 required
                             >
                                 <option value="">Seleccionar...</option>
-                                {availableCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                {availableCategories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
                             </select>
+                            <p className="text-xs text-slate-400 mt-1">Selecciona el grupo principal.</p>
+                        </div>
+                         <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Familia (Detalle)</label>
+                            <select 
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                value={selectedFamilyId} 
+                                onChange={e => setSelectedFamilyId(e.target.value)}
+                                disabled={!selectedCategoryId}
+                                required
+                            >
+                                <option value="">Seleccionar...</option>
+                                {availableFamilies.map(f => <option key={f.id} value={f.id}>{f.icon} {f.name}</option>)}
+                            </select>
+                            <p className="text-xs text-slate-400 mt-1">Aquí es donde se guarda el apunte.</p>
                         </div>
                     </div>
 

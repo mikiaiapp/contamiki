@@ -5,23 +5,23 @@ export interface Account {
   name: string;
   initialBalance: number;
   currency: string;
+  icon: string; // Emoji
 }
 
-export interface Family {
+// Ahora Category es el PADRE (Agrupador para subtotales)
+export interface Category {
   id: string;
   name: string;
   type: TransactionType;
+  icon: string; // Emoji
 }
 
-export interface Category {
-  id: string;
-  familyId: string;
-  name: string;
-}
-
-export interface Entity {
+// Ahora Family es el HIJO (Detalle específico donde va el apunte)
+export interface Family {
   id: string;
   name: string;
+  categoryId: string; // Link to parent
+  icon: string; // Emoji
 }
 
 export interface Transaction {
@@ -30,9 +30,8 @@ export interface Transaction {
   amount: number;
   description: string;
   accountId: string;
-  categoryId: string;
-  familyId: string; // Denormalized for easier filtering
-  entityId?: string; // Contrapartida
+  familyId: string; // El apunte va a la familia
+  categoryId: string; // Desnormalizado para búsquedas rápidas
   type: TransactionType;
 }
 
@@ -40,7 +39,6 @@ export interface AppState {
   accounts: Account[];
   families: Family[];
   categories: Category[];
-  entities: Entity[];
   transactions: Transaction[];
 }
 

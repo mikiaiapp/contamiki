@@ -19,8 +19,7 @@ const App: React.FC = () => {
     accounts: [],
     families: [],
     categories: [],
-    transactions: [],
-    entities: []
+    transactions: []
   });
   const [currentView, setCurrentView] = useState<View>('DASHBOARD');
   const [dataLoaded, setDataLoaded] = useState(false);

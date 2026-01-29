@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { Transaction, Family, Account } from "../types";
+import { Transaction, Family, Account, Category } from "../types";
 import { getToken } from "./authService";
 
 // Helper to get the AI instance lazily
@@ -26,39 +26,46 @@ const getAIClient = async () => {
 export const generateFinancialAdvice = async (
   transactions: Transaction[],
   families: Family[],
-  accounts: Account[]
+  accounts: Account[],
+  categories: Category[]
 ): Promise<string> => {
   try {
     const ai = await getAIClient();
     if (!ai) return "Error: No se pudo conectar con la IA. Verifica tu conexión o credenciales.";
 
-    // Prepare a summary to save tokens and avoid sending PII
-    const recentTransactions = transactions.slice(0, 50).map(t => ({
-      date: t.date,
-      amount: t.amount,
-      type: t.type,
-      desc: t.description,
-      family: families.find(f => f.id === t.familyId)?.name || 'Desconocido'
-    }));
+    // Prepare a summary
+    const recentTransactions = transactions.slice(0, 50).map(t => {
+      const fam = families.find(f => f.id === t.familyId);
+      const cat = categories.find(c => c.id === fam?.categoryId);
+      return {
+        date: t.date,
+        amount: t.amount,
+        type: t.type,
+        desc: t.description,
+        item: fam?.name || 'Desconocido',
+        group: cat?.name || 'Desconocido'
+      };
+    });
 
     const accountSummaries = accounts.map(a => ({
       name: a.name,
-      initial: a.initialBalance
+      initial: a.initialBalance,
+      icon: a.icon
     }));
 
     const prompt = `
-      Actúa como un asesor financiero estricto pero útil.
-      Aquí tienes un resumen de los datos financieros del usuario (Últimas 50 transacciones y metadatos de cuentas):
+      Actúa como un asesor financiero personal.
+      Aquí tienes un resumen de los datos financieros del usuario (Últimas 50 transacciones y estado de cuentas):
       
       Cuentas: ${JSON.stringify(accountSummaries)}
-      Transacciones: ${JSON.stringify(recentTransactions)}
+      Transacciones Recientes: ${JSON.stringify(recentTransactions)}
 
       Analiza los hábitos de gasto. 
-      1. Identifica la familia de categorías con mayor gasto.
-      2. Detecta gastos recurrentes innecesarios.
-      3. Da 3 consejos específicos y accionables para ahorrar dinero basados en estos datos.
+      1. Identifica la Categoría (Grupo) con mayor gasto y qué familia específica dentro de ella contribuye más.
+      2. Detecta gastos recurrentes que podrían reducirse.
+      3. Da 3 consejos específicos y accionables para ahorrar dinero.
       
-      Formatea la respuesta en Markdown limpio. Usa negritas para enfatizar. Manténlo por debajo de 300 palabras.
+      Formatea la respuesta en Markdown limpio y usa emojis donde sea apropiado.
     `;
 
     const response = await ai.models.generateContent({

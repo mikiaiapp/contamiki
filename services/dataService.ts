@@ -1,42 +1,35 @@
-import { AppState, Account, Family, Category, Transaction, Entity } from "../types";
+import { AppState, Account, Family, Category } from "../types";
 import { getToken, logout } from "./authService";
 
-const defaultFamilies: Family[] = [
-  { id: 'f1', name: 'Vivienda', type: 'EXPENSE' },
-  { id: 'f2', name: 'Alimentación', type: 'EXPENSE' },
-  { id: 'f3', name: 'Transporte', type: 'EXPENSE' },
-  { id: 'f4', name: 'Salario', type: 'INCOME' },
-  { id: 'f5', name: 'Inversiones', type: 'INCOME' },
+// Categorías (Padres - Agrupadores)
+const defaultCategories: Category[] = [
+  { id: 'c1', name: 'Vivienda', type: 'EXPENSE', icon: '🏠' },
+  { id: 'c2', name: 'Alimentación', type: 'EXPENSE', icon: '🍎' },
+  { id: 'c3', name: 'Transporte', type: 'EXPENSE', icon: '🚗' },
+  { id: 'c4', name: 'Ingresos Laborales', type: 'INCOME', icon: '💼' },
+  { id: 'c5', name: 'Ingresos Pasivos', type: 'INCOME', icon: '📈' },
 ];
 
-const defaultCategories: Category[] = [
-  { id: 'c1', familyId: 'f1', name: 'Alquiler/Hipoteca' },
-  { id: 'c2', familyId: 'f1', name: 'Suministros' },
-  { id: 'c3', familyId: 'f2', name: 'Supermercado' },
-  { id: 'c4', familyId: 'f2', name: 'Restaurantes' },
-  { id: 'c5', familyId: 'f3', name: 'Gasolina' },
-  { id: 'c6', familyId: 'f4', name: 'Nómina' },
-  { id: 'c7', familyId: 'f5', name: 'Dividendos' },
+// Familias (Hijos - Elementos específicos)
+const defaultFamilies: Family[] = [
+  { id: 'f1', categoryId: 'c1', name: 'Alquiler/Hipoteca', icon: '🔑' },
+  { id: 'f2', categoryId: 'c1', name: 'Suministros (Luz/Agua)', icon: '💡' },
+  { id: 'f3', categoryId: 'c2', name: 'Supermercado', icon: '🛒' },
+  { id: 'f4', categoryId: 'c2', name: 'Restaurantes', icon: '🍽️' },
+  { id: 'f5', categoryId: 'c3', name: 'Gasolina', icon: '⛽' },
+  { id: 'f6', categoryId: 'c4', name: 'Nómina', icon: '💵' },
+  { id: 'f7', categoryId: 'c5', name: 'Dividendos', icon: '💰' },
 ];
 
 const defaultAccounts: Account[] = [
-  { id: 'a1', name: 'Cuenta Bancaria Principal', initialBalance: 1000, currency: 'EUR' },
-  { id: 'a2', name: 'Cartera / Efectivo', initialBalance: 150, currency: 'EUR' },
-];
-
-const defaultEntities: Entity[] = [
-  { id: 'e1', name: 'Supermercados S.A.' },
-  { id: 'e2', name: 'Gasolinera Norte' },
-  { id: 'e3', name: 'Empresa Principal S.L.' },
-  { id: 'e4', name: 'Casero' },
-  { id: 'e5', name: 'Restaurante El Buen Gusto' },
+  { id: 'a1', name: 'Banco Principal', initialBalance: 1000, currency: 'EUR', icon: '🏦' },
+  { id: 'a2', name: 'Cartera / Efectivo', initialBalance: 150, currency: 'EUR', icon: '👛' },
 ];
 
 const defaultState: AppState = {
     accounts: defaultAccounts,
     families: defaultFamilies,
     categories: defaultCategories,
-    entities: defaultEntities,
     transactions: [],
 };
 
@@ -60,19 +53,15 @@ export const loadData = async (): Promise<AppState> => {
     
     const data = await response.json();
     
-    if (!data || !data.accounts || data.accounts.length === 0) {
+    // Si no hay datos o la estructura es antigua (tiene entities), reseteamos a defaults limpios
+    // o intentamos migrar. Para simplificar en este cambio estructural, usaremos defaults si faltan categorías.
+    if (!data || !data.categories || data.categories.length === 0) {
         return defaultState;
-    }
-    
-    // Ensure entities array exists for older data
-    if (!data.entities) {
-        data.entities = defaultEntities;
     }
     
     return data;
   } catch (e: any) {
     console.error("Error loading data:", e);
-    // If auth error, app will handle redirection, otherwise return defaults
     if (e.message === "Unauthorized" || e.message === "No token") throw e;
     return defaultState;
   }
@@ -83,13 +72,21 @@ export const saveData = async (state: AppState) => {
       const token = getToken();
       if(!token) return;
 
+      // Limpieza de datos antiguos si existen antes de guardar
+      const cleanState = {
+        accounts: state.accounts,
+        categories: state.categories,
+        families: state.families,
+        transactions: state.transactions
+      };
+
       await fetch('/api/data', {
           method: 'POST',
           headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify(state)
+          body: JSON.stringify(cleanState)
       });
   } catch (e) {
       console.error("Error saving data:", e);
