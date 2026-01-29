@@ -20,11 +20,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [accountId, setAccountId] = useState(data.accounts[0]?.id || '');
   const [familyId, setFamilyId] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [entityId, setEntityId] = useState(''); // Contrapartida
 
   // Filtered Logic
   const filteredTransactions = data.transactions
     .filter(t => t.description.toLowerCase().includes(filter.toLowerCase()) || 
-                 data.categories.find(c => c.id === t.categoryId)?.name.toLowerCase().includes(filter.toLowerCase()))
+                 data.categories.find(c => c.id === t.categoryId)?.name.toLowerCase().includes(filter.toLowerCase()) ||
+                 (t.entityId && data.entities?.find(e => e.id === t.entityId)?.name.toLowerCase().includes(filter.toLowerCase())))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -39,6 +41,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       accountId,
       categoryId,
       familyId, // Persist family ID for easier querying later
+      entityId,
       type
     };
 
@@ -53,6 +56,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       setDate(new Date().toISOString().split('T')[0]);
       setFamilyId('');
       setCategoryId('');
+      setEntityId('');
   };
 
   // Derived options based on selections
@@ -95,6 +99,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             <tr>
               <th className="px-6 py-4">Fecha</th>
               <th className="px-6 py-4">Descripción</th>
+              <th className="px-6 py-4">Contrapartida</th>
               <th className="px-6 py-4">Familia / Categoría</th>
               <th className="px-6 py-4">Cuenta</th>
               <th className="px-6 py-4 text-right">Importe</th>
@@ -106,10 +111,19 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 const category = data.categories.find(c => c.id === t.categoryId);
                 const family = data.families.find(f => f.id === t.familyId);
                 const account = data.accounts.find(a => a.id === t.accountId);
+                const entity = data.entities?.find(e => e.id === t.entityId);
+                
                 return (
                     <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 text-sm text-slate-600">{t.date}</td>
                         <td className="px-6 py-4 font-medium text-slate-800">{t.description}</td>
+                        <td className="px-6 py-4 text-sm text-slate-600">
+                            {entity ? (
+                                <span className="inline-flex items-center px-2 py-1 rounded bg-indigo-50 text-indigo-700 text-xs font-medium">
+                                    {entity.name}
+                                </span>
+                            ) : '-'}
+                        </td>
                         <td className="px-6 py-4 text-sm text-slate-500">
                             <span className="inline-block bg-slate-100 px-2 py-1 rounded text-xs font-semibold mr-2">{family?.name}</span>
                             {category?.name}
@@ -131,7 +145,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             })}
             {filteredTransactions.length === 0 && (
                 <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
                         No se encontraron movimientos.
                     </td>
                 </tr>
@@ -142,8 +156,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
       {/* Add Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 my-8">
                 <h3 className="text-xl font-bold mb-4">Añadir Movimiento</h3>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     {/* Type Toggle */}
@@ -164,13 +178,23 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         </button>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Importe</label>
-                        <input 
-                            type="number" step="0.01" required 
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            value={amount} onChange={e => setAmount(e.target.value)}
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Importe</label>
+                            <input 
+                                type="number" step="0.01" required 
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                value={amount} onChange={e => setAmount(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Fecha</label>
+                            <input 
+                                type="date" required 
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                value={date} onChange={e => setDate(e.target.value)}
+                            />
+                        </div>
                     </div>
 
                     <div>
@@ -182,24 +206,27 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Fecha</label>
-                            <input 
-                                type="date" required 
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                value={date} onChange={e => setDate(e.target.value)}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Cuenta</label>
-                            <select 
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                value={accountId} onChange={e => setAccountId(e.target.value)}
-                            >
-                                {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                            </select>
-                        </div>
+                    {/* Contrapartida Selection */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Contrapartida (Tercero)</label>
+                        <select 
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                            value={entityId} onChange={e => setEntityId(e.target.value)}
+                        >
+                            <option value="">-- Sin contrapartida específica --</option>
+                            {(data.entities || []).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                        </select>
+                        <p className="text-xs text-slate-400 mt-1">Opcional. Selecciona quién recibe o envía el dinero.</p>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Cuenta Bancaria / Caja</label>
+                        <select 
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            value={accountId} onChange={e => setAccountId(e.target.value)}
+                        >
+                            {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">

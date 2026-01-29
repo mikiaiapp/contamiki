@@ -1,4 +1,4 @@
-import { AppState, Account, Family, Category, Transaction } from "../types";
+import { AppState, Account, Family, Category, Transaction, Entity } from "../types";
 import { getToken, logout } from "./authService";
 
 const defaultFamilies: Family[] = [
@@ -24,10 +24,19 @@ const defaultAccounts: Account[] = [
   { id: 'a2', name: 'Cartera / Efectivo', initialBalance: 150, currency: 'EUR' },
 ];
 
+const defaultEntities: Entity[] = [
+  { id: 'e1', name: 'Supermercados S.A.' },
+  { id: 'e2', name: 'Gasolinera Norte' },
+  { id: 'e3', name: 'Empresa Principal S.L.' },
+  { id: 'e4', name: 'Casero' },
+  { id: 'e5', name: 'Restaurante El Buen Gusto' },
+];
+
 const defaultState: AppState = {
     accounts: defaultAccounts,
     families: defaultFamilies,
     categories: defaultCategories,
+    entities: defaultEntities,
     transactions: [],
 };
 
@@ -55,8 +64,13 @@ export const loadData = async (): Promise<AppState> => {
         return defaultState;
     }
     
+    // Ensure entities array exists for older data
+    if (!data.entities) {
+        data.entities = defaultEntities;
+    }
+    
     return data;
-  } catch (e) {
+  } catch (e: any) {
     console.error("Error loading data:", e);
     // If auth error, app will handle redirection, otherwise return defaults
     if (e.message === "Unauthorized" || e.message === "No token") throw e;

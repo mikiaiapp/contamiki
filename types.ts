@@ -19,6 +19,11 @@ export interface Category {
   name: string;
 }
 
+export interface Entity {
+  id: string;
+  name: string;
+}
+
 export interface Transaction {
   id: string;
   date: string; // ISO String
@@ -27,6 +32,7 @@ export interface Transaction {
   accountId: string;
   categoryId: string;
   familyId: string; // Denormalized for easier filtering
+  entityId?: string; // Contrapartida
   type: TransactionType;
 }
 
@@ -34,6 +40,7 @@ export interface AppState {
   accounts: Account[];
   families: Family[];
   categories: Category[];
+  entities: Entity[];
   transactions: Transaction[];
 }
 

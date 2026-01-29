@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
-import { AppState, Transaction } from '../types';
+import { AppState } from '../types';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Users } from 'lucide-react';
 
 interface DashboardProps {
   data: AppState;
@@ -10,7 +10,7 @@ interface DashboardProps {
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
 
 export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
-  const { transactions, accounts, families } = data;
+  const { transactions, accounts, families, entities } = data;
 
   const stats = useMemo(() => {
     let income = 0;
@@ -39,6 +39,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
     });
     return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
   }, [transactions, families]);
+
+  // Entity Balances (Saldo en Contrapartidas)
+  const entityBalances = useMemo(() => {
+      if (!entities) return [];
+      
+      return entities.map(entity => {
+          const entityTx = transactions.filter(t => t.entityId === entity.id);
+          // Interpretation of "Saldo" for Contrapartida:
+          // Expenses paid TO them increases the volume/balance (e.g. how much I paid them)
+          // Income received FROM them increases their contribution
+          // To make it a "Balance" in a debt sense: 
+          // If I buy on credit, debt increases. But here we have generic accounts.
+          // We will show "Volumen Total" (Total Volume) and net direction.
+          
+          const totalPaidTo = entityTx.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + t.amount, 0);
+          const totalReceivedFrom = entityTx.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0);
+          
+          return {
+              id: entity.id,
+              name: entity.name,
+              paid: totalPaidTo,
+              received: totalReceivedFrom,
+              net: totalReceivedFrom - totalPaidTo // Positive means they gave me more money
+          };
+      }).filter(e => e.paid > 0 || e.received > 0).sort((a, b) => (b.paid + b.received) - (a.paid + a.received)).slice(0, 5); // Top 5
+  }, [transactions, entities]);
 
   // Last 6 months trend
   const trendData = useMemo(() => {
@@ -102,10 +128,52 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
         </div>
       </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Expense Breakdown */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-[400px]">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Chart */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 lg:col-span-2 h-[400px]">
+           <h3 className="text-lg font-semibold text-slate-800 mb-4">Tendencia (6 Meses)</h3>
+           <ResponsiveContainer width="100%" height="100%">
+             <BarChart data={trendData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                <YAxis axisLine={false} tickLine={false} />
+                <Tooltip formatter={(value: number) => value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} />
+                <Legend />
+                <Bar dataKey="Ingresos" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} />
+             </BarChart>
+           </ResponsiveContainer>
+        </div>
+
+        {/* Counterpart Balances */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-[400px] overflow-y-auto">
+            <div className="flex items-center gap-2 mb-4">
+                <Users className="text-indigo-500" size={20} />
+                <h3 className="text-lg font-semibold text-slate-800">Top Contrapartidas</h3>
+            </div>
+            <div className="space-y-4">
+                {entityBalances.length === 0 && <p className="text-slate-400 text-sm">No hay datos de contrapartidas.</p>}
+                {entityBalances.map(e => (
+                    <div key={e.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
+                        <div className="flex flex-col">
+                            <span className="font-medium text-slate-800 text-sm">{e.name}</span>
+                            <span className="text-xs text-slate-500">
+                                {e.paid > 0 && `Pagado: ${e.paid.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}`}
+                                {e.paid > 0 && e.received > 0 && ' | '}
+                                {e.received > 0 && `Recibido: ${e.received.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}`}
+                            </span>
+                        </div>
+                        <span className={`font-bold text-sm ${e.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {e.net >= 0 ? '+' : ''}{e.net.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </div>
+      </div>
+
+      {/* Expense Breakdown */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-[400px]">
           <h3 className="text-lg font-semibold text-slate-800 mb-4">Gastos por Familia</h3>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -127,23 +195,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
               <Tooltip formatter={(value: number) => value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} />
             </PieChart>
           </ResponsiveContainer>
-        </div>
-
-        {/* Trend Bar Chart */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-[400px]">
-           <h3 className="text-lg font-semibold text-slate-800 mb-4">Ingresos vs Gastos (6 Meses)</h3>
-           <ResponsiveContainer width="100%" height="100%">
-             <BarChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                <YAxis axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value: number) => value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} />
-                <Legend />
-                <Bar dataKey="Ingresos" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} />
-             </BarChart>
-           </ResponsiveContainer>
-        </div>
       </div>
     </div>
   );

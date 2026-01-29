@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { AppState, Account, Family, Category } from '../types';
-import { Plus, Trash2 } from 'lucide-react';
+import { AppState, Account, Family, Category, Entity } from '../types';
+import { Plus, Trash2, Users } from 'lucide-react';
 
 interface SettingsViewProps {
   data: AppState;
@@ -8,7 +8,7 @@ interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }) => {
-  const [activeTab, setActiveTab] = useState<'FAMILIES' | 'ACCOUNTS'>('FAMILIES');
+  const [activeTab, setActiveTab] = useState<'FAMILIES' | 'ACCOUNTS' | 'ENTITIES'>('FAMILIES');
   
   // State helpers for adding items
   const [newAccountName, setNewAccountName] = useState('');
@@ -19,6 +19,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
   const [newCategoryName, setNewCategoryName] = useState('');
   const [selectedFamilyForCategory, setSelectedFamilyForCategory] = useState('');
+
+  const [newEntityName, setNewEntityName] = useState('');
 
 
   const handleAddAccount = () => {
@@ -72,22 +74,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       onUpdateData({ categories: data.categories.filter(c => c.id !== id) });
   };
 
+  const handleAddEntity = () => {
+      if(!newEntityName) return;
+      const newEnt: Entity = {
+          id: crypto.randomUUID(),
+          name: newEntityName
+      };
+      onUpdateData({ entities: [...(data.entities || []), newEnt] });
+      setNewEntityName('');
+  };
+
+  const handleDeleteEntity = (id: string) => {
+      onUpdateData({ entities: (data.entities || []).filter(e => e.id !== id) });
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-800">Configuración</h2>
 
-      <div className="flex border-b border-slate-200">
+      <div className="flex border-b border-slate-200 overflow-x-auto">
         <button 
-            className={`px-6 py-3 font-medium transition-colors ${activeTab === 'FAMILIES' ? 'border-b-2 border-emerald-500 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-6 py-3 font-medium transition-colors whitespace-nowrap ${activeTab === 'FAMILIES' ? 'border-b-2 border-emerald-500 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
             onClick={() => setActiveTab('FAMILIES')}
         >
             Familias y Categorías
         </button>
         <button 
-            className={`px-6 py-3 font-medium transition-colors ${activeTab === 'ACCOUNTS' ? 'border-b-2 border-emerald-500 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-6 py-3 font-medium transition-colors whitespace-nowrap ${activeTab === 'ACCOUNTS' ? 'border-b-2 border-emerald-500 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
             onClick={() => setActiveTab('ACCOUNTS')}
         >
             Cuentas
+        </button>
+        <button 
+            className={`px-6 py-3 font-medium transition-colors whitespace-nowrap ${activeTab === 'ENTITIES' ? 'border-b-2 border-emerald-500 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+            onClick={() => setActiveTab('ENTITIES')}
+        >
+            Contrapartidas
         </button>
       </div>
 
@@ -122,6 +144,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                           </li>
                       ))}
                   </ul>
+              </div>
+          </div>
+      )}
+
+      {activeTab === 'ENTITIES' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                  <h3 className="text-lg font-bold mb-4">Añadir Contrapartida</h3>
+                  <p className="text-sm text-slate-500 mb-4">Registra terceros (empresas, personas, tiendas) para asociar a tus movimientos.</p>
+                  <div className="space-y-3">
+                      <input 
+                        type="text" placeholder="Nombre (ej. Mercadona, Cliente X)" 
+                        className="w-full px-3 py-2 border rounded-lg"
+                        value={newEntityName} onChange={e => setNewEntityName(e.target.value)}
+                      />
+                      <button onClick={handleAddEntity} className="w-full py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex justify-center items-center gap-2">
+                        <Users size={18} /> Añadir Contrapartida
+                      </button>
+                  </div>
+              </div>
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                  <h3 className="text-lg font-bold mb-4">Contrapartidas Existentes</h3>
+                  <div className="max-h-[400px] overflow-y-auto space-y-2">
+                      {(data.entities || []).map(ent => (
+                          <div key={ent.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
+                              <p className="font-medium text-slate-800">{ent.name}</p>
+                              <button onClick={() => handleDeleteEntity(ent.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
+                          </div>
+                      ))}
+                      {(data.entities || []).length === 0 && <p className="text-slate-400 italic">No hay contrapartidas registradas.</p>}
+                  </div>
               </div>
           </div>
       )}
