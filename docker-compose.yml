@@ -10,14 +10,16 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4000
-      # Puedes definir estas variables en un archivo .env en la misma carpeta
       - API_KEY=${API_KEY}
       - JWT_SECRET=${JWT_SECRET:-clave_secreta_por_defecto_123}
     volumes:
-      # Persistencia de datos (usuarios y transacciones) en la carpeta local ./data
-      - ./data:/app/data
+      # Usamos un volumen nombrado para que Docker lo gestione automáticamente
+      - contamiki_data:/app/data
     networks:
       - contamiki_network
+
+volumes:
+  contamiki_data:
 
 networks:
   contamiki_network:
