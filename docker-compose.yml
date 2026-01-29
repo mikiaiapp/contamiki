@@ -8,9 +8,9 @@ services:
       - "4000:4000"
     volumes:
       # 1. Mapear el directorio actual al contenedor para reflejar cambios de código (git pull)
-      # - ./:/app
+      - ./:/app
       # 2. Usar un volumen anónimo para node_modules para evitar conflictos con el host
-      # - /app/node_modules
+      - ./app/node_modules
       # 3. Persistencia de datos (Ajusta la ruta de la izquierda según tu NAS)
       - /volume1/docker/contamiki/data:/app/data
     # Comando: Reconstruye el frontend (bundle.js) y luego arranca el servidor cada vez que se reinicia
