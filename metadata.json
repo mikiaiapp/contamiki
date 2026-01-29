@@ -1,0 +1,5 @@
+{
+  "name": "ContaMiki",
+  "description": "Una aplicación completa de finanzas personales para controlar gastos, ingresos, familias, categorías y cuentas con información impulsada por IA.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,16 @@
+version: '3'
+services:
+  contamiki:
+    container_name: contamiki
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persistencia de datos (Ajusta la ruta de la izquierda según tu NAS)
+      - ./data:/app/data
+    environment:
+      # Tu API Key de Google Gemini
+      - API_KEY=AIzaSyByt2qp5UYhL-bhf1me82AM81PEJ7MJyYE
+      # Clave secreta para las sesiones (Cámbiala por seguridad)
+      - JWT_SECRET=cambia_esta_clave_secreta_por_algo_seguro
