@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { login, register } from '../services/authService';
+import { login, register } from './services/authService';
 import { Wallet, Lock, User, UserPlus, LogIn } from 'lucide-react';
 
 interface LoginViewProps {

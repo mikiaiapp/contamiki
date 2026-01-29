@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AppState, Transaction, TransactionType } from '../types';
+import { AppState, Transaction, TransactionType } from './types';
 import { Plus, Trash2, Search, ArrowRightLeft, Calendar as CalendarIcon, Tag } from 'lucide-react';
 
 interface TransactionViewProps {

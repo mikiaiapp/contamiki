@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Layout } from './components/Layout';
-import { Dashboard } from './components/Dashboard';
-import { TransactionView } from './components/TransactionView';
+import { Layout } from './Layout';
+import { Dashboard } from './Dashboard';
+import { TransactionView } from './TransactionView';
 import { SettingsView } from './components/SettingsView';
 import { AIInsights } from './components/AIInsights';
-import { LoginView } from './components/LoginView';
+import { LoginView } from './LoginView';
 import { AppState, View, Transaction } from './types';
 import { loadData, saveData } from './services/dataService';
 import { isAuthenticated } from './services/authService';

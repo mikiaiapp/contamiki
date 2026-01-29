@@ -1,3 +1,4 @@
+
 export type TransactionType = 'EXPENSE' | 'INCOME' | 'TRANSFER';
 
 export interface Account {
@@ -9,10 +10,11 @@ export interface Account {
 }
 
 // AHORA Family es el PADRE (Agrupador Principal)
+// Restricted to EXPENSE or INCOME as transfers are account-to-account only.
 export interface Family {
   id: string;
   name: string;
-  type: TransactionType;
+  type: 'EXPENSE' | 'INCOME'; 
   icon: string; // Emoji o Base64 DataURL
 }
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { LayoutDashboard, Receipt, Settings, BrainCircuit, Wallet, LogOut } from 'lucide-react';
-import { View } from '../types';
-import { logout } from '../services/authService';
+import { View } from './types';
+import { logout } from './services/authService';
 
 interface LayoutProps {
   currentView: View;

@@ -1,29 +1,10 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { Transaction, Family, Account, Category } from "../types";
-import { getToken } from "./authService";
 
-// Helper to get the AI instance lazily
-const getAIClient = async () => {
-    try {
-        const token = getToken() || "preview_token";
-        
-        // En preview mode es posible que la API Key no se lea si auth falla, 
-        // pero intentamos llamar al config endpoint de todas formas
-        const res = await fetch('/api/config', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!res.ok) throw new Error("No se pudo obtener la configuración");
-
-        const config = await res.json();
-        if (!config.apiKey) throw new Error("API Key no configurada en el servidor");
-        return new GoogleGenAI({ apiKey: config.apiKey });
-    } catch (e) {
-        console.error("Failed to initialize AI:", e);
-        return null;
-    }
-}
-
+/**
+ * Generates financial advice based on user transactions and accounts using Gemini 3.
+ */
 export const generateFinancialAdvice = async (
   transactions: Transaction[],
   families: Family[],
@@ -31,10 +12,10 @@ export const generateFinancialAdvice = async (
   categories: Category[]
 ): Promise<string> => {
   try {
-    const ai = await getAIClient();
-    if (!ai) return "Error: No se pudo conectar con la IA. Verifica tu conexión o credenciales.";
+    // Guidelines: Always use new GoogleGenAI({ apiKey: process.env.API_KEY }) directly.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-    // Prepare a summary
+    // Prepare a summary for the prompt
     const recentTransactions = transactions.slice(0, 50).map(t => {
       // Family is Parent (Group)
       const fam = families.find(f => f.id === t.familyId);
@@ -72,11 +53,13 @@ export const generateFinancialAdvice = async (
       Formatea la respuesta en Markdown limpio y usa emojis donde sea apropiado.
     `;
 
+    // Guidelines: Use 'gemini-3-flash-preview' for basic text tasks.
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
 
+    // Guidelines: Access the text output via the .text property.
     return response.text || "No hay información disponible en este momento.";
   } catch (error) {
     console.error("Gemini API Error:", error);

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AppState, Family, Category } from '../types';
+import { AppState, Family, Category } from './types';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { TrendingUp, TrendingDown, Banknote, ChevronDown, ChevronRight, ChevronLeft, ListFilter, Scale } from 'lucide-react';
 
