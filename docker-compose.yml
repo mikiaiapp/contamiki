@@ -14,7 +14,7 @@ services:
       # 3. Persistencia de datos (Ajusta la ruta de la izquierda según tu NAS)
       - /volume1/docker/contamiki/data:/app/data
     # Comando: Reconstruye el frontend (bundle.js) y luego arranca el servidor cada vez que se reinicia
-    command: sh -c "npm run build && npm start"
+    #command: sh -c "npm run build && npm start"
     environment:
       - PORT=4000
       # Tu API Key de Google Gemini
