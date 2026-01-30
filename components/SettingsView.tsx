@@ -57,7 +57,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     
     const cleanText = text.trim();
-    if (!cleanText || cleanText.length < 2) { 
+    if (cleanText.length < 2) { 
         setWebLogos([]); 
         setHasSearched(false);
         return; 
@@ -85,7 +85,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
   const renderIconInput = (icon: string, setIcon: (s: string) => void, currentName: string, fileRef: React.RefObject<HTMLInputElement>) => {
     const isImage = icon.startsWith('data:image') || icon.startsWith('http');
-    // El cuadro se muestra si estamos buscando, si hay logos cargados o si hemos buscado pero no hay nada
     const showBox = isSearchingWeb || webLogos.length > 0 || (hasSearched && !isSearchingWeb);
     
     return (
@@ -96,12 +95,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     onClick={() => fileRef.current?.click()}
                 >
                     {isImage ? (
-                        <img 
-                            src={icon} 
-                            className="w-full h-full object-contain p-2" 
-                            alt="Icono" 
-                            referrerPolicy="no-referrer"
-                        />
+                        <img src={icon} className="w-full h-full object-contain p-2" alt="Icono" referrerPolicy="no-referrer" />
                     ) : (
                         <span className="text-3xl">{icon}</span>
                     )}
@@ -110,7 +104,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     </div>
                 </div>
                 <div className="flex-1 text-center sm:text-left space-y-3">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Identidad Visual</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Personalización Visual</p>
                     <div className="flex flex-wrap justify-center sm:justify-start gap-2">
                         <button onClick={() => fileRef.current?.click()} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-black text-[8px] uppercase tracking-widest flex items-center gap-1.5 hover:bg-slate-50 transition-colors shadow-sm"><ImageIcon size={12} /> Galería</button>
                         <input type="file" ref={fileRef} className="hidden" accept="image/*" onChange={async (e) => {
@@ -128,11 +122,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           </div>
 
           {showBox && (
-            <div className="bg-white p-6 rounded-[2.5rem] border-2 border-indigo-50 shadow-2xl space-y-4 animate-in slide-in-from-top-4 duration-500 ring-4 ring-indigo-50/20">
+            <div className="bg-white p-6 rounded-[2rem] border-2 border-indigo-50 shadow-2xl space-y-4 animate-in slide-in-from-top-4 duration-500 ring-4 ring-indigo-50/20">
                 <div className="flex justify-between items-center border-b border-slate-50 pb-3">
                     <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
                         <Sparkles size={14} className={isSearchingWeb ? 'animate-spin' : ''} /> 
-                        {isSearchingWeb ? `Buscando logotipo para "${currentName}"...` : `Logos e Iconos encontrados`}
+                        {isSearchingWeb ? `Buscando para "${currentName}"...` : `Sugerencias`}
                     </span>
                     {!isSearchingWeb && (
                         <button onClick={() => {setWebLogos([]); setHasSearched(false);}} className="text-slate-300 hover:text-rose-500 transition-colors"><XCircle size={20}/></button>
@@ -142,37 +136,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 {isSearchingWeb && webLogos.length === 0 ? (
                     <div className="py-12 flex flex-col items-center justify-center gap-4">
                         <Loader2 className="animate-spin text-indigo-500" size={32} />
-                        <p className="text-[9px] font-black text-indigo-300 uppercase tracking-[0.4em]">Explorando la Red</p>
+                        <p className="text-[9px] font-black text-indigo-300 uppercase tracking-[0.4em]">Consultando archivos...</p>
                     </div>
                 ) : webLogos.length > 0 ? (
-                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar p-1">
+                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar p-1">
                         {webLogos.map((logo, idx) => (
                             <button 
                                 key={idx} 
                                 onClick={() => handleSelectWebLogo(logo.url, setIcon)} 
-                                className="aspect-square bg-slate-50 rounded-2xl border-2 border-transparent hover:border-indigo-500 p-2.5 transition-all flex items-center justify-center overflow-hidden shadow-sm hover:scale-110 active:scale-95 group relative"
-                                title={logo.source}
+                                className="aspect-square bg-slate-50 rounded-2xl border-2 border-transparent hover:border-indigo-500 p-2 transition-all flex items-center justify-center overflow-hidden shadow-sm hover:scale-105 active:scale-95 group relative"
                             >
                                 <img 
                                     src={logo.url} 
                                     className="w-full h-full object-contain" 
                                     alt={logo.source} 
                                     referrerPolicy="no-referrer"
-                                    loading="lazy"
                                     onError={(e) => {
-                                        // Ocultar solo si la imagen es definitivamente inválida
-                                        const btn = (e.target as HTMLImageElement).closest('button');
-                                        if (btn) btn.style.display = 'none';
+                                        (e.target as HTMLImageElement).parentElement?.classList.add('hidden');
                                     }}
                                 />
-                                <div className="absolute inset-0 bg-indigo-600/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
                         ))}
                     </div>
                 ) : hasSearched && !isSearchingWeb ? (
-                    <div className="py-8 text-center flex flex-col items-center gap-2">
-                        <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-300"><Info size={24}/></div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sin resultados específicos para "{currentName}".</p>
+                    <div className="py-6 text-center">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sin resultados para "{currentName}".</p>
                     </div>
                 ) : null}
             </div>
@@ -185,7 +173,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     <div className="space-y-12 max-w-full overflow-hidden">
       <div className="text-center md:text-left space-y-2">
         <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tighter leading-none">Ajustes.</h2>
-        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Estructura de la aplicación</p>
+        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Configuración de cuentas y categorías</p>
       </div>
 
       <div className="flex bg-slate-100 p-1.5 rounded-[1.5rem] shadow-inner border border-slate-200/50 overflow-x-auto scrollbar-hide">
@@ -196,24 +184,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
       <div className="max-w-3xl mx-auto">
         {activeTab === 'ACCOUNTS' && (
-            <div className="grid grid-cols-1 gap-10 animate-in fade-in duration-500">
+            <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
-                        <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl shadow-indigo-100"><Wallet size={24}/></div>
+                        <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Wallet size={24}/></div>
                         {accId ? 'Editar Cuenta' : 'Nueva Cuenta'}
                     </h3>
                     <div className="space-y-6">
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Sparkles size={12} className="text-indigo-400" /> Entidad o Nombre
-                            </label>
-                            <input 
-                                type="text" 
-                                placeholder="Ej: Santander, BBVA, Revolut, Cash..." 
-                                className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" 
-                                value={accName} 
-                                onChange={e => { setAccName(e.target.value); triggerWebSearch(e.target.value); }} 
-                            />
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre o Banco</label>
+                            <input type="text" placeholder="Ej: Santander, BBVA, Revolut..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={accName} onChange={e => { setAccName(e.target.value); triggerWebSearch(e.target.value); }} />
                         </div>
                         {renderIconInput(accIcon, setAccIcon, accName, accFileInputRef)}
                         <div className="space-y-2">
@@ -256,24 +236,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         )}
 
         {activeTab === 'FAMILIES' && (
-            <div className="animate-in fade-in duration-500 space-y-10">
+            <div className="space-y-10">
                 <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center justify-center gap-4">
-                        <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl shadow-indigo-100"><Layers size={24}/></div>
+                        <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Layers size={24}/></div>
                         Nueva Familia
                     </h3>
                     <div className="space-y-6">
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Sparkles size={12} className="text-indigo-400" /> Grupo Principal
-                            </label>
-                            <input 
-                                type="text" 
-                                placeholder="Ej: Alimentación, Ocio, Hogar..." 
-                                className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" 
-                                value={famName} 
-                                onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} 
-                            />
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Concepto Principal</label>
+                            <input type="text" placeholder="Ej: Alimentación, Hogar, Nómina..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={famName} onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} />
                         </div>
                         {renderIconInput(famIcon, setFamIcon, famName, famFileInputRef)}
                         <div className="flex bg-slate-100 p-2 rounded-2xl">
@@ -308,34 +280,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         )}
 
         {activeTab === 'CATEGORIES' && (
-            <div className="animate-in fade-in duration-500 space-y-10">
+            <div className="space-y-10">
                 <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center justify-center gap-4">
-                        <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl shadow-indigo-100"><Tag size={24}/></div>
+                        <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Tag size={24}/></div>
                         Nueva Categoría
                     </h3>
                     <div className="space-y-6">
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vincular a Familia</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Grupo Padre</label>
                             <div className="relative">
                                 <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none appearance-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={catParent} onChange={e => setCatParent(e.target.value)}>
-                                    <option value="">Selecciona un grupo...</option>
+                                    <option value="">Selecciona familia...</option>
                                     {data.families.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                                 </select>
                                 <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Sparkles size={12} className="text-indigo-400" /> Marca o Actividad
-                            </label>
-                            <input 
-                                type="text" 
-                                placeholder="Ej: Mercadona, Netflix, Carburante, Cine..." 
-                                className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" 
-                                value={catName} 
-                                onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} 
-                            />
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre o Establecimiento</label>
+                            <input type="text" placeholder="Ej: Mercadona, Netflix, Gasolinera..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={catName} onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} />
                         </div>
                         {renderIconInput(catIcon, setCatIcon, catName, catFileInputRef)}
                         <button onClick={() => {
