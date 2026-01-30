@@ -90,7 +90,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           };
           reader.readAsDataURL(blob);
       } catch (e) { 
-          // Si hay fallo de CORS, la URL directa funcionará para visualización local
           setWebLogos([]);
           setHasSearched(false);
       }
@@ -110,7 +109,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     </div>
                 </div>
                 <div className="flex-1 text-center sm:text-left space-y-3">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Avatar Representativo</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Icono Personalizado</p>
                     <div className="flex flex-wrap justify-center sm:justify-start gap-2">
                         <button onClick={() => fileRef.current?.click()} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-black text-[8px] uppercase tracking-widest flex items-center gap-1.5 hover:bg-slate-50 transition-colors shadow-sm"><ImageIcon size={12} /> Galería</button>
                         <input type="file" ref={fileRef} className="hidden" accept="image/*" onChange={async (e) => {
@@ -130,7 +129,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 <div className="flex justify-between items-center border-b border-slate-50 pb-3">
                     <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
                         <Sparkles size={14} className={isSearchingWeb ? 'animate-pulse' : ''} /> 
-                        {isSearchingWeb ? `Rastreando logos para "${currentName}"...` : `Resultados para "${currentName}"`}
+                        {isSearchingWeb ? `Buscando icono para "${currentName}"...` : `Iconos e Imágenes para "${currentName}"`}
                     </span>
                     {!isSearchingWeb && (
                         <button onClick={() => {setWebLogos([]); setHasSearched(false);}} className="text-slate-300 hover:text-rose-500 transition-colors"><XCircle size={18}/></button>
@@ -150,7 +149,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                     className="w-full h-full object-contain" 
                                     alt={logo.source} 
                                     onError={(e) => {
-                                        // Si una fuente específica falla, ocultamos el botón de forma elegante
                                         (e.target as HTMLImageElement).closest('button')?.style.setProperty('display', 'none');
                                     }}
                                 />
@@ -160,7 +158,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 ) : !isSearchingWeb && hasSearched ? (
                     <div className="py-8 text-center flex flex-col items-center gap-2">
                         <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-300"><Info size={20}/></div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sin coincidencias exactas en la red</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Intenta con otros términos (ocio, viajes, etc.)</p>
                     </div>
                 ) : null}
                 
@@ -170,7 +168,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             <Loader2 className="animate-spin text-indigo-500" size={32} />
                             <Sparkles className="absolute top-0 right-0 text-indigo-300 animate-bounce" size={14} />
                         </div>
-                        <span className="text-[9px] font-black text-indigo-300 uppercase tracking-[0.4em]">IA Analizando Dominios</span>
+                        <span className="text-[9px] font-black text-indigo-300 uppercase tracking-[0.4em]">IA Analizando Concepto Visual</span>
                     </div>
                 )}
             </div>
@@ -183,13 +181,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     <div className="space-y-12 max-w-full overflow-hidden">
       <div className="text-center md:text-left space-y-2">
         <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tighter leading-none">Ajustes.</h2>
-        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Estructura de la aplicación</p>
+        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Estructura del Entorno</p>
       </div>
 
       <div className="flex bg-slate-100 p-1.5 rounded-[1.5rem] shadow-inner border border-slate-200/50 overflow-x-auto scrollbar-hide">
         <button className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all whitespace-nowrap ${activeTab === 'ACCOUNTS' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => setActiveTab('ACCOUNTS')}><Wallet size={18} /> Cuentas</button>
-        <button className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all whitespace-nowrap ${activeTab === 'FAMILIES' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => setActiveTab('FAMILIES')}><Layers size={18} /> Grupos</button>
-        <button className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all whitespace-nowrap ${activeTab === 'CATEGORIES' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => setActiveTab('CATEGORIES')}><Tag size={18} /> Detalles</button>
+        <button className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all whitespace-nowrap ${activeTab === 'FAMILIES' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => setActiveTab('FAMILIES')}><Layers size={18} /> Familias</button>
+        <button className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all whitespace-nowrap ${activeTab === 'CATEGORIES' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => setActiveTab('CATEGORIES')}><Tag size={18} /> Categorías</button>
       </div>
 
       {activeTab === 'ACCOUNTS' && (
@@ -198,7 +196,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                   <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                       <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
                           <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl shadow-indigo-100"><Wallet size={24}/></div>
-                          {accId ? 'Modificar Cuenta' : 'Añadir Cuenta'}
+                          {accId ? 'Editar Cuenta' : 'Nueva Cuenta'}
                       </h3>
                       <div className="space-y-6">
                           <div className="space-y-2">
@@ -222,7 +220,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                       </div>
                   </div>
                   <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col">
-                      <h3 className="text-lg font-black text-slate-800 mb-8 uppercase tracking-widest">Patrimonio Actual</h3>
+                      <h3 className="text-lg font-black text-slate-800 mb-8 uppercase tracking-widest">Cuentas Activas</h3>
                       <div className="space-y-4 flex-1 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                           {data.accounts.map(acc => (
                               <div key={acc.id} className="flex justify-between items-center p-6 bg-slate-50 rounded-[2rem] group border border-transparent hover:border-indigo-100 hover:bg-white hover:shadow-xl transition-all">
@@ -253,12 +251,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                   <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                       <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
                           <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl shadow-indigo-100"><Layers size={24}/></div>
-                          Nuevo Agrupador
+                          Nueva Familia
                       </h3>
                       <div className="space-y-6">
                           <div className="space-y-2">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                  <Sparkles size={12} className="text-indigo-400" /> Título del Grupo
+                                  <Sparkles size={12} className="text-indigo-400" /> Nombre del Grupo
                               </label>
                               <input type="text" placeholder="Ej: Alimentación, Hogar, Ocio..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={famName} onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} />
                           </div>
@@ -271,11 +269,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                               if(!famName) return;
                               onUpdateData({ families: [...data.families, { id: generateId(), name: famName, type: famType, icon: famIcon }] });
                               resetForm();
-                          }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all active:scale-95">Guardar Grupo</button>
+                          }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all active:scale-95">Guardar Familia</button>
                       </div>
                   </div>
                   <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col">
-                      <h3 className="text-lg font-black text-slate-800 mb-8 uppercase tracking-widest">Estructura Global</h3>
+                      <h3 className="text-lg font-black text-slate-800 mb-8 uppercase tracking-widest">Listado de Familias</h3>
                       <div className="space-y-4 flex-1 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                           {data.families.map(f => (
                               <div key={f.id} className="flex justify-between items-center p-6 bg-slate-50 rounded-[2rem] border border-transparent hover:border-indigo-100 hover:bg-white hover:shadow-xl transition-all">
@@ -302,14 +300,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                   <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                       <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
                           <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl shadow-indigo-100"><Tag size={24}/></div>
-                          Nuevo Detalle
+                          Nueva Categoría
                       </h3>
                       <div className="space-y-6">
                           <div className="space-y-2">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vincular a Grupo</label>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vincular a Familia</label>
                               <div className="relative">
                                   <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none appearance-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={catParent} onChange={e => setCatParent(e.target.value)}>
-                                      <option value="">Selecciona un grupo...</option>
+                                      <option value="">Selecciona una familia...</option>
                                       {data.families.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                                   </select>
                                   <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
@@ -317,20 +315,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                           </div>
                           <div className="space-y-2">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                  <Sparkles size={12} className="text-indigo-400" /> Nombre del Detalle
+                                  <Sparkles size={12} className="text-indigo-400" /> Nombre de Categoría
                               </label>
-                              <input type="text" placeholder="Ej: Amazon, Netflix, Mercadona..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={catName} onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} />
+                              <input type="text" placeholder="Ej: Netflix, Mercadona, Gasolina..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={catName} onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} />
                           </div>
                           {renderIconInput(catIcon, setCatIcon, catName, catFileInputRef)}
                           <button onClick={() => {
                               if(!catName || !catParent) return;
                               onUpdateData({ categories: [...data.categories, { id: generateId(), name: catName, familyId: catParent, icon: catIcon }] });
                               resetForm();
-                          }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all active:scale-95">Confirmar Detalle</button>
+                          }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all active:scale-95">Confirmar Categoría</button>
                       </div>
                   </div>
                   <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col">
-                      <h3 className="text-lg font-black text-slate-800 mb-8 uppercase tracking-widest">Jerarquía Actual</h3>
+                      <h3 className="text-lg font-black text-slate-800 mb-8 uppercase tracking-widest">Jerarquía de Categorías</h3>
                       <div className="space-y-10 flex-1 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
                           {data.families.map(fam => {
                             const famCats = data.categories.filter(c => c.familyId === fam.id);

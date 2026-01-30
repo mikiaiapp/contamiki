@@ -2,13 +2,14 @@
 import { GoogleGenAI } from "@google/genai";
 
 /**
- * Busca logotipos e imágenes utilizando una estrategia de mapeo de dominios ultra-robusta.
+ * Busca logotipos e iconos representativos.
+ * Utiliza IA para decidir si buscar un dominio de marca o palabras clave para iconos conceptuales.
  */
 export const searchInternetLogos = async (text: string): Promise<{url: string, source: string}[]> => {
     if (!text || text.trim().length < 2) return [];
     
     const query = text.trim();
-    let cleanDomains: string[] = [];
+    let items: string[] = [];
 
     try {
         const apiKey = process.env.API_KEY;
@@ -16,44 +17,49 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
             const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
-                contents: `Identify the main official web domains for the brand: "${query}". 
-                Return ONLY the domains separated by commas (e.g., brand.com, brand.es). 
-                No markdown, no quotes, no extra text.`,
+                contents: `Analyze the term: "${query}". 
+                If it's a BRAND, return its main web domains (e.g. netflix.com).
+                If it's a GENERAL CATEGORY (e.g. "ocio", "viajes"), return the 3 best descriptive English keywords for an icon search (e.g. "leisure", "travel", "insurance").
+                Return ONLY a comma-separated list. No text, no quotes.`,
                 config: {
                     thinkingConfig: { thinkingBudget: 0 }
                 },
             });
 
             const rawResponse = (response.text || "").toLowerCase();
-            // Extraer cualquier cadena que parezca un dominio
-            const matches = rawResponse.match(/([a-z0-9][a-z0-9-]*\.)+[a-z]{2,}/gi) || [];
-            cleanDomains = Array.from(new Set(matches.map(d => d.replace(/^www\./, ''))));
+            items = rawResponse.split(',').map(i => i.trim()).filter(i => i.length > 2);
         }
     } catch (error) {
-        console.warn("AI domain extraction failed, using fallback logic.");
+        console.warn("AI icon extraction failed, using fallback.");
     }
 
-    // Fallback: Si no hay dominios o la IA falló, construir uno probable
-    if (cleanDomains.length === 0) {
-        const slug = query.toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (slug) cleanDomains = [`${slug}.com`, `${slug}.es`, `${slug}.io`].slice(0, 3);
+    // Fallback: Si la IA falla, usamos el término directo como palabra clave
+    if (items.length === 0) {
+        items = [query.toLowerCase()];
     }
 
     const results: {url: string, source: string}[] = [];
     
-    cleanDomains.forEach(domain => {
-        // Clearbit es el más fiable para logos de alta calidad
-        results.push({ url: `https://logo.clearbit.com/${domain}?size=256`, source: domain });
-        // Unavatar es excelente para marcas tecnológicas y sociales
-        results.push({ url: `https://unavatar.io/${domain}?fallback=false`, source: domain });
-        // Google Favicon como último recurso de alta disponibilidad
-        results.push({ url: `https://www.google.com/s2/favicons?domain=${domain}&sz=128`, source: domain });
+    items.forEach(item => {
+        const isDomain = item.includes('.');
+        
+        if (isDomain) {
+            // Fuentes para marcas
+            results.push({ url: `https://logo.clearbit.com/${item}?size=256`, source: item });
+            results.push({ url: `https://unavatar.io/${item}?fallback=false`, source: item });
+            results.push({ url: `https://www.google.com/s2/favicons?domain=${item}&sz=128`, source: item });
+        } else {
+            // Fuentes para conceptos genéricos (Icons8 Fluency es excelente para esto)
+            const keyword = item.replace(/\s+/g, '-');
+            results.push({ url: `https://img.icons8.com/fluency/256/${keyword}.png`, source: item });
+            results.push({ url: `https://img.icons8.com/color/256/${keyword}.png`, source: item });
+            results.push({ url: `https://img.icons8.com/clouds/256/${keyword}.png`, source: item });
+        }
     });
 
-    // Siempre añadir un avatar generado por nombre como última opción
-    const avatarName = encodeURIComponent(query);
+    // Siempre añadir un avatar de texto como última opción
     results.push({
-        url: `https://ui-avatars.com/api/?name=${avatarName}&background=4f46e5&color=fff&size=512&bold=true`,
+        url: `https://ui-avatars.com/api/?name=${encodeURIComponent(query)}&background=4f46e5&color=fff&size=512&bold=true`,
         source: 'Generado'
     });
 
