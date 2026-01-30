@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 
 /**
  * Busca logotipos e iconos representativos en internet.
- * Optimizado para distinguir entre marcas corporativas e iconos conceptuales genéricos.
+ * PRIORIDAD: 1. Logos de Marca | 2. Resultados de Google | 3. Iconos Conceptuales
  */
 export const searchInternetLogos = async (text: string): Promise<{url: string, source: string}[]> => {
     if (!text || text.trim().length < 2) return [];
@@ -16,9 +16,10 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
     let searchFoundUrls: string[] = [];
 
     // 1. LÓGICA DE MARCAS (Heurística rápida)
-    if (!query.includes(' ')) {
+    if (!query.includes(' ') && query.length > 2) {
         domains.push(`${queryLower}.es`);
         domains.push(`${queryLower}.com`);
+        domains.push(`${queryLower}.net`);
     }
 
     // 2. BÚSQUEDA PROFUNDA CON IA (Gemini + Google Search)
@@ -27,16 +28,19 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
         if (apiKey) {
             const ai = new GoogleGenAI({ apiKey });
             
-            // Prompt especializado en distinguir Marca vs Concepto con múltiples sinónimos
+            // Prompt especializado para PRIORIZAR marcas y obtener SLUGS técnicos para conceptos
             const prompt = `Analiza el término: "${query}".
             TAREA:
-            1. Si es una marca comercial conocida: lista sus 2 dominios más probables (ej: "amazon.es").
-            2. Si es un concepto genérico: busca los 6 términos más precisos en inglés para buscar un ICONO (sinónimos cortos). Ej: "ahorro" -> "savings, pig-bank, wallet, money, coin, safe".
+            1. Si es una marca conocida: identifica sus 3 dominios web oficiales.
+            2. Si es un concepto (ej: teatro, ocio): genera 10 términos técnicos en inglés que sean SLUGS de iconos (ej: "teatro" -> "theater, drama, masks, stage, performer").
             
-            ADICIONALMENTE: Realiza una búsqueda en Google de "transparent png icon for ${query}" y devuelve las URLs de imágenes.
+            BÚSQUEDA WEB REQUERIDA (Google Search):
+            - "logo:${query}"
+            - "official brand logo ${query}"
+            - "vector icon ${query} png transparent"
             
             FORMATO DE RESPUESTA:
-            DOMINIOS: dom1.com, dom2.es | CONCEPTOS: term1, term2, term3, term4, term5, term6`;
+            DOMINIOS: dom1.com, dom2.es | CONCEPTOS: term1, term2, term3, term4, term5`;
 
             const response = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
@@ -48,14 +52,13 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
 
             const rawText = response.text || "";
             
-            // Extraer URLs reales de la red (Grounding)
+            // Extraer URLs de Google Search (Grounding)
             const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
             if (groundingChunks) {
                 groundingChunks.forEach((chunk: any) => {
                     if (chunk.web?.uri) {
                         const uri = chunk.web.uri;
-                        // Filtro agresivo para quedarnos con imágenes o sitios de recursos
-                        if (uri.match(/\.(png|jpg|jpeg|svg|webp)$/i) || uri.includes('icon') || uri.includes('logo') || uri.includes('vector') || uri.includes('cdn')) {
+                        if (uri.match(/\.(png|jpg|jpeg|svg|webp)$/i) || uri.includes('logo') || uri.includes('brand') || uri.includes('icon')) {
                             searchFoundUrls.push(uri);
                         }
                     }
@@ -70,7 +73,7 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
                     domains.push(...ds);
                 }
                 if (p.includes('conceptos:')) {
-                    const cs = p.replace('conceptos:', '').split(',').map(s => s.trim()).filter(s => s.length > 2);
+                    const cs = p.replace('conceptos:', '').split(',').map(s => s.trim()).filter(s => s.length > 1);
                     iconKeywords.push(...cs);
                 }
             });
@@ -81,49 +84,47 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
 
     const results: {url: string, source: string}[] = [];
 
-    // --- BLOQUE A: ICONOS CONCEPTUALES (Enriquecido con Iconify) ---
-    const uniqueKeywords = Array.from(new Set(iconKeywords));
-    if (uniqueKeywords.length > 0 || query.includes(' ')) {
-        uniqueKeywords.forEach(k => {
-            const term = k.replace(/\s+/g, '-');
-            
-            // 1. Iconify API (Iconos vectoriales profesionales)
-            results.push({ url: `https://api.iconify.design/solar:${term}-bold-duotone.svg`, source: 'Solar Duotone' });
-            results.push({ url: `https://api.iconify.design/lucide:${term}.svg`, source: 'Lucide' });
-            results.push({ url: `https://api.iconify.design/ph:${term}-fill.svg`, source: 'Phosphor' });
-            results.push({ url: `https://api.iconify.design/tabler:${term}.svg`, source: 'Tabler' });
-            results.push({ url: `https://api.iconify.design/material-symbols:${term}.svg`, source: 'Material' });
-            
-            // 2. DiceBear (Procedural)
-            results.push({ url: `https://api.dicebear.com/9.x/icons/svg?seed=${term}`, source: 'Vector Art' });
-            
-            // 3. Icons8 (Coloridos)
-            results.push({ url: `https://img.icons8.com/fluency/256/${term}.png`, source: 'Fluency' });
-            results.push({ url: `https://img.icons8.com/color/256/${term}.png`, source: 'Color' });
-            results.push({ url: `https://img.icons8.com/stickers/256/${term}.png`, source: 'Sticker' });
-        });
-    }
-
-    // --- BLOQUE B: LOGOTIPOS CORPORATIVOS (Se mantiene intacto) ---
+    // --- BLOQUE 1: LOGOTIPOS CORPORATIVOS (PRIORIDAD MÁXIMA) ---
     const uniqueDomains = Array.from(new Set(domains));
     uniqueDomains.forEach(domain => {
-        results.push({ url: `https://logo.clearbit.com/${domain}?size=256`, source: 'Logo Oficial' });
-        results.push({ url: `https://unavatar.io/${domain}?fallback=false`, source: 'Social' });
-        results.push({ url: `https://www.google.com/s2/favicons?domain=${domain}&sz=128`, source: 'Favicon' });
+        results.push({ url: `https://logo.clearbit.com/${domain}?size=256`, source: 'Marca Oficial' });
+        results.push({ url: `https://unavatar.io/${domain}?fallback=false`, source: 'Avatar Marca' });
     });
 
-    // --- BLOQUE C: IMÁGENES WEB (Google Search Grounding) ---
+    // --- BLOQUE 2: RESULTADOS DE BÚSQUEDA WEB (Incluye logo:termino) ---
     searchFoundUrls.forEach(url => {
-        results.push({ url, source: 'Web Image' });
+        results.push({ url, source: 'Búsqueda Web' });
     });
 
-    // --- BLOQUE D: FALLBACK ---
+    // --- BLOQUE 3: ICONOS CONCEPTUALES (SOPORTE DE ALTA CALIDAD) ---
+    const effectiveKeywords = iconKeywords.length > 0 ? iconKeywords : [queryLower.replace(/\s+/g, '-')];
+    effectiveKeywords.forEach(k => {
+        const term = k.replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        if (term.length < 2) return;
+
+        // Intentar el concepto como marca (ej: theater.com) suele dar logos muy icónicos
+        results.push({ url: `https://logo.clearbit.com/${term}.com?size=256`, source: 'Concepto Brand' });
+
+        // Iconify - Colecciones elegidas por su exhaustividad conceptual
+        results.push({ url: `https://api.iconify.design/mdi:${term}.svg`, source: 'Material' });
+        results.push({ url: `https://api.iconify.design/ri:${term}-fill.svg`, source: 'Remix' });
+        results.push({ url: `https://api.iconify.design/flat-color-icons:${term}.svg`, source: 'Color' });
+        results.push({ url: `https://api.iconify.design/ph:${term}-bold.svg`, source: 'Phosphor' });
+        results.push({ url: `https://api.iconify.design/solar:${term}-bold-duotone.svg`, source: 'Solar' });
+        results.push({ url: `https://api.iconify.design/lucide:${term}.svg`, source: 'Lucide' });
+        
+        // Icons8
+        results.push({ url: `https://img.icons8.com/fluency/256/${term}.png`, source: 'Fluency' });
+        results.push({ url: `https://img.icons8.com/color/256/${term}.png`, source: 'Color' });
+    });
+
+    // --- BLOQUE 4: FALLBACK ---
     results.push({
         url: `https://ui-avatars.com/api/?name=${encodeURIComponent(query)}&background=4f46e5&color=fff&size=512&bold=true`,
         source: 'Iniciales'
     });
 
-    // Consolidación final
+    // Consolidación final y limpieza de duplicados
     const seenUrls = new Set<string>();
     const finalResults = results.filter(item => {
         if (!item.url || seenUrls.has(item.url)) return false;
@@ -131,5 +132,5 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
         return true;
     });
 
-    return finalResults.slice(0, 48); // Aumentamos el límite para dar más opciones
+    return finalResults.slice(0, 80);
 };
