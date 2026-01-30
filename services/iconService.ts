@@ -17,61 +17,58 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
             const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
-                contents: `Analiza este término financiero o comercial: "${query}". 
+                contents: `Identify visual identity for: "${query}".
                 
-                Instrucciones:
-                1. Si es una MARCA o ESTABLECIMIENTO (ej. Netflix, Amazon, Mercadona, Santander), devuelve SOLO su dominio web principal (ej. "netflix.com").
-                2. Si es un CONCEPTO o CATEGORÍA (ej. ocio, comida, viajes, salud), devuelve SOLO 3 palabras clave en inglés para buscar iconos (ej. "travel, suitcase, vacation").
+                STRICT RULES:
+                1. If it's a BRAND/STORE/COMPANY (e.g. Amazon, Netflix, Zara, Shell, Starbucks, BBVA), return ONLY its primary domain (e.g. "amazon.com").
+                2. If it's a GENERAL CATEGORY (e.g. food, health, travel, salary), return ONLY 3 clear English keywords (e.g. "pizza, burger, food").
                 
-                Responde ÚNICAMENTE con una lista separada por comas. Sin explicaciones ni etiquetas.`,
+                OUTPUT: Comma-separated list only. No markdown. No labels.`,
                 config: {
                     thinkingConfig: { thinkingBudget: 0 }
                 },
             });
 
             const rawResponse = (response.text || "").toLowerCase();
-            // Limpieza de la respuesta para obtener solo los términos
             items = rawResponse.split(',')
-                .map(i => i.replace(/[^a-z0-9.\-_]/gi, '').trim())
+                .map(i => i.trim())
+                .map(i => i.replace(/^(domain|brand|icon|keyword|resultado):\s*/i, ''))
                 .filter(i => i.length >= 2);
         }
     } catch (error) {
-        console.warn("Error en IA de iconos, usando búsqueda directa.");
+        console.warn("IA Icon extraction failed.");
     }
 
-    // Fallback: Si la IA falla, usamos el texto original
-    if (items.length === 0) {
-        items = [query.toLowerCase()];
-    }
+    if (items.length === 0) items = [query.toLowerCase()];
 
     const results: {url: string, source: string}[] = [];
     
     items.forEach(item => {
-        // Un dominio suele tener un punto y no espacios
         const isDomain = item.includes('.') && !item.includes(' ');
         
         if (isDomain) {
-            // Buscadores de logotipos de marcas
-            results.push({ url: `https://logo.clearbit.com/${item}?size=256`, source: 'Clearbit' });
-            results.push({ url: `https://unavatar.io/${item}?fallback=false`, source: 'Unavatar' });
-            results.push({ url: `https://www.google.com/s2/favicons?domain=${item}&sz=128`, source: 'Google' });
+            // Fuentes para marcas corporativas
+            results.push({ url: `https://logo.clearbit.com/${item}?size=256`, source: 'Brand' });
+            results.push({ url: `https://unavatar.io/${item}?fallback=false`, source: 'Brand' });
+            results.push({ url: `https://www.google.com/s2/favicons?domain=${item}&sz=128`, source: 'Brand' });
         } else {
-            // Buscadores de iconos conceptuales (Icons8 Fluency - Gran calidad visual)
+            // Fuentes para conceptos (Iconos de alta calidad)
             const keyword = item.replace(/\s+/g, '-');
-            results.push({ url: `https://img.icons8.com/fluency/256/${keyword}.png`, source: 'Icons8' });
-            results.push({ url: `https://img.icons8.com/color/256/${keyword}.png`, source: 'Icons8' });
-            results.push({ url: `https://img.icons8.com/clouds/256/${keyword}.png`, source: 'Icons8' });
-            results.push({ url: `https://img.icons8.com/plasticine/256/${keyword}.png`, source: 'Icons8' });
+            results.push({ url: `https://img.icons8.com/fluency/256/${keyword}.png`, source: 'Icon' });
+            results.push({ url: `https://img.icons8.com/color/256/${keyword}.png`, source: 'Icon' });
+            results.push({ url: `https://img.icons8.com/clouds/256/${keyword}.png`, source: 'Icon' });
+            results.push({ url: `https://img.icons8.com/plasticine/256/${keyword}.png`, source: 'Icon' });
+            results.push({ url: `https://img.icons8.com/bubbles/256/${keyword}.png`, source: 'Icon' });
         }
     });
 
-    // Avatar de texto como respaldo final
+    // Fallback de avatar de texto
     results.push({
         url: `https://ui-avatars.com/api/?name=${encodeURIComponent(query)}&background=4f46e5&color=fff&size=512&bold=true`,
-        source: 'Auto'
+        source: 'Default'
     });
 
-    // Filtro de duplicados por URL
+    // Filtrado de duplicados y limitación
     const uniqueResults = Array.from(new Map(results.map(item => [item.url, item])).values());
-    return uniqueResults.slice(0, 15);
+    return uniqueResults.slice(0, 16);
 };
