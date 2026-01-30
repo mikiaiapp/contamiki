@@ -1,22 +1,23 @@
+FROM node:18-alpine
 
 # Directorio de trabajo
-WORKDIR /aplicación
+WORKDIR /app
 
 # Copiar archivos de dependencias
-COPIA paquete.json .
+COPY package.json .
 
 # Instalar dependencias (incluyendo devDependencies para esbuild)
-EJECUTAR npm install
+RUN npm install
 
 # Copiar el resto del código fuente
-COPIAR . .
+COPY . .
 
 # Construir el frontend (genera bundle.js)
-EJECUTAR npm run build
+RUN npm run build
 
 # Exponer el puerto
-EXPONER 4000
+EXPOSE 4000
 
 # Iniciar el servidor
-CMD ["npm", "inicio"]
+CMD ["npm", "start"]
 
