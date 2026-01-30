@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { login, register } from './services/authService';
-import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle } from 'lucide-react';
+import { login, register, loginAsGuest } from './services/authService';
+import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles } from 'lucide-react';
 
 interface LoginViewProps {
     onLoginSuccess: () => void;
@@ -27,7 +27,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 onLoginSuccess();
             } else {
                 await register(username, password);
-                setSuccessMsg('Registro completado. Ya puedes entrar.');
+                setSuccessMsg('Registro completado localmente. Ya puedes entrar.');
                 setMode('LOGIN');
                 setPassword('');
             }
@@ -36,6 +36,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleGuestAccess = () => {
+        loginAsGuest();
+        onLoginSuccess();
     };
 
     return (
@@ -67,7 +72,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     </button>
                 </div>
 
-                <div className="p-10 sm:p-12">
+                <div className="p-10 sm:p-12 space-y-8">
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {error && (
                             <div className="bg-rose-50 text-rose-600 p-4 rounded-2xl text-[10px] font-bold text-center border border-rose-100 flex items-center justify-center gap-2 animate-in slide-in-from-top-2">
@@ -128,8 +133,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             )}
                         </button>
                     </form>
+
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+                        <div className="relative flex justify-center text-[8px] font-black uppercase tracking-[0.4em] text-slate-300">
+                            <span className="bg-white px-4">O bien</span>
+                        </div>
+                    </div>
+
+                    <button 
+                        onClick={handleGuestAccess}
+                        className="w-full py-5 bg-indigo-50 text-indigo-600 rounded-2xl font-black uppercase tracking-widest text-[9px] hover:bg-indigo-100 transition-all flex items-center justify-center gap-2 group"
+                    >
+                        <Sparkles size={16} className="group-hover:animate-pulse" /> 
+                        Entrar en Modo Demo (Local)
+                    </button>
                     
-                    <p className="text-center text-slate-300 text-[9px] font-bold uppercase tracking-widest mt-12">
+                    <p className="text-center text-slate-300 text-[9px] font-bold uppercase tracking-widest mt-4">
                         Sistema Seguro v1.3.0
                     </p>
                 </div>

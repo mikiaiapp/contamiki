@@ -11,14 +11,12 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children }) => {
-  // Navegación principal (superior)
   const mainNavItems: { id: View; label: string; icon: React.ReactNode }[] = [
-    { id: 'DASHBOARD', label: 'Tablero', icon: <LayoutDashboard size={22} /> },
+    { id: 'RESUMEN', label: 'Resumen', icon: <LayoutDashboard size={22} /> },
     { id: 'TRANSACTIONS', label: 'Movimientos', icon: <Receipt size={22} /> },
     { id: 'SETTINGS', label: 'Ajustes', icon: <Settings size={22} /> },
   ];
 
-  // Item especial para la IA
   const aiNavItem = { id: 'AI_INSIGHTS' as View, label: 'Asesor IA', icon: <BrainCircuit size={22} /> };
 
   const renderNavItem = (item: { id: View; label: string; icon: React.ReactNode }, isMobile = false) => (
@@ -40,7 +38,6 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 flex-col lg:flex-row overflow-hidden font-sans">
-      {/* Sidebar Escritorio */}
       <aside className="hidden lg:flex w-72 xl:w-80 bg-slate-950 text-white flex-col shadow-2xl z-50">
         <div className="p-10 flex items-center gap-4">
           <div className="bg-indigo-600 p-2.5 rounded-2xl shadow-lg shadow-indigo-500/20">
@@ -53,7 +50,6 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
           {mainNavItems.map((item) => renderNavItem(item))}
         </nav>
 
-        {/* Sección inferior de la Sidebar */}
         <div className="px-6 pb-4 space-y-2">
           <div className="h-px bg-white/5 mx-4 mb-4" />
           {renderNavItem(aiNavItem)}
@@ -70,7 +66,6 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         </div>
       </aside>
 
-      {/* Header Móvil */}
       <header className="lg:hidden bg-slate-950 text-white px-6 py-4 flex justify-between items-center shadow-xl z-50">
         <div className="flex items-center gap-3">
           <div className="bg-indigo-600 p-2 rounded-xl">
@@ -83,14 +78,12 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         </button>
       </header>
 
-      {/* Área Principal */}
       <main className="flex-1 overflow-y-auto relative bg-slate-50 custom-scrollbar">
         <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-8 md:px-12 py-8 md:py-12 lg:py-16 pb-36 lg:pb-16">
           {children}
         </div>
       </main>
 
-      {/* Navegación Inferior Móvil/Tablet */}
       <nav className="lg:hidden fixed bottom-6 left-4 right-4 bg-slate-900/95 backdrop-blur-xl border border-white/10 flex justify-around items-center p-2 z-50 rounded-[2.5rem] shadow-2xl">
         {mainNavItems.map((item) => (
           <button
@@ -104,7 +97,6 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
             <span className="text-[8px] font-black uppercase tracking-[0.1em]">{item.label}</span>
           </button>
         ))}
-        {/* IA al final en móvil */}
         <button
             onClick={() => setCurrentView(aiNavItem.id)}
             className={`flex flex-col items-center gap-1 p-3 transition-all ${

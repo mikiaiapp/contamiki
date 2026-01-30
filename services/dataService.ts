@@ -1,6 +1,8 @@
 
 import { AppState, Account, Family, Category } from "../types";
-import { getToken } from "./authService";
+import { getToken, getUsername } from "./authService";
+
+const DATA_KEY_PREFIX = 'contamiki_data_';
 
 const defaultFamilies: Family[] = [
   { id: 'f1', name: 'Vivienda', type: 'EXPENSE', icon: '🏠' },
@@ -35,32 +37,44 @@ const defaultState: AppState = {
 
 export const loadData = async (): Promise<AppState> => {
   const token = getToken();
+  const username = getUsername();
   if (!token) throw new Error("No hay token de sesión (401)");
 
-  const response = await fetch('/api/data', {
-      headers: { 'Authorization': `Bearer ${token}` }
-  });
+  try {
+      const response = await fetch('/api/data', {
+          headers: { 'Authorization': `Bearer ${token}` }
+      });
 
-  if (response.status === 401 || response.status === 403) {
-      throw new Error("Sesión expirada (401)");
-  }
+      if (response.status === 401 || response.status === 403) {
+          throw new Error("Sesión expirada (401)");
+      }
 
-  if (!response.ok) return defaultState;
-  
-  const data = await response.json();
-  if (!data || Object.keys(data).length === 0 || !data.families) {
+      if (response.ok) {
+          const data = await response.json();
+          if (!data || Object.keys(data).length === 0 || !data.families) {
+              return defaultState;
+          }
+          return data;
+      }
+      
+      // Si el servidor devuelve error pero no es de autenticación, usamos local
+      throw new Error("SERVER_UNAVAILABLE");
+  } catch (err) {
+      // Carga desde localStorage si el servidor falla o no existe
+      const localData = localStorage.getItem(DATA_KEY_PREFIX + username);
+      if (localData) return JSON.parse(localData);
       return defaultState;
   }
-  
-  return data;
 };
 
 export const saveData = async (state: AppState) => {
   const token = getToken();
-  if (!token) return;
+  const username = getUsername();
+  if (!token || !username) return;
 
+  // Intentar guardar en servidor
   try {
-      await fetch('/api/data', {
+      const response = await fetch('/api/data', {
           method: 'POST',
           headers: {
               'Content-Type': 'application/json',
@@ -68,7 +82,10 @@ export const saveData = async (state: AppState) => {
           },
           body: JSON.stringify(state)
       });
+      
+      if (!response.ok) throw new Error("Server error");
   } catch (e) {
-      console.error("Error saving data:", e);
+      // Guardar siempre en local como respaldo o si no hay servidor
+      localStorage.setItem(DATA_KEY_PREFIX + username, JSON.stringify(state));
   }
 };

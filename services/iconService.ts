@@ -24,60 +24,58 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
 
     // 2. BÚSQUEDA PROFUNDA CON IA (Gemini + Google Search)
     try {
-        const apiKey = process.env.API_KEY;
-        if (apiKey) {
-            const ai = new GoogleGenAI({ apiKey });
-            
-            // Prompt especializado para PRIORIZAR marcas y obtener SLUGS técnicos para conceptos
-            const prompt = `Analiza el término: "${query}".
-            TAREA:
-            1. Si es una marca conocida: identifica sus 3 dominios web oficiales.
-            2. Si es un concepto (ej: teatro, ocio): genera 10 términos técnicos en inglés que sean SLUGS de iconos (ej: "teatro" -> "theater, drama, masks, stage, performer").
-            
-            BÚSQUEDA WEB REQUERIDA (Google Search):
-            - "logo:${query}"
-            - "official brand logo ${query}"
-            - "vector icon ${query} png transparent"
-            
-            FORMATO DE RESPUESTA:
-            DOMINIOS: dom1.com, dom2.es | CONCEPTOS: term1, term2, term3, term4, term5`;
+        // Use process.env.API_KEY directly as required by world-class GenAI SDK standards.
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+        
+        // Prompt especializado para PRIORIZAR marcas y obtener SLUGS técnicos para conceptos
+        const prompt = `Analiza el término: "${query}".
+        TAREA:
+        1. Si es una marca conocida: identifica sus 3 dominios web oficiales.
+        2. Si es un concepto (ej: teatro, ocio): genera 10 términos técnicos en inglés que sean SLUGS de iconos (ej: "teatro" -> "theater, drama, masks, stage, performer").
+        
+        BÚSQUEDA WEB REQUERIDA (Google Search):
+        - "logo:${query}"
+        - "official brand logo ${query}"
+        - "vector icon ${query} png transparent"
+        
+        FORMATO DE RESPUESTA:
+        DOMINIOS: dom1.com, dom2.es | CONCEPTOS: term1, term2, term3, term4, term5`;
 
-            const response = await ai.models.generateContent({
-                model: "gemini-3-flash-preview",
-                contents: prompt,
-                config: {
-                    tools: [{ googleSearch: {} }]
-                },
-            });
+        const response = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: prompt,
+            config: {
+                tools: [{ googleSearch: {} }]
+            },
+        });
 
-            const rawText = response.text || "";
-            
-            // Extraer URLs de Google Search (Grounding)
-            const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-            if (groundingChunks) {
-                groundingChunks.forEach((chunk: any) => {
-                    if (chunk.web?.uri) {
-                        const uri = chunk.web.uri;
-                        if (uri.match(/\.(png|jpg|jpeg|svg|webp)$/i) || uri.includes('logo') || uri.includes('brand') || uri.includes('icon')) {
-                            searchFoundUrls.push(uri);
-                        }
+        const rawText = response.text || "";
+        
+        // Extraer URLs de Google Search (Grounding)
+        const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+        if (groundingChunks) {
+            groundingChunks.forEach((chunk: any) => {
+                if (chunk.web?.uri) {
+                    const uri = chunk.web.uri;
+                    if (uri.match(/\.(png|jpg|jpeg|svg|webp)$/i) || uri.includes('logo') || uri.includes('brand') || uri.includes('icon')) {
+                        searchFoundUrls.push(uri);
                     }
-                });
-            }
-
-            // Parsear dominios y conceptos
-            const parts = rawText.toLowerCase().split('|');
-            parts.forEach(p => {
-                if (p.includes('dominios:')) {
-                    const ds = p.replace('dominios:', '').split(',').map(s => s.trim()).filter(s => s.includes('.'));
-                    domains.push(...ds);
-                }
-                if (p.includes('conceptos:')) {
-                    const cs = p.replace('conceptos:', '').split(',').map(s => s.trim()).filter(s => s.length > 1);
-                    iconKeywords.push(...cs);
                 }
             });
         }
+
+        // Parsear dominios y conceptos
+        const parts = rawText.toLowerCase().split('|');
+        parts.forEach(p => {
+            if (p.includes('dominios:')) {
+                const ds = p.replace('dominios:', '').split(',').map(s => s.trim()).filter(s => s.includes('.'));
+                domains.push(...ds);
+            }
+            if (p.includes('conceptos:')) {
+                const cs = p.replace('conceptos:', '').split(',').map(s => s.trim()).filter(s => s.length > 1);
+                iconKeywords.push(...cs);
+            }
+        });
     } catch (error) {
         console.warn("Error en búsqueda IA de iconos:", error);
     }

@@ -12,12 +12,8 @@ export const generateFinancialAdvice = async (
   categories: Category[]
 ): Promise<string> => {
   try {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-        return "Configuración de IA no disponible. Por favor, asegúrate de que el sistema tenga una API_KEY configurada.";
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
+    // Initializing with process.env.API_KEY as per the @google/genai guidelines.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
     const recentTransactions = transactions.slice(0, 50).map(t => {
       const fam = families.find(f => f.id === t.familyId);

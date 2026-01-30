@@ -6,7 +6,7 @@ import { TransactionView } from './TransactionView';
 import { SettingsView } from './components/SettingsView';
 import { AIInsights } from './components/AIInsights';
 import { LoginView } from './LoginView';
-import { AppState, View, Transaction } from './types';
+import { AppState, View, Transaction, RecurrentMovement, FavoriteMovement } from './types';
 import { loadData, saveData } from './services/dataService';
 import { isAuthenticated, logout } from './services/authService';
 
@@ -16,9 +16,11 @@ const App: React.FC = () => {
     accounts: [],
     families: [],
     categories: [],
-    transactions: []
+    transactions: [],
+    recurrents: [],
+    favorites: []
   });
-  const [currentView, setCurrentView] = useState<View>('DASHBOARD');
+  const [currentView, setCurrentView] = useState<View>('RESUMEN');
   const [dataLoaded, setDataLoaded] = useState(false);
   const saveTimeoutRef = useRef<number | null>(null);
 
@@ -27,12 +29,15 @@ const App: React.FC = () => {
         setDataLoaded(false);
         loadData()
             .then(fetchedData => {
-                setData(fetchedData);
+                setData({
+                    ...fetchedData,
+                    recurrents: fetchedData.recurrents || [],
+                    favorites: fetchedData.favorites || []
+                });
                 setDataLoaded(true);
             })
             .catch(err => {
                 console.error("Failed to load data:", err);
-                // Si hay un error de autenticación (401), cerramos sesión
                 if (err.message.includes('401') || err.message.includes('403')) {
                     logout();
                 } else {
@@ -54,6 +59,30 @@ const App: React.FC = () => {
     }
   }, [data, dataLoaded, isLoggedIn]);
 
+  const handleAddTransaction = (t: Transaction) => {
+    setData(prev => ({...prev, transactions: [...prev.transactions, t]}));
+  };
+
+  const handleUpdateTransaction = (t: Transaction) => {
+    setData(prev => ({
+        ...prev, 
+        transactions: prev.transactions.map(tx => tx.id === t.id ? t : tx)
+    }));
+  };
+
+  const handleDeleteTransaction = (id: string) => {
+    setData(prev => ({...prev, transactions: prev.transactions.filter(tx => tx.id !== id)}));
+  };
+
+  const handleUpdateRecurrent = (r: RecurrentMovement) => {
+    setData(prev => ({
+        ...prev,
+        recurrents: prev.recurrents?.some(x => x.id === r.id) 
+            ? prev.recurrents.map(x => x.id === r.id ? r : x)
+            : [...(prev.recurrents || []), r]
+    }));
+  };
+
   if (!isLoggedIn) {
       return <LoginView onLoginSuccess={() => setIsLoggedIn(true)} />;
   }
@@ -69,12 +98,20 @@ const App: React.FC = () => {
 
   return (
     <Layout currentView={currentView} setCurrentView={setCurrentView}>
-      {currentView === 'DASHBOARD' && <Dashboard data={data} />}
+      {currentView === 'RESUMEN' && (
+        <Dashboard 
+            data={data} 
+            onAddTransaction={handleAddTransaction}
+            onUpdateData={(newData) => setData(prev => ({...prev, ...newData}))}
+        />
+      )}
       {currentView === 'TRANSACTIONS' && (
         <TransactionView 
           data={data} 
-          onAddTransaction={(t) => setData(prev => ({...prev, transactions: [...prev.transactions, t]}))}
-          onDeleteTransaction={(id) => setData(prev => ({...prev, transactions: prev.transactions.filter(tx => tx.id !== id)}))}
+          onAddTransaction={handleAddTransaction}
+          onDeleteTransaction={handleDeleteTransaction}
+          onUpdateTransaction={handleUpdateTransaction}
+          onUpdateData={(newData) => setData(prev => ({...prev, ...newData}))}
         />
       )}
       {currentView === 'SETTINGS' && (
