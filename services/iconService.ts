@@ -18,8 +18,8 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
             const response = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
                 contents: `Analyze the term: "${query}". 
-                If it's a BRAND, return its main web domains (e.g. netflix.com).
-                If it's a GENERAL CATEGORY (e.g. "ocio", "viajes", "seguros", "restaurantes"), return the 3 best descriptive English keywords for an icon search (e.g. "leisure", "travel", "insurance", "restaurant").
+                If it's a BRAND, return its main web domains (e.g. netflix.com, amazon.es).
+                If it's a GENERAL CATEGORY or CONCEPT (e.g. "ocio", "viajes", "seguros", "restaurantes", "salud"), return the 3 best descriptive English keywords for an icon search (e.g. "leisure", "travel", "insurance", "restaurant", "health").
                 Return ONLY a comma-separated list. No text, no quotes.`,
                 config: {
                     thinkingConfig: { thinkingBudget: 0 }
@@ -44,25 +44,26 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
         const isDomain = item.includes('.');
         
         if (isDomain) {
-            // Fuentes para marcas
+            // Fuentes para marcas (Logotipos)
             results.push({ url: `https://logo.clearbit.com/${item}?size=256`, source: item });
             results.push({ url: `https://unavatar.io/${item}?fallback=false`, source: item });
             results.push({ url: `https://www.google.com/s2/favicons?domain=${item}&sz=128`, source: item });
         } else {
-            // Fuentes para conceptos genéricos (Icons8 Fluency)
+            // Fuentes para conceptos genéricos (Iconografía de diseño)
             const keyword = item.replace(/\s+/g, '-');
             results.push({ url: `https://img.icons8.com/fluency/256/${keyword}.png`, source: item });
             results.push({ url: `https://img.icons8.com/color/256/${keyword}.png`, source: item });
+            results.push({ url: `https://img.icons8.com/clouds/256/${keyword}.png`, source: item });
         }
     });
 
-    // Siempre añadir un avatar de texto como última opción
+    // Siempre añadir un avatar de texto como última opción de seguridad
     results.push({
         url: `https://ui-avatars.com/api/?name=${encodeURIComponent(query)}&background=4f46e5&color=fff&size=512&bold=true`,
         source: 'Generado'
     });
 
-    // Eliminar duplicados y limitar
+    // Eliminar duplicados y limitar resultados para no saturar la UI
     const uniqueResults = Array.from(new Map(results.map(item => [item.url, item])).values());
     return uniqueResults.slice(0, 12);
 };

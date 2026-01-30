@@ -24,18 +24,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [hasSearched, setHasSearched] = useState(false);
   const searchTimeoutRef = useRef<number | null>(null);
 
-  // States
+  // States para Cuentas
   const [accId, setAccId] = useState<string | null>(null);
   const [accName, setAccName] = useState('');
   const [accBalance, setAccBalance] = useState('');
   const [accIcon, setAccIcon] = useState('🏦');
   const accFileInputRef = useRef<HTMLInputElement>(null);
 
+  // States para Familias
   const [famName, setFamName] = useState('');
   const [famType, setFamType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [famIcon, setFamIcon] = useState('📂');
   const famFileInputRef = useRef<HTMLInputElement>(null);
 
+  // States para Categorías
   const [catName, setCatName] = useState('');
   const [catParent, setCatParent] = useState('');
   const [catIcon, setCatIcon] = useState('🏷️');
@@ -89,6 +91,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           };
           reader.readAsDataURL(blob);
       } catch (e) { 
+          // Si falla CORS, mantenemos la URL directa
           setWebLogos([]);
           setHasSearched(false);
       }
@@ -128,7 +131,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 <div className="flex justify-between items-center border-b border-slate-50 pb-3">
                     <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
                         <Sparkles size={14} className={isSearchingWeb ? 'animate-pulse' : ''} /> 
-                        {isSearchingWeb ? `IA buscando iconografía para "${currentName}"...` : `Iconos para "${currentName}"`}
+                        {isSearchingWeb ? `IA buscando iconografía para "${currentName}"...` : `Iconos e Imágenes para "${currentName}"`}
                     </span>
                     {!isSearchingWeb && (
                         <button onClick={() => {setWebLogos([]); setHasSearched(false);}} className="text-slate-300 hover:text-rose-500 transition-colors"><XCircle size={18}/></button>
@@ -136,7 +139,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 </div>
                 
                 {webLogos.length > 0 ? (
-                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar p-1">
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar p-1">
                         {webLogos.map((logo, idx) => (
                             <button 
                                 key={idx} 
@@ -167,7 +170,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             <Loader2 className="animate-spin text-indigo-500" size={32} />
                             <Sparkles className="absolute top-0 right-0 text-indigo-300 animate-bounce" size={14} />
                         </div>
-                        <span className="text-[9px] font-black text-indigo-300 uppercase tracking-[0.4em]">Traduciendo Concepto Visual</span>
+                        <span className="text-[9px] font-black text-indigo-300 uppercase tracking-[0.4em]">Analizando Concepto Visual</span>
                     </div>
                 )}
             </div>
@@ -180,7 +183,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     <div className="space-y-12 max-w-full overflow-hidden">
       <div className="text-center md:text-left space-y-2">
         <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tighter leading-none">Ajustes.</h2>
-        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Configuración del Entorno</p>
+        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Personalización del Sistema</p>
       </div>
 
       <div className="flex bg-slate-100 p-1.5 rounded-[1.5rem] shadow-inner border border-slate-200/50 overflow-x-auto scrollbar-hide">
@@ -200,9 +203,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     <div className="space-y-6">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Sparkles size={12} className="text-indigo-400" /> Marca o Entidad
+                                <Sparkles size={12} className="text-indigo-400" /> Nombre o Entidad
                             </label>
-                            <input type="text" placeholder="Ej: Santander, BBVA, N26..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={accName} onChange={e => { setAccName(e.target.value); triggerWebSearch(e.target.value); }} />
+                            <input type="text" placeholder="Ej: Santander, Efectivo, N26..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={accName} onChange={e => { setAccName(e.target.value); triggerWebSearch(e.target.value); }} />
                         </div>
                         {renderIconInput(accIcon, setAccIcon, accName, accFileInputRef)}
                         <div className="space-y-2">
@@ -246,16 +249,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         {activeTab === 'FAMILIES' && (
             <div className="animate-in fade-in duration-500">
                 <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
+                    <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center justify-center gap-4">
                         <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl shadow-indigo-100"><Layers size={24}/></div>
-                        Nueva Familia
+                        Configurar Nueva Familia
                     </h3>
                     <div className="space-y-6 max-w-2xl mx-auto">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Sparkles size={12} className="text-indigo-400" /> Nombre del Grupo
+                                <Sparkles size={12} className="text-indigo-400" /> Título del Grupo
                             </label>
-                            <input type="text" placeholder="Ej: Alimentación, Hogar, Ocio..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={famName} onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} />
+                            <input type="text" placeholder="Ej: Alimentación, Ocio, Viajes, Seguros..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={famName} onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} />
                         </div>
                         {renderIconInput(famIcon, setFamIcon, famName, famFileInputRef)}
                         <div className="flex bg-slate-100 p-2 rounded-2xl">
@@ -275,16 +278,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         {activeTab === 'CATEGORIES' && (
             <div className="animate-in fade-in duration-500">
                 <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
+                    <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center justify-center gap-4">
                         <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl shadow-indigo-100"><Tag size={24}/></div>
-                        Nueva Categoría
+                        Configurar Nueva Categoría
                     </h3>
                     <div className="space-y-6 max-w-2xl mx-auto">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vincular a Familia</label>
                             <div className="relative">
                                 <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none appearance-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={catParent} onChange={e => setCatParent(e.target.value)}>
-                                    <option value="">Selecciona una familia...</option>
+                                    <option value="">Selecciona un grupo...</option>
                                     {data.families.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                                 </select>
                                 <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
@@ -294,7 +297,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                                 <Sparkles size={12} className="text-indigo-400" /> Nombre de Categoría
                             </label>
-                            <input type="text" placeholder="Ej: Netflix, Amazon, Mercadona, Gasolina..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={catName} onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} />
+                            <input type="text" placeholder="Ej: Netflix, Amazon, Gasolinera, Restaurantes..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={catName} onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} />
                         </div>
                         {renderIconInput(catIcon, setCatIcon, catName, catFileInputRef)}
                         <button onClick={() => {
