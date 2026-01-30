@@ -8,14 +8,10 @@ import { AIInsights } from './components/AIInsights';
 import { LoginView } from './LoginView';
 import { AppState, View, Transaction } from './types';
 import { loadData, saveData } from './services/dataService';
-import { isAuthenticated } from './services/authService';
+import { isAuthenticated, logout } from './services/authService';
 
 const App: React.FC = () => {
-  // Auth State
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(isAuthenticated());
-  const [checkingAuth, setCheckingAuth] = useState(false);
-
-  // App Data State
   const [data, setData] = useState<AppState>({
     accounts: [],
     families: [],
@@ -26,70 +22,50 @@ const App: React.FC = () => {
   const [dataLoaded, setDataLoaded] = useState(false);
   const saveTimeoutRef = useRef<number | null>(null);
 
-  // Load Data when logged in
   useEffect(() => {
     if (isLoggedIn) {
         setDataLoaded(false);
-        loadData().then(fetchedData => {
-            setData(fetchedData);
-            setDataLoaded(true);
-        }).catch(err => {
-            console.error("Failed to load data", err);
-            setDataLoaded(true); 
-        });
+        loadData()
+            .then(fetchedData => {
+                setData(fetchedData);
+                setDataLoaded(true);
+            })
+            .catch(err => {
+                console.error("Failed to load data:", err);
+                // Si hay un error de autenticación (401), cerramos sesión
+                if (err.message.includes('401') || err.message.includes('403')) {
+                    logout();
+                } else {
+                    setDataLoaded(true);
+                }
+            });
     }
   }, [isLoggedIn]);
 
-  // Persistence (Debounced save to server)
   useEffect(() => {
     if (isLoggedIn && dataLoaded) {
-      if (saveTimeoutRef.current) {
-          clearTimeout(saveTimeoutRef.current);
-      }
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = window.setTimeout(() => {
           saveData(data);
-      }, 1000);
+      }, 1500);
     }
-    
     return () => {
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     }
   }, [data, dataLoaded, isLoggedIn]);
 
-  const handleAddTransaction = (t: Transaction) => {
-    setData(prev => ({
-      ...prev,
-      transactions: [...prev.transactions, t]
-    }));
-  };
-
-  const handleDeleteTransaction = (id: string) => {
-    setData(prev => ({
-      ...prev,
-      transactions: prev.transactions.filter(t => t.id !== id)
-    }));
-  };
-
-  const handleUpdateData = (newData: Partial<AppState>) => {
-    setData(prev => ({
-      ...prev,
-      ...newData
-    }));
-  };
-
-  if (checkingAuth) return null;
-
-  // Login View logic
   if (!isLoggedIn) {
       return <LoginView onLoginSuccess={() => setIsLoggedIn(true)} />;
   }
 
-  if (!dataLoaded) return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500 gap-3">
-          <div className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
-          <span className="font-medium">Cargando tus finanzas...</span>
-      </div>
-  );
+  if (!dataLoaded) {
+      return (
+          <div className="fixed inset-0 flex flex-col items-center justify-center bg-slate-950 text-white z-[999]">
+              <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6 shadow-[0_0_20px_rgba(99,102,241,0.3)]"></div>
+              <p className="text-xs font-black uppercase tracking-[0.4em] animate-pulse">Cifrando Finanzas</p>
+          </div>
+      );
+  }
 
   return (
     <Layout currentView={currentView} setCurrentView={setCurrentView}>
@@ -97,12 +73,12 @@ const App: React.FC = () => {
       {currentView === 'TRANSACTIONS' && (
         <TransactionView 
           data={data} 
-          onAddTransaction={handleAddTransaction}
-          onDeleteTransaction={handleDeleteTransaction}
+          onAddTransaction={(t) => setData(prev => ({...prev, transactions: [...prev.transactions, t]}))}
+          onDeleteTransaction={(id) => setData(prev => ({...prev, transactions: prev.transactions.filter(tx => tx.id !== id)}))}
         />
       )}
       {currentView === 'SETTINGS' && (
-        <SettingsView data={data} onUpdateData={handleUpdateData} />
+        <SettingsView data={data} onUpdateData={(newData) => setData(prev => ({...prev, ...newData}))} />
       )}
       {currentView === 'AI_INSIGHTS' && <AIInsights data={data} />}
     </Layout>
