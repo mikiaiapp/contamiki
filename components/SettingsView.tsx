@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { AppState, Account, Family, Category } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, Maximize2, ClipboardList, Info, FileSpreadsheet, ChevronDown, XCircle } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import * as XLSX from 'xlsx';
 
@@ -19,8 +19,6 @@ const generateId = () => {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }) => {
   const [activeTab, setActiveTab] = useState<'FAMILIES' | 'CATEGORIES' | 'ACCOUNTS'>('ACCOUNTS');
-  const [showImport, setShowImport] = useState(false);
-  const [importText, setImportText] = useState('');
   
   const [webLogos, setWebLogos] = useState<{url: string, source: string}[]>([]);
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
@@ -74,19 +72,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   };
 
   const handleSelectWebLogo = async (url: string, setIcon: (s: string) => void) => {
-      setIcon(url); // Establecemos primero la URL para respuesta inmediata
+      setIcon(url); 
       try {
           const response = await fetch(url);
           const blob = await response.blob();
           const reader = new FileReader();
           reader.onloadend = () => {
-              setIcon(reader.result as string); // Luego persistimos como Base64
+              setIcon(reader.result as string);
               setWebLogos([]);
               setHasSearched(false);
           };
           reader.readAsDataURL(blob);
       } catch (e) { 
-          // Si hay CORS, mantenemos la URL original (funciona en <img> pero no se guarda como base64)
           setWebLogos([]);
           setHasSearched(false);
       }
@@ -106,7 +103,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     </div>
                 </div>
                 <div className="flex-1 text-center sm:text-left space-y-3">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Avatar Personalizado</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Imagen Representativa</p>
                     <div className="flex flex-wrap justify-center sm:justify-start gap-2">
                         <button onClick={() => fileRef.current?.click()} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-black text-[8px] uppercase tracking-widest flex items-center gap-1.5 hover:bg-slate-50 transition-colors shadow-sm"><ImageIcon size={12} /> Galería</button>
                         <input type="file" ref={fileRef} className="hidden" accept="image/*" onChange={async (e) => {
@@ -116,7 +113,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                 reader.readAsDataURL(e.target.files[0]);
                             }
                         }} />
-                        {isImage && <button onClick={() => setIcon('🏦')} className="text-rose-500 bg-rose-50 px-3 py-1.5 rounded-lg text-[8px] font-black uppercase">Borrar</button>}
+                        {isImage && <button onClick={() => setIcon('🏦')} className="text-rose-500 bg-rose-50 px-3 py-1.5 rounded-lg text-[8px] font-black uppercase">Emoji</button>}
                     </div>
                 </div>
           </div>
@@ -126,7 +123,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 <div className="flex justify-between items-center border-b border-slate-50 pb-3">
                     <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
                         <Sparkles size={14} className={isSearchingWeb ? 'animate-pulse' : ''} /> 
-                        {isSearchingWeb ? `Buscando logos para "${currentName}"...` : `Sugerencias para "${currentName}"`}
+                        {isSearchingWeb ? `Rastreando logos para "${currentName}"...` : `Logotipos encontrados`}
                     </span>
                     {!isSearchingWeb && (
                         <button onClick={() => {setWebLogos([]); setHasSearched(false);}} className="text-slate-300 hover:text-rose-500 transition-colors"><XCircle size={18}/></button>
@@ -134,25 +131,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 </div>
                 
                 {webLogos.length > 0 ? (
-                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar p-1">
+                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar p-1">
                         {webLogos.map((logo, idx) => (
                             <button 
                                 key={idx} 
                                 onClick={() => handleSelectWebLogo(logo.url, setIcon)} 
                                 className="aspect-square bg-white rounded-xl border-2 border-slate-100 hover:border-indigo-500 p-2 transition-all flex items-center justify-center overflow-hidden shadow-sm hover:scale-110 active:scale-95"
                             >
-                                <img src={logo.url} className="w-full h-full object-contain" alt={logo.source} title={logo.source} />
+                                <img 
+                                    src={logo.url} 
+                                    className="w-full h-full object-contain" 
+                                    alt={logo.source} 
+                                    title={logo.source} 
+                                    onError={(e) => {
+                                        // Si la imagen falla, ocultamos el botón
+                                        (e.target as HTMLImageElement).closest('button')?.remove();
+                                    }}
+                                />
                             </button>
                         ))}
                     </div>
                 ) : !isSearchingWeb && hasSearched && (
                     <div className="py-8 text-center flex flex-col items-center gap-2">
                         <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-300"><Info size={20}/></div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No se encontraron marcas oficiales</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No hay marcas oficiales para esta búsqueda</p>
                     </div>
                 )}
                 
-                {isSearchingWeb && (
+                {isSearchingWeb && webLogos.length === 0 && (
                     <div className="py-12 flex flex-col items-center justify-center gap-4">
                         <div className="relative">
                             <Loader2 className="animate-spin text-indigo-500" size={32} />
@@ -165,42 +171,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           )}
       </div>
     );
-  };
-
-  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>, type: 'ACCOUNTS' | 'FAMILIES' | 'CATEGORIES') => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
-    reader.onload = (event) => {
-      const result = event.target?.result;
-      if (isExcel) {
-        const workbook = XLSX.read(result, { type: 'binary' });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
-        const newItems: any[] = [];
-        json.forEach(parts => {
-            if (parts.length < 2 || !parts[0]) return;
-            if (type === 'ACCOUNTS') newItems.push({ id: generateId(), name: String(parts[0]), initialBalance: parseFloat(String(parts[1])) || 0, currency: 'EUR', icon: '🏦' });
-            else if (type === 'FAMILIES') {
-                const flowType = String(parts[1]).toUpperCase().includes('INGRESO') ? 'INCOME' : 'EXPENSE';
-                newItems.push({ id: generateId(), name: String(parts[0]), type: flowType, icon: flowType === 'INCOME' ? '📈' : '📂' });
-            } else if (type === 'CATEGORIES') {
-                const family = data.families.find(f => f.name.toLowerCase() === String(parts[1]).toLowerCase());
-                if (family) newItems.push({ id: generateId(), name: String(parts[0]), familyId: family.id, icon: '🏷️' });
-            }
-        });
-        if (newItems.length > 0) {
-            if (type === 'ACCOUNTS') onUpdateData({ accounts: [...data.accounts, ...newItems] });
-            if (type === 'FAMILIES') onUpdateData({ families: [...data.families, ...newItems] });
-            if (type === 'CATEGORIES') onUpdateData({ categories: [...data.categories, ...newItems] });
-        }
-      } else {
-        setImportText(result as string);
-      }
-    };
-    if (isExcel) reader.readAsBinaryString(file);
-    else reader.readAsText(file);
   };
 
   return (
@@ -227,13 +197,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                       <div className="space-y-6">
                           <div className="space-y-2">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                  <Sparkles size={12} className="text-indigo-400" /> Entidad Financiera
+                                  <Sparkles size={12} className="text-indigo-400" /> Entidad / Marca
                               </label>
                               <input type="text" placeholder="Ej: Santander, Revolut, BBVA..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={accName} onChange={e => { setAccName(e.target.value); triggerWebSearch(e.target.value); }} />
                           </div>
                           {renderIconInput(accIcon, setAccIcon, accName, accFileInputRef)}
                           <div className="space-y-2">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Capital Inicial (€)</label>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fondo Inicial (€)</label>
                               <input type="number" placeholder="0.00" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
                           </div>
                           <button onClick={() => {
@@ -242,11 +212,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                               if (accId) onUpdateData({ accounts: data.accounts.map(a => a.id === accId ? { ...a, name: accName, initialBalance: balanceVal, icon: accIcon } : a) });
                               else onUpdateData({ accounts: [...data.accounts, { id: generateId(), name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon }] });
                               resetForm();
-                          }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all active:scale-95">Guardar Configuración</button>
+                          }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all active:scale-95">Guardar Cambios</button>
                       </div>
                   </div>
                   <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col">
-                      <h3 className="text-lg font-black text-slate-800 mb-8 uppercase tracking-widest">Patrimonio Conectado</h3>
+                      <h3 className="text-lg font-black text-slate-800 mb-8 uppercase tracking-widest">Patrimonio Actual</h3>
                       <div className="space-y-4 flex-1 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                           {data.accounts.map(acc => (
                               <div key={acc.id} className="flex justify-between items-center p-6 bg-slate-50 rounded-[2rem] group border border-transparent hover:border-indigo-100 hover:bg-white hover:shadow-xl transition-all">
@@ -284,7 +254,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                                   <Sparkles size={12} className="text-indigo-400" /> Título del Grupo
                               </label>
-                              <input type="text" placeholder="Ej: Hogar, Suscripciones, Ocio..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={famName} onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} />
+                              <input type="text" placeholder="Ej: Hogar, Ocio, Trabajo..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={famName} onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} />
                           </div>
                           {renderIconInput(famIcon, setFamIcon, famName, famFileInputRef)}
                           <div className="flex bg-slate-100 p-2 rounded-2xl">
@@ -343,14 +313,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                                   <Sparkles size={12} className="text-indigo-400" /> Nombre del Detalle
                               </label>
-                              <input type="text" placeholder="Ej: Netflix, Cine, Mercadona..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={catName} onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} />
+                              <input type="text" placeholder="Ej: Netflix, Mercadona, Gas..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={catName} onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} />
                           </div>
                           {renderIconInput(catIcon, setCatIcon, catName, catFileInputRef)}
                           <button onClick={() => {
                               if(!catName || !catParent) return;
                               onUpdateData({ categories: [...data.categories, { id: generateId(), name: catName, familyId: catParent, icon: catIcon }] });
                               resetForm();
-                          }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all active:scale-95">Guardar Detalle</button>
+                          }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all active:scale-95">Confirmar Detalle</button>
                       </div>
                   </div>
                   <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col">
