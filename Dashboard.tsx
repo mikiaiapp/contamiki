@@ -95,19 +95,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
     return { income: periodIncome, expense: periodExpense, balance: currentTotalBalance, periodBalance: periodIncome - periodExpense };
   }, [transactions, dateFilter, accounts]);
 
-  const expenseByFamilyData = useMemo(() => {
-    const map = new Map<string, number>();
-    transactions.filter(t => {
-      const tDate = new Date(t.date);
-      return tDate >= dateFilter.start && tDate <= dateFilter.end && t.type === 'EXPENSE';
-    }).forEach(t => {
-      const family = families.find(f => f.id === t.familyId);
-      const name = family ? family.name : 'Otros';
-      map.set(name, (map.get(name) || 0) + t.amount);
-    });
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
-  }, [transactions, dateFilter, families]);
-
   const hierarchicalData = useMemo(() => {
       const data: any[] = [];
       const periodTxs = transactions.filter(t => {
@@ -194,9 +181,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
         ))}
       </div>
 
-      {/* Visualizaciones en Tablets/Móviles */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 md:gap-10">
-        <div className="lg:col-span-2 bg-white p-5 sm:p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+      {/* Visualización de Jerarquía Principal */}
+      <div className="grid grid-cols-1 gap-8 md:gap-10">
+        <div className="bg-white p-5 sm:p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
             <h3 className="text-md font-black text-slate-800 mb-6 uppercase tracking-widest flex items-center gap-3">
                 <ListFilter className="text-indigo-500" size={18} /> Detalle de Agrupadores
             </h3>
@@ -235,31 +222,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
                                 ))}
                             </div>
                         )}
-                    </div>
-                ))}
-            </div>
-        </div>
-
-        <div className="bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center justify-center text-center">
-            <h3 className="text-indigo-400 text-[9px] font-black uppercase tracking-[0.4em] mb-8">Estructura de Gastos</h3>
-            <div className="h-[250px] w-full relative">
-                <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                        <Pie data={expenseByFamilyData} cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value">
-                            {expenseByFamilyData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                        </Pie>
-                    </PieChart>
-                </ResponsiveContainer>
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <p className="text-slate-500 text-[8px] font-black uppercase tracking-widest">Gasto</p>
-                    <p className="text-white text-lg font-black tracking-tight">-{globalStats.expense.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}</p>
-                </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 w-full mt-6">
-                {expenseByFamilyData.slice(0, 4).map((item, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
-                        <span className="text-slate-400 text-[8px] font-black uppercase tracking-widest truncate">{item.name}</span>
                     </div>
                 ))}
             </div>
