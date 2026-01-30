@@ -10,6 +10,14 @@ interface SettingsViewProps {
   onUpdateData: (newData: Partial<AppState>) => void;
 }
 
+// Helper para generar IDs robustos incluso en entornos no seguros
+const generateId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+};
+
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }) => {
   const [activeTab, setActiveTab] = useState<'FAMILIES' | 'CATEGORIES' | 'ACCOUNTS'>('ACCOUNTS');
   const [showImport, setShowImport] = useState(false);
@@ -24,13 +32,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     rawLines.forEach(parts => {
       if (parts.length < 2 || !parts[0]) return;
       if (type === 'ACCOUNTS') {
-        newItems.push({ id: crypto.randomUUID(), name: parts[0], initialBalance: parseFloat(parts[1]) || 0, currency: 'EUR', icon: '🏦' });
+        newItems.push({ id: generateId(), name: parts[0], initialBalance: parseFloat(parts[1]) || 0, currency: 'EUR', icon: '🏦' });
       } else if (type === 'FAMILIES') {
         const flowType = parts[1].toUpperCase().includes('INGRESO') ? 'INCOME' : 'EXPENSE';
-        newItems.push({ id: crypto.randomUUID(), name: parts[0], type: flowType, icon: flowType === 'INCOME' ? '📈' : '📂' });
+        newItems.push({ id: generateId(), name: parts[0], type: flowType, icon: flowType === 'INCOME' ? '📈' : '📂' });
       } else if (type === 'CATEGORIES') {
         const family = data.families.find(f => f.name.toLowerCase() === parts[1].toLowerCase());
-        if (family) newItems.push({ id: crypto.randomUUID(), name: parts[0], familyId: family.id, icon: '🏷️' });
+        if (family) newItems.push({ id: generateId(), name: parts[0], familyId: family.id, icon: '🏷️' });
       }
     });
     if (newItems.length > 0) {
@@ -53,14 +61,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     const reader = new FileReader();
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
     reader.onload = (event) => {
-      const data = event.target?.result;
+      const result = event.target?.result;
       if (isExcel) {
-        const workbook = XLSX.read(data, { type: 'binary' });
+        const workbook = XLSX.read(result, { type: 'binary' });
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
         processImportData(json, type);
       } else {
-        setImportText(data as string);
+        setImportText(result as string);
       }
     };
     if (isExcel) reader.readAsBinaryString(file);
@@ -159,12 +167,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   };
 
   const renderIconInput = (icon: string, setIcon: (s: string) => void, currentName: string, fileRef: React.RefObject<HTMLInputElement>) => {
-    const isImage = icon.startsWith('data:image') || icon.startsWith('http');
+    // Seguridad contra nulos
+    const safeIcon = icon || '🏦';
+    const isImage = safeIcon.startsWith('data:image') || safeIcon.startsWith('http');
+    
     return (
       <div className="space-y-4 w-full">
           <div className="flex flex-col sm:flex-row gap-4 items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <div className="relative group w-20 h-20 flex-shrink-0 flex items-center justify-center border-2 border-white rounded-2xl bg-white overflow-hidden shadow-sm cursor-pointer" onClick={() => fileRef.current?.click()}>
-                    {isImage ? <img src={icon} className="w-full h-full object-contain p-2" /> : <span className="text-3xl">{icon}</span>}
+                    {isImage ? <img src={safeIcon} className="w-full h-full object-contain p-2" /> : <span className="text-3xl">{safeIcon}</span>}
                 </div>
                 <div className="flex-1 text-center sm:text-left space-y-3">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Avatar del Registro</p>
@@ -228,7 +239,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                               if(!accName) return;
                               const balanceVal = parseFloat(accBalance) || 0;
                               if (accId) onUpdateData({ accounts: data.accounts.map(a => a.id === accId ? { ...a, name: accName, initialBalance: balanceVal, icon: accIcon } : a) });
-                              else onUpdateData({ accounts: [...data.accounts, { id: crypto.randomUUID(), name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon }] });
+                              else onUpdateData({ accounts: [...data.accounts, { id: generateId(), name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon }] });
                               resetForm();
                           }} className="w-full py-4.5 bg-slate-900 text-white rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg active:scale-95">{accId ? 'Confirmar' : 'Crear Cuenta'}</button>
                       </div>
@@ -240,7 +251,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                               <div key={acc.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-xl group border border-transparent hover:border-indigo-100 transition-all">
                                   <div className="flex items-center gap-3">
                                       <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-slate-100 p-1.5 shadow-sm">
-                                        {acc.icon.startsWith('data:image') || acc.icon.startsWith('http') ? <img src={acc.icon} className="w-full h-full object-contain" /> : <span className="text-xl">{acc.icon}</span>}
+                                        {(acc.icon || '🏦').startsWith('data:image') || (acc.icon || '🏦').startsWith('http') ? <img src={acc.icon} className="w-full h-full object-contain" /> : <span className="text-xl">{acc.icon || '🏦'}</span>}
                                       </div>
                                       <div>
                                           <span className="font-black text-slate-800 block text-xs truncate max-w-[100px]">{acc.name}</span>
@@ -248,7 +259,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                       </div>
                                   </div>
                                   <div className="flex gap-1 group-hover:opacity-100 transition-opacity">
-                                      <button onClick={() => { setAccId(acc.id); setAccName(acc.name); setAccBalance(acc.initialBalance.toString()); setAccIcon(acc.icon); }} className="p-1.5 text-slate-300 hover:text-indigo-600"><Edit2 size={16}/></button>
+                                      <button onClick={() => { setAccId(acc.id); setAccName(acc.name); setAccBalance(acc.initialBalance.toString()); setAccIcon(acc.icon || '🏦'); }} className="p-1.5 text-slate-300 hover:text-indigo-600"><Edit2 size={16}/></button>
                                       <button onClick={() => onUpdateData({accounts: data.accounts.filter(a=>a.id!==acc.id)})} className="p-1.5 text-slate-300 hover:text-rose-600"><Trash2 size={16}/></button>
                                   </div>
                               </div>
@@ -274,7 +285,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                           </div>
                           <button onClick={() => {
                               if(!famName) return;
-                              onUpdateData({ families: [...data.families, { id: crypto.randomUUID(), name: famName, type: famType, icon: famIcon }] });
+                              onUpdateData({ families: [...data.families, { id: generateId(), name: famName, type: famType, icon: famIcon }] });
                               resetForm();
                           }} className="w-full py-4.5 bg-slate-900 text-white rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg active:scale-95">Guardar Grupo</button>
                       </div>
@@ -285,7 +296,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                           {data.families.map(f => (
                               <div key={f.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-xl">
                                   <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center overflow-hidden p-1.5 shadow-sm">{f.icon.startsWith('data:image') || f.icon.startsWith('http') ? <img src={f.icon} className="w-full h-full object-contain" /> : <span className="text-xl">{f.icon}</span>}</div>
+                                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center overflow-hidden p-1.5 shadow-sm">{(f.icon || '📂').startsWith('data:image') || (f.icon || '📂').startsWith('http') ? <img src={f.icon} className="w-full h-full object-contain" /> : <span className="text-xl">{f.icon || '📂'}</span>}</div>
                                     <span className="font-black text-slate-800 text-xs">{f.name}</span>
                                   </div>
                                   <span className={`text-[7px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${f.type === 'INCOME' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>{f.type === 'INCOME' ? 'Entrada' : 'Salida'}</span>
@@ -312,7 +323,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                           {renderIconInput(catIcon, setCatIcon, catName, catFileInputRef)}
                           <button onClick={() => {
                               if(!catName || !catParent) return;
-                              onUpdateData({ categories: [...data.categories, { id: crypto.randomUUID(), name: catName, familyId: catParent, icon: catIcon }] });
+                              onUpdateData({ categories: [...data.categories, { id: generateId(), name: catName, familyId: catParent, icon: catIcon }] });
                               resetForm();
                           }} className="w-full py-4.5 bg-slate-950 text-white rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg active:scale-95 disabled:opacity-30">Guardar Detalle</button>
                       </div>
@@ -329,7 +340,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                 <div className="grid grid-cols-1 gap-2.5">
                                   {famCats.map(c => (
                                     <div key={c.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-transparent">
-                                        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-slate-100 p-1.5 shadow-sm">{c.icon.startsWith('data:image') || c.icon.startsWith('http') ? <img src={c.icon} className="w-full h-full object-contain" /> : <span className="text-lg">{c.icon}</span>}</div>
+                                        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-slate-100 p-1.5 shadow-sm">{(c.icon || '🏷️').startsWith('data:image') || (c.icon || '🏷️').startsWith('http') ? <img src={c.icon} className="w-full h-full object-contain" /> : <span className="text-lg">{c.icon || '🏷️'}</span>}</div>
                                         <span className="font-bold text-slate-800 text-[10px]">{c.name}</span>
                                     </div>
                                   ))}

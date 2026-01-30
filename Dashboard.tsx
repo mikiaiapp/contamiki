@@ -132,8 +132,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
   }, [families, categories, transactions, dateFilter]);
 
   const renderIcon = (iconStr: string, size = "w-8 h-8", textSize = "text-xl") => {
-      if (iconStr.startsWith('data:image') || iconStr.startsWith('http')) return <img src={iconStr} className={`${size} object-contain`} />;
-      return <span className={textSize}>{iconStr}</span>;
+      const safeIcon = iconStr || '📂';
+      if (safeIcon.startsWith('data:image') || safeIcon.startsWith('http')) return <img src={safeIcon} className={`${size} object-contain`} />;
+      return <span className={textSize}>{safeIcon}</span>;
   }
 
   return (
