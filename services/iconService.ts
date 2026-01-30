@@ -19,7 +19,7 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
                 model: "gemini-3-flash-preview",
                 contents: `Analyze the term: "${query}". 
                 If it's a BRAND, return its main web domains (e.g. netflix.com).
-                If it's a GENERAL CATEGORY (e.g. "ocio", "viajes"), return the 3 best descriptive English keywords for an icon search (e.g. "leisure", "travel", "insurance").
+                If it's a GENERAL CATEGORY (e.g. "ocio", "viajes", "seguros", "restaurantes"), return the 3 best descriptive English keywords for an icon search (e.g. "leisure", "travel", "insurance", "restaurant").
                 Return ONLY a comma-separated list. No text, no quotes.`,
                 config: {
                     thinkingConfig: { thinkingBudget: 0 }
@@ -49,11 +49,10 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
             results.push({ url: `https://unavatar.io/${item}?fallback=false`, source: item });
             results.push({ url: `https://www.google.com/s2/favicons?domain=${item}&sz=128`, source: item });
         } else {
-            // Fuentes para conceptos genéricos (Icons8 Fluency es excelente para esto)
+            // Fuentes para conceptos genéricos (Icons8 Fluency)
             const keyword = item.replace(/\s+/g, '-');
             results.push({ url: `https://img.icons8.com/fluency/256/${keyword}.png`, source: item });
             results.push({ url: `https://img.icons8.com/color/256/${keyword}.png`, source: item });
-            results.push({ url: `https://img.icons8.com/clouds/256/${keyword}.png`, source: item });
         }
     });
 
@@ -65,5 +64,5 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
 
     // Eliminar duplicados y limitar
     const uniqueResults = Array.from(new Map(results.map(item => [item.url, item])).values());
-    return uniqueResults.slice(0, 15);
+    return uniqueResults.slice(0, 12);
 };
