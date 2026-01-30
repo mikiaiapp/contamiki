@@ -1,4 +1,3 @@
-DESDE el nodo: 18-alpino
 
 # Directorio de trabajo
 WORKDIR /aplicación
@@ -20,3 +19,4 @@ EXPONER 4000
 
 # Iniciar el servidor
 CMD ["npm", "inicio"]
+
