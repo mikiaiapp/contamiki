@@ -18,22 +18,25 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
             const response = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
                 contents: `Analyze the term: "${query}". 
-                If it's a BRAND, return its main web domains (e.g. netflix.com, amazon.es).
-                If it's a GENERAL CATEGORY or CONCEPT (e.g. "ocio", "viajes", "seguros", "restaurantes", "salud"), return the 3 best descriptive English keywords for an icon search (e.g. "leisure", "travel", "insurance", "restaurant", "health").
-                Return ONLY a comma-separated list. No text, no quotes.`,
+                1. If it's a specific BRAND or COMPANY (e.g. "Netflix", "Santander", "Amazon"), return its primary web domain (e.g. "netflix.com").
+                2. If it's a GENERAL CATEGORY or ACTIVITY (e.g. "ocio", "viajes", "seguros", "restaurantes", "salud"), return 3 descriptive English nouns for an icon search (e.g. "leisure, joystick, cinema" for "ocio").
+                Return ONLY a comma-separated list. No labels, no quotes, no explanations.`,
                 config: {
                     thinkingConfig: { thinkingBudget: 0 }
                 },
             });
 
             const rawResponse = (response.text || "").toLowerCase();
-            items = rawResponse.split(',').map(i => i.trim()).filter(i => i.length > 2);
+            // Limpiar la respuesta de posibles prefijos o formatos inesperados
+            items = rawResponse.split(',')
+                .map(i => i.replace(/[^a-z0-9.\-_]/gi, '').trim())
+                .filter(i => i.length >= 2);
         }
     } catch (error) {
         console.warn("AI icon extraction failed, using fallback.");
     }
 
-    // Fallback: Si la IA falla, usamos el término directo como palabra clave
+    // Fallback: Si la IA falla, usamos el término directo
     if (items.length === 0) {
         items = [query.toLowerCase()];
     }
@@ -49,21 +52,22 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
             results.push({ url: `https://unavatar.io/${item}?fallback=false`, source: item });
             results.push({ url: `https://www.google.com/s2/favicons?domain=${item}&sz=128`, source: item });
         } else {
-            // Fuentes para conceptos genéricos (Iconografía de diseño)
+            // Fuentes para conceptos genéricos (Iconografía de alta calidad de Icons8)
             const keyword = item.replace(/\s+/g, '-');
             results.push({ url: `https://img.icons8.com/fluency/256/${keyword}.png`, source: item });
             results.push({ url: `https://img.icons8.com/color/256/${keyword}.png`, source: item });
             results.push({ url: `https://img.icons8.com/clouds/256/${keyword}.png`, source: item });
+            results.push({ url: `https://img.icons8.com/office/256/${keyword}.png`, source: item });
         }
     });
 
-    // Siempre añadir un avatar de texto como última opción de seguridad
+    // Siempre añadir un avatar de texto con las iniciales como respaldo final
     results.push({
         url: `https://ui-avatars.com/api/?name=${encodeURIComponent(query)}&background=4f46e5&color=fff&size=512&bold=true`,
         source: 'Generado'
     });
 
-    // Eliminar duplicados y limitar resultados para no saturar la UI
+    // Eliminar duplicados por URL y filtrar enlaces muertos (optimización visual)
     const uniqueResults = Array.from(new Map(results.map(item => [item.url, item])).values());
-    return uniqueResults.slice(0, 12);
+    return uniqueResults.slice(0, 15);
 };
