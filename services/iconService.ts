@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 
 /**
  * Busca logotipos e iconos representativos en internet.
- * Optimizado para distinguir entre marcas corporativas e iconos conceptuales genéricos.
+ * PRIORIDAD: 1. Logos de Marca | 2. Resultados de Google | 3. Iconos Conceptuales
  */
 export const searchInternetLogos = async (text: string): Promise<{url: string, source: string}[]> => {
     if (!text || text.trim().length < 2) return [];
@@ -15,11 +15,11 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
     let iconKeywords: string[] = [];
     let searchFoundUrls: string[] = [];
 
-    // 1. LÓGICA DE MARCAS (Heurística rápida para empresas)
+    // 1. LÓGICA DE MARCAS (Heurística rápida: si es una palabra sola, es probable que sea marca)
     if (!query.includes(' ') && query.length > 2) {
         domains.push(`${queryLower}.es`);
         domains.push(`${queryLower}.com`);
-        domains.push(`${queryLower}.org`);
+        domains.push(`${queryLower}.net`);
     }
 
     // 2. BÚSQUEDA PROFUNDA CON IA (Gemini + Google Search)
@@ -28,22 +28,19 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
         if (apiKey) {
             const ai = new GoogleGenAI({ apiKey });
             
-            // Prompt mejorado incluyendo la sugerencia de "logo:term" y búsqueda de pictogramas
+            // Prompt optimizado para PRIORIZAR marcas y luego conceptos
             const prompt = `Analiza el término: "${query}".
             TAREA:
-            1. Si es una marca conocida: lista sus 3 dominios más probables.
-            2. Si es un concepto genérico (ej: "teatro", "supermercado"): genera 10 términos técnicos en inglés que correspondan a SLUGS de iconos (ej: "teatro" -> "theater, drama, masks, cinema, stage, actor, comedy, performing-arts").
+            1. Si es una marca o empresa: identifica sus 3 dominios web más probables.
+            2. Si es un concepto (ej: teatro, comida): genera 8 términos en inglés para iconos (ej: "teatro" -> "theater, drama, masks, stage").
             
-            IMPORTANTE: Los conceptos deben ser palabras simples en minúsculas, separadas por guiones.
-            
-            ADICIONALMENTE: Realiza una búsqueda en Google usando estos operadores:
+            BÚSQUEDA WEB REQUERIDA (Google Search):
             - "logo:${query}"
-            - "vector icon ${query} transparent png"
-            - "site:flaticon.com ${query}"
-            Extrae las URLs directas de imágenes de los resultados.
+            - "official logo of ${query}"
+            - "transparent png icon for ${query}"
             
             FORMATO DE RESPUESTA:
-            DOMINIOS: dom1.com, dom2.es | CONCEPTOS: term1, term2, term3, term4, term5, term6, term7, term8, term9, term10`;
+            DOMINIOS: dom1.com, dom2.es | CONCEPTOS: term1, term2, term3`;
 
             const response = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
@@ -55,21 +52,20 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
 
             const rawText = response.text || "";
             
-            // Extraer URLs reales (Grounding / Google Search)
+            // Extraer URLs reales de Google Search (Grounding) - Estas suelen ser de alta calidad
             const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
             if (groundingChunks) {
                 groundingChunks.forEach((chunk: any) => {
                     if (chunk.web?.uri) {
                         const uri = chunk.web.uri;
-                        // Filtramos para intentar quedarnos con imágenes o páginas de iconos
-                        if (uri.match(/\.(png|jpg|jpeg|svg|webp)$/i) || uri.includes('icon') || uri.includes('logo') || uri.includes('brand') || uri.includes('cdn')) {
+                        if (uri.match(/\.(png|jpg|jpeg|svg|webp)$/i) || uri.includes('logo') || uri.includes('brand') || uri.includes('cdn')) {
                             searchFoundUrls.push(uri);
                         }
                     }
                 });
             }
 
-            // Parsear dominios y conceptos de la respuesta de texto
+            // Parsear dominios y conceptos
             const parts = rawText.toLowerCase().split('|');
             parts.forEach(p => {
                 if (p.includes('dominios:')) {
@@ -88,61 +84,47 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
 
     const results: {url: string, source: string}[] = [];
 
-    // --- BLOQUE A: ICONOS CONCEPTUALES (Iconify & Emojis) ---
-    // Si la IA no devolvió nada, intentamos con la query original limpia
-    const effectiveKeywords = iconKeywords.length > 0 ? iconKeywords : [queryLower.replace(/\s+/g, '-')];
+    // --- BLOQUE 1: LOGOTIPOS CORPORATIVOS (PRIORIDAD MÁXIMA) ---
+    const uniqueDomains = Array.from(new Set(domains));
+    uniqueDomains.forEach(domain => {
+        results.push({ url: `https://logo.clearbit.com/${domain}?size=256`, source: 'Logo Oficial' });
+        results.push({ url: `https://unavatar.io/${domain}?fallback=false`, source: 'Brand Avatar' });
+    });
 
+    // --- BLOQUE 2: RESULTADOS DIRECTOS DE GOOGLE (Alta relevancia para "logo:teatro") ---
+    searchFoundUrls.forEach(url => {
+        results.push({ url, source: 'Web Search' });
+    });
+
+    // --- BLOQUE 3: ICONOS CONCEPTUALES (SOPORTE SECUNDARIO) ---
+    const effectiveKeywords = iconKeywords.length > 0 ? iconKeywords : [queryLower.replace(/\s+/g, '-')];
     effectiveKeywords.forEach(k => {
         const term = k.replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
         if (term.length < 2) return;
 
-        // Iconify - Expandido con más colecciones ricas en conceptos
+        // Intentar buscar el concepto como marca también (ej: theater.com)
+        results.push({ url: `https://logo.clearbit.com/${term}.com?size=256`, source: 'Concept Logo' });
+
+        // Iconify - Colecciones sólidas
         results.push({ url: `https://api.iconify.design/mdi:${term}.svg`, source: 'Material' });
         results.push({ url: `https://api.iconify.design/ri:${term}-fill.svg`, source: 'Remix' });
-        results.push({ url: `https://api.iconify.design/flat-color-icons:${term}.svg`, source: 'Flat Color' });
-        results.push({ url: `https://api.iconify.design/lucide:${term}.svg`, source: 'Lucide' });
+        results.push({ url: `https://api.iconify.design/flat-color-icons:${term}.svg`, source: 'Flat' });
         results.push({ url: `https://api.iconify.design/ph:${term}-bold.svg`, source: 'Phosphor' });
-        results.push({ url: `https://api.iconify.design/solar:${term}-bold-duotone.svg`, source: 'Solar Duotone' });
-        results.push({ url: `https://api.iconify.design/line-md:${term}.svg`, source: 'Line Art' });
-        results.push({ url: `https://api.iconify.design/fxemoji:${term}.svg`, source: 'Emoji' });
-        results.push({ url: `https://api.iconify.design/noto:${term}.svg`, source: 'Noto' });
+        results.push({ url: `https://api.iconify.design/solar:${term}-bold-duotone.svg`, source: 'Solar' });
+        results.push({ url: `https://api.iconify.design/lucide:${term}.svg`, source: 'Lucide' });
         
-        // Icons8 - Estilos visuales potentes
+        // Icons8
         results.push({ url: `https://img.icons8.com/fluency/256/${term}.png`, source: 'Fluency' });
         results.push({ url: `https://img.icons8.com/color/256/${term}.png`, source: 'Color' });
-        results.push({ url: `https://img.icons8.com/plasticine/256/${term}.png`, source: 'Plasticine' });
-        results.push({ url: `https://img.icons8.com/stickers/256/${term}.png`, source: 'Sticker' });
-
-        // Truco: Probar el concepto como si fuera un dominio (ej: theater.com) en Clearbit
-        // A veces las empresas con nombre genérico tienen el logo perfecto del concepto
-        domains.push(`${term}.com`);
     });
 
-    // --- BLOQUE B: LOGOTIPOS CORPORATIVOS ---
-    const uniqueDomains = Array.from(new Set(domains));
-    uniqueDomains.forEach(domain => {
-        results.push({ url: `https://logo.clearbit.com/${domain}?size=256`, source: 'Brand Logo' });
-        results.push({ url: `https://unavatar.io/${domain}?fallback=false`, source: 'Social Brand' });
-    });
-
-    // --- BLOQUE C: GROUNDING DE BÚSQUEDA WEB ---
-    searchFoundUrls.forEach(url => {
-        results.push({ url, source: 'Web Result' });
-    });
-
-    // --- BLOQUE D: ARTE PROCEDURAL (DiceBear) ---
-    effectiveKeywords.slice(0, 2).forEach(k => {
-        results.push({ url: `https://api.dicebear.com/9.x/icons/svg?seed=${k}`, source: 'Vector Art' });
-        results.push({ url: `https://api.dicebear.com/9.x/shapes/svg?seed=${k}`, source: 'Abstract' });
-    });
-
-    // --- BLOQUE E: FALLBACK ---
+    // --- BLOQUE 4: FALLBACKS ---
     results.push({
         url: `https://ui-avatars.com/api/?name=${encodeURIComponent(query)}&background=4f46e5&color=fff&size=512&bold=true`,
         source: 'Iniciales'
     });
 
-    // Consolidación final y eliminación de duplicados por URL
+    // Consolidación final eliminando duplicados
     const seenUrls = new Set<string>();
     const finalResults = results.filter(item => {
         if (!item.url || seenUrls.has(item.url)) return false;
@@ -150,6 +132,5 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
         return true;
     });
 
-    // Devolvemos una lista amplia para que el usuario tenga donde elegir
-    return finalResults.slice(0, 70);
+    return finalResults.slice(0, 80);
 };
