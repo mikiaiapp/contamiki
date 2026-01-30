@@ -3,69 +3,89 @@ import { GoogleGenAI } from "@google/genai";
 
 /**
  * Busca logotipos e iconos representativos en internet.
+ * Realiza una búsqueda dual: Marcas (dominios) + Conceptos (iconos).
  */
 export const searchInternetLogos = async (text: string): Promise<{url: string, source: string}[]> => {
     if (!text || text.trim().length < 2) return [];
     
     const query = text.trim();
-    let brandDomain = "";
-    let keywords: string[] = [];
+    const queryLower = query.toLowerCase();
+    
+    let domains: string[] = [];
+    let concepts: string[] = [];
 
+    // 1. HEURÍSTICA INMEDIATA (Sin esperar a la IA)
+    if (!query.includes(' ')) {
+        domains.push(`${queryLower}.es`);
+        domains.push(`${queryLower}.com`);
+    }
+    // Conceptos base siempre incluidos
+    concepts.push(queryLower);
+
+    // 2. ENRIQUECIMIENTO CON IA
     try {
         const apiKey = process.env.API_KEY;
         if (apiKey) {
             const ai = new GoogleGenAI({ apiKey });
-            // Prompt extremadamente directivo para evitar explicaciones de la IA
             const response = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
-                contents: `Identify the brand or concept: "${query}". 
+                contents: `Analiza: "${query}".
                 
-                RULES:
-                - If it's a COMPANY/BRAND (e.g. Netflix, Amazon, BBVA, Shell), return ONLY its domain (e.g. "netflix.com").
-                - If it's a CATEGORY (e.g. food, car, salary), return ONLY 2 English nouns (e.g. "pizza, food").
-                - NO MARKDOWN. NO INTRO. NO LABELS. JUST THE TEXT.`,
+                Responde en una sola línea separada por comas:
+                1. Los 2 dominios web más probables si es una empresa (ej: caixabank.es, caixabank.com).
+                2. 3 sustantivos en inglés que describan el concepto (ej: bank, money, finance).
+                
+                SALIDA: Solo la lista de palabras, nada más.`,
                 config: {
                     thinkingConfig: { thinkingBudget: 0 }
                 },
             });
 
             const cleanResponse = (response.text || "").toLowerCase().trim().replace(/[`*]/g, '');
+            const parts = cleanResponse.split(',').map(p => p.trim()).filter(p => p.length > 2);
             
-            if (cleanResponse.includes('.') && !cleanResponse.includes(' ')) {
-                brandDomain = cleanResponse;
-            } else {
-                keywords = cleanResponse.split(',').map(k => k.trim());
-            }
+            parts.forEach(p => {
+                if (p.includes('.') && !p.includes(' ')) {
+                    domains.push(p);
+                } else {
+                    concepts.push(p);
+                }
+            });
         }
     } catch (error) {
-        console.warn("IA Icon search failed, using query as fallback.");
+        console.warn("IA Enrichment failed, using basic search.");
     }
 
     const results: {url: string, source: string}[] = [];
 
-    // 1. SI ES UNA MARCA (Dominio detectado)
-    if (brandDomain || (query.includes('.') && !query.includes(' '))) {
-        const domain = brandDomain || query.toLowerCase();
-        results.push({ url: `https://logo.clearbit.com/${domain}?size=256`, source: 'Brand' });
-        results.push({ url: `https://unavatar.io/${domain}?fallback=false`, source: 'Brand' });
-        results.push({ url: `https://www.google.com/s2/favicons?domain=${domain}&sz=128`, source: 'Brand' });
-    }
-
-    // 2. SI SON CONCEPTOS O CATEGORÍAS
-    const searchTerms = keywords.length > 0 ? keywords : [query.toLowerCase()];
-    searchTerms.forEach(term => {
-        const k = term.replace(/\s+/g, '-');
-        results.push({ url: `https://img.icons8.com/fluency/256/${k}.png`, source: 'Icon' });
-        results.push({ url: `https://img.icons8.com/color/256/${k}.png`, source: 'Icon' });
-        results.push({ url: `https://img.icons8.com/clouds/256/${k}.png`, source: 'Icon' });
+    // A. AGREGAR LOGOS DE MARCAS (Dominios)
+    const uniqueDomains = Array.from(new Set(domains));
+    uniqueDomains.forEach(domain => {
+        // Unavatar es excelente para marcas porque busca en redes sociales si falla el dominio
+        results.push({ url: `https://unavatar.io/${domain}?fallback=false`, source: 'Marca (Social)' });
+        results.push({ url: `https://logo.clearbit.com/${domain}?size=256`, source: 'Marca (HQ)' });
+        results.push({ url: `https://www.google.com/s2/favicons?domain=${domain}&sz=128`, source: 'Marca (Favicon)' });
     });
 
-    // 3. FALLBACK SEGURO (Avatar de texto)
+    // B. AGREGAR ICONOS DE CONCEPTOS (Keywords)
+    const uniqueConcepts = Array.from(new Set(concepts));
+    uniqueConcepts.forEach(c => {
+        const term = c.replace(/\s+/g, '-');
+        // Usamos múltiples estilos de Icons8 para dar variedad
+        results.push({ url: `https://img.icons8.com/fluency/256/${term}.png`, source: 'Icono Fluency' });
+        results.push({ url: `https://img.icons8.com/color/256/${term}.png`, source: 'Icono Color' });
+        results.push({ url: `https://img.icons8.com/clouds/256/${term}.png`, source: 'Icono Clouds' });
+        results.push({ url: `https://img.icons8.com/emoji/256/${term}-emoji.png`, source: 'Emoji' });
+    });
+
+    // C. FALLBACK FINAL (Avatar con iniciales)
     results.push({
         url: `https://ui-avatars.com/api/?name=${encodeURIComponent(query)}&background=4f46e5&color=fff&size=512&bold=true`,
-        source: 'Default'
+        source: 'Iniciales'
     });
 
-    // Limpiar duplicados y URLs vacías
-    return Array.from(new Map(results.map(item => [item.url, item])).values()).slice(0, 15);
+    // Limpieza de duplicados y limitación de resultados
+    const uniqueResults = Array.from(new Map(results.map(item => [item.url, item])).values());
+    
+    return uniqueResults.slice(0, 24);
 };
