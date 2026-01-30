@@ -3,9 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 
 /**
  * Busca logotipos e iconos representativos en internet.
- * Realiza una búsqueda dual profunda: 
- * 1. Marcas corporativas (Dominios + Social)
- * 2. Conceptos semánticos (Traducción + Sinónimos para Iconos)
+ * Utiliza Google Search Grounding para encontrar los mejores términos e imágenes.
  */
 export const searchInternetLogos = async (text: string): Promise<{url: string, source: string}[]> => {
     if (!text || text.trim().length < 2) return [];
@@ -15,80 +13,100 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
     
     let domains: string[] = [];
     let iconKeywords: string[] = [];
+    let searchFoundUrls: string[] = [];
 
-    // 1. HEURÍSTICA INMEDIATA
-    // Si no tiene espacios, es un candidato a dominio (marca)
+    // 1. HEURÍSTICA INMEDIATA PARA MARCAS
     if (!query.includes(' ')) {
         domains.push(`${queryLower}.es`);
         domains.push(`${queryLower}.com`);
     }
-    // Añadimos el query original por si acaso
     iconKeywords.push(queryLower);
 
-    // 2. ENRIQUECIMIENTO CON IA (Crucial para traducción y conceptos)
+    // 2. BÚSQUEDA CON GEMINI + GOOGLE SEARCH
     try {
         const apiKey = process.env.API_KEY;
         if (apiKey) {
             const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
-                contents: `Analiza este término de contabilidad/gastos: "${query}".
+                contents: `Busca iconos y representaciones visuales para el concepto: "${query}".
                 
-                Responde estrictamente con una lista de palabras separadas por comas que incluya:
-                1. Si es una marca o empresa: sus 2 dominios web más probables (ej. "mercadona.es, mercadona.com").
-                2. Si es un concepto o actividad: 5 palabras clave en INGLÉS que mejor lo representen para buscar un icono (ej. si es "ocio" -> "leisure, cinema, party, game, popcorn"). 
+                Si es una marca, identifica su dominio oficial.
+                Si es un concepto genérico (ej: ocio, impuestos, supermercado), busca los 5 términos en inglés más usados para sus iconos (ej: "leisure", "tax", "shopping-cart").
                 
-                IMPORTANTE: Solo devuelve la lista de palabras, sin explicaciones ni encabezados.`,
+                Responde en una línea con este formato:
+                DOMINIOS: dom1.com, dom2.es | KEYWORDS: word1, word2, word3`,
                 config: {
-                    thinkingConfig: { thinkingBudget: 0 }
+                    tools: [{ googleSearch: {} }] // Usamos Google Search para mayor precisión
                 },
             });
 
-            const cleanResponse = (response.text || "").toLowerCase().trim().replace(/[`*]/g, '');
-            const parts = cleanResponse.split(',').map(p => p.trim()).filter(p => p.length > 1);
+            const rawText = response.text || "";
             
-            parts.forEach(p => {
-                if (p.includes('.') && !p.includes(' ')) {
-                    domains.push(p);
-                } else {
-                    iconKeywords.push(p);
+            // Extraer URLs de la búsqueda de Google (Grounding)
+            const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+            if (groundingChunks) {
+                groundingChunks.forEach((chunk: any) => {
+                    if (chunk.web?.uri) searchFoundUrls.push(chunk.web.uri);
+                });
+            }
+
+            // Parsear respuesta de texto
+            const cleanText = rawText.toLowerCase().trim();
+            const parts = cleanText.split('|');
+            
+            parts.forEach(part => {
+                if (part.includes('dominios:')) {
+                    const d = part.replace('dominios:', '').split(',').map(s => s.trim()).filter(s => s.includes('.'));
+                    domains.push(...d);
+                }
+                if (part.includes('keywords:')) {
+                    const k = part.replace('keywords:', '').split(',').map(s => s.trim()).filter(s => s.length > 2);
+                    iconKeywords.push(...k);
                 }
             });
         }
     } catch (error) {
-        console.warn("IA Icon enrichment failed:", error);
+        console.warn("Gemini Search failed, using fallbacks:", error);
     }
 
     const results: {url: string, source: string}[] = [];
 
-    // A. FUENTES DE MARCAS (Basadas en dominios)
+    // A. AGREGAR RESULTADOS DE MARCAS (Dominios)
     const uniqueDomains = Array.from(new Set(domains));
     uniqueDomains.forEach(domain => {
-        results.push({ url: `https://unavatar.io/${domain}?fallback=false`, source: 'Marca (Social)' });
         results.push({ url: `https://logo.clearbit.com/${domain}?size=256`, source: 'Marca (HQ)' });
-        results.push({ url: `https://www.google.com/s2/favicons?domain=${domain}&sz=128`, source: 'Marca (Favicon)' });
+        results.push({ url: `https://unavatar.io/${domain}?fallback=false`, source: 'Marca (Social)' });
+        results.push({ url: `https://www.google.com/s2/favicons?domain=${domain}&sz=128`, source: 'Favicon' });
     });
 
-    // B. FUENTES DE CONCEPTOS (Basadas en keywords en inglés/español)
+    // B. AGREGAR RESULTADOS CONCEPTUALES (Basados en las Keywords encontradas por Google Search)
     const uniqueKeywords = Array.from(new Set(iconKeywords));
     uniqueKeywords.forEach(k => {
         const term = k.replace(/\s+/g, '-');
-        // Icons8 es muy estricto con los nombres en inglés. La IA nos ha dado términos en inglés.
-        // Probamos varios estilos populares de Icons8
+        // Probamos múltiples variantes de Icons8 que son el estándar para "iconos conceptuales"
         results.push({ url: `https://img.icons8.com/fluency/256/${term}.png`, source: 'Icono Fluency' });
         results.push({ url: `https://img.icons8.com/color/256/${term}.png`, source: 'Icono Color' });
         results.push({ url: `https://img.icons8.com/clouds/256/${term}.png`, source: 'Icono Clouds' });
-        results.push({ url: `https://img.icons8.com/emoji/256/${term}-emoji.png`, source: 'Emoji' });
         results.push({ url: `https://img.icons8.com/stickers/256/${term}.png`, source: 'Sticker' });
+        results.push({ url: `https://img.icons8.com/emoji/256/${term}-emoji.png`, source: 'Emoji' });
+        results.push({ url: `https://img.icons8.com/cute-clipart/256/${term}.png`, source: 'Clipart' });
     });
 
-    // C. FALLBACK (Avatar visual con iniciales)
+    // C. AGREGAR URLs ENCONTRADAS POR GOOGLE (Grounding) que parezcan imágenes o favicons
+    searchFoundUrls.forEach(url => {
+        if (url.match(/\.(jpeg|jpg|gif|png|svg)$/) || url.includes('icon') || url.includes('logo')) {
+            results.push({ url, source: 'Búsqueda Web' });
+        }
+    });
+
+    // D. FALLBACK FINAL
     results.push({
         url: `https://ui-avatars.com/api/?name=${encodeURIComponent(query)}&background=4f46e5&color=fff&size=512&bold=true`,
         source: 'Iniciales'
     });
 
-    // Limpiar duplicados de URL y filtrar
+    // Limpieza de duplicados y filtrado de resultados rotos
     const seenUrls = new Set<string>();
     const finalResults = results.filter(item => {
         if (seenUrls.has(item.url)) return false;
@@ -96,5 +114,5 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
         return true;
     });
 
-    return finalResults.slice(0, 30); // Devolvemos un pool amplio para que el usuario elija
+    return finalResults.slice(0, 32);
 };
