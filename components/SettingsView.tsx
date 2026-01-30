@@ -24,20 +24,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [hasSearched, setHasSearched] = useState(false);
   const searchTimeoutRef = useRef<number | null>(null);
 
-  // States para Cuentas
+  // States
   const [accId, setAccId] = useState<string | null>(null);
   const [accName, setAccName] = useState('');
   const [accBalance, setAccBalance] = useState('');
   const [accIcon, setAccIcon] = useState('🏦');
   const accFileInputRef = useRef<HTMLInputElement>(null);
 
-  // States para Familias
   const [famName, setFamName] = useState('');
   const [famType, setFamType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [famIcon, setFamIcon] = useState('📂');
   const famFileInputRef = useRef<HTMLInputElement>(null);
 
-  // States para Categorías
   const [catName, setCatName] = useState('');
   const [catParent, setCatParent] = useState('');
   const [catIcon, setCatIcon] = useState('🏷️');
@@ -74,32 +72,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         } finally {
             setIsSearchingWeb(false);
         }
-    }, 800);
+    }, 600);
   };
 
-  const handleSelectWebLogo = async (url: string, setIcon: (s: string) => void) => {
-      setIcon(url); 
-      // Intentamos persistir en Base64 para evitar depender de la URL externa
-      try {
-          const response = await fetch(url);
-          if (response.ok) {
-              const blob = await response.blob();
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                  setIcon(reader.result as string);
-                  setWebLogos([]);
-                  setHasSearched(false);
-              };
-              reader.readAsDataURL(blob);
-          } else {
-            setWebLogos([]);
-            setHasSearched(false);
-          }
-      } catch (e) { 
-          // Si falla por CORS, mantenemos la URL (al menos se verá mientras el sitio externo lo permita)
-          setWebLogos([]);
-          setHasSearched(false);
-      }
+  const handleSelectWebLogo = (url: string, setIcon: (s: string) => void) => {
+      // Usamos la URL directa para evitar fallos de CORS al intentar convertir a base64
+      setIcon(url);
+      setWebLogos([]);
+      setHasSearched(false);
   };
 
   const renderIconInput = (icon: string, setIcon: (s: string) => void, currentName: string, fileRef: React.RefObject<HTMLInputElement>) => {
@@ -116,7 +96,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     </div>
                 </div>
                 <div className="flex-1 text-center sm:text-left space-y-3">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Identidad de Categoría</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Iconografía sugerida</p>
                     <div className="flex flex-wrap justify-center sm:justify-start gap-2">
                         <button onClick={() => fileRef.current?.click()} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg font-black text-[8px] uppercase tracking-widest flex items-center gap-1.5 hover:bg-slate-50 transition-colors shadow-sm"><ImageIcon size={12} /> Galería</button>
                         <input type="file" ref={fileRef} className="hidden" accept="image/*" onChange={async (e) => {
@@ -136,7 +116,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 <div className="flex justify-between items-center border-b border-slate-50 pb-3">
                     <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
                         <Sparkles size={14} className={isSearchingWeb ? 'animate-pulse' : ''} /> 
-                        {isSearchingWeb ? `IA analizando "${currentName}"...` : `Iconos sugeridos`}
+                        {isSearchingWeb ? `IA buscando para "${currentName}"...` : `Resultados para "${currentName}"`}
                     </span>
                     {!isSearchingWeb && (
                         <button onClick={() => {setWebLogos([]); setHasSearched(false);}} className="text-slate-300 hover:text-rose-500 transition-colors"><XCircle size={18}/></button>
@@ -165,17 +145,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 ) : !isSearchingWeb && hasSearched ? (
                     <div className="py-8 text-center flex flex-col items-center gap-2">
                         <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-300"><Info size={20}/></div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No hay iconos para "{currentName}". Prueba algo distinto.</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sin resultados. Prueba con: Ocio, Amazon, Santander...</p>
                     </div>
                 ) : null}
                 
                 {isSearchingWeb && (
                     <div className="py-12 flex flex-col items-center justify-center gap-4">
-                        <div className="relative">
-                            <Loader2 className="animate-spin text-indigo-500" size={32} />
-                            <Sparkles className="absolute top-0 right-0 text-indigo-300 animate-bounce" size={14} />
-                        </div>
-                        <span className="text-[9px] font-black text-indigo-300 uppercase tracking-[0.4em]">Conectando con motor visual</span>
+                        <Loader2 className="animate-spin text-indigo-500" size={32} />
+                        <span className="text-[9px] font-black text-indigo-300 uppercase tracking-[0.4em]">Consultando Identidad</span>
                     </div>
                 )}
             </div>
@@ -188,18 +165,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     <div className="space-y-12 max-w-full overflow-hidden">
       <div className="text-center md:text-left space-y-2">
         <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tighter leading-none">Ajustes.</h2>
-        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Personalización del Sistema</p>
+        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Personalización</p>
       </div>
 
       <div className="flex bg-slate-100 p-1.5 rounded-[1.5rem] shadow-inner border border-slate-200/50 overflow-x-auto scrollbar-hide">
         <button className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all whitespace-nowrap ${activeTab === 'ACCOUNTS' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => setActiveTab('ACCOUNTS')}><Wallet size={18} /> Cuentas</button>
         <button className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all whitespace-nowrap ${activeTab === 'FAMILIES' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => setActiveTab('FAMILIES')}><Layers size={18} /> Familias</button>
-        <button className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all whitespace-nowrap ${activeTab === 'CATEGORIES' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => setActiveTab('CATEGORIES')}><Tag size={18} /> Categorías</button>
+        <button className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all whitespace-nowrap ${activeTab === 'CATEGORIES' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => setActiveTab('CATEGORIES')}><Tag size={18} /> Categorías y Familias</button>
       </div>
 
       <div className="max-w-3xl mx-auto">
         {activeTab === 'ACCOUNTS' && (
-            <div className="grid grid-cols-1 md:grid-cols-1 gap-10 animate-in fade-in duration-500">
+            <div className="grid grid-cols-1 gap-10 animate-in fade-in duration-500">
                 <div className="bg-white p-8 sm:p-12 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
                         <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl shadow-indigo-100"><Wallet size={24}/></div>
@@ -208,7 +185,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     <div className="space-y-6">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Sparkles size={12} className="text-indigo-400" /> Marca o Entidad
+                                <Sparkles size={12} className="text-indigo-400" /> Entidad o Nombre
                             </label>
                             <input type="text" placeholder="Ej: Santander, Efectivo, N26..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={accName} onChange={e => { setAccName(e.target.value); triggerWebSearch(e.target.value); }} />
                         </div>
@@ -228,16 +205,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 </div>
                 
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Cuentas Registradas</h4>
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Cuentas</h4>
                     <div className="space-y-3">
                         {data.accounts.map(acc => (
-                            <div key={acc.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl group transition-all">
+                            <div key={acc.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl transition-all">
                                 <div className="flex items-center gap-4">
                                     <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden border border-slate-100 p-2 shadow-sm shrink-0">
                                       {(acc.icon || '🏦').startsWith('data:image') || (acc.icon || '🏦').startsWith('http') ? <img src={acc.icon} className="w-full h-full object-contain" alt={acc.name} /> : <span className="text-2xl">{acc.icon || '🏦'}</span>}
                                     </div>
-                                    <div className="truncate">
-                                        <span className="font-black text-slate-900 block text-[11px] uppercase truncate">{acc.name}</span>
+                                    <div>
+                                        <span className="font-black text-slate-900 block text-[11px] uppercase">{acc.name}</span>
                                         <span className="text-[10px] font-bold text-indigo-500">{acc.initialBalance.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
                                     </div>
                                 </div>
@@ -262,7 +239,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     <div className="space-y-6">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Sparkles size={12} className="text-indigo-400" /> Nombre del Grupo
+                                <Sparkles size={12} className="text-indigo-400" /> Grupo Principal
                             </label>
                             <input type="text" placeholder="Ej: Alimentación, Ocio, Viajes, Seguros..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900 shadow-sm" value={famName} onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} />
                         </div>
@@ -280,7 +257,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 </div>
 
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Familias Existentes</h4>
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Lista de Familias</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {data.families.map(f => (
                             <div key={f.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-transparent hover:border-indigo-100 transition-all">
@@ -288,7 +265,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                     <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center overflow-hidden border border-slate-100 p-1.5 shadow-sm">
                                         {(f.icon || '📂').startsWith('data:image') || (f.icon || '📂').startsWith('http') ? <img src={f.icon} className="w-full h-full object-contain" alt={f.name} /> : <span className="text-xl">{f.icon || '📂'}</span>}
                                     </div>
-                                    <span className="font-black text-slate-900 text-[10px] uppercase truncate">{f.name}</span>
+                                    <span className="font-black text-slate-900 text-[10px] uppercase">{f.name}</span>
                                 </div>
                                 <button onClick={() => onUpdateData({ families: data.families.filter(fam => fam.id !== f.id) })} className="text-slate-300 hover:text-rose-500 p-2"><Trash2 size={14} /></button>
                             </div>
@@ -332,7 +309,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 </div>
 
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Categorías por Familia</h4>
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6">Categorías Activas</h4>
                     <div className="space-y-8">
                         {data.families.map(fam => {
                             const famCats = data.categories.filter(c => c.familyId === fam.id);

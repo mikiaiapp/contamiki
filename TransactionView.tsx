@@ -49,19 +49,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         const results = await searchInternetLogos(text);
         setWebLogos(results);
         setIsSearchingWeb(false);
-    }, 600);
+    }, 800);
   };
 
-  const handleSelectWebLogo = async (url: string) => {
-      try {
-          const response = await fetch(url);
-          const blob = await response.blob();
-          const reader = new FileReader();
-          reader.onloadend = () => setSelectedBrandIcon(reader.result as string);
-          reader.readAsDataURL(blob);
-      } catch (e) { 
-          setSelectedBrandIcon(url); 
-      }
+  const handleSelectWebLogo = (url: string) => {
+      // Guardar URL directa para evitar fallos CORS
+      setSelectedBrandIcon(url);
       setWebLogos([]);
   };
 
@@ -183,7 +176,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                                 className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500 pr-14" 
                                 value={description} 
                                 onChange={e => { setDescription(e.target.value); triggerWebSearch(e.target.value); }} 
-                                placeholder="Ej. Netflix, Amazon, Mercadona..." 
+                                placeholder="Ej. Netflix, Ocio, Viajes..." 
                             />
                             <div className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center">
                                 {isSearchingWeb ? <Loader2 size={16} className="animate-spin text-indigo-500"/> : selectedBrandIcon && renderIcon(selectedBrandIcon, "w-6 h-6")}
@@ -192,11 +185,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         
                         {(webLogos.length > 0 || isSearchingWeb) && (
                             <div className="bg-slate-50 p-3 rounded-2xl border-2 border-slate-100 mt-2">
-                                <p className="text-[7px] font-black text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-1"><Sparkles size={10}/> Sugerencias de marca</p>
+                                <p className="text-[7px] font-black text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-1"><Sparkles size={10}/> Sugerencias</p>
                                 <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                                     {webLogos.map((logo, idx) => (
                                         <button key={idx} onClick={() => handleSelectWebLogo(logo.url)} className="flex-shrink-0 w-12 h-12 bg-white rounded-xl border border-transparent hover:border-indigo-300 p-2 shadow-sm transition-all flex items-center justify-center overflow-hidden">
-                                            <img src={logo.url} className="w-full h-full object-contain" />
+                                            <img src={logo.url} className="w-full h-full object-contain" onError={(e) => (e.target as any).parentElement.style.display='none'} />
                                         </button>
                                     ))}
                                 </div>
