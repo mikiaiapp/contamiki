@@ -10,7 +10,6 @@ export interface Account {
 }
 
 // AHORA Family es el PADRE (Agrupador Principal)
-// Restricted to EXPENSE or INCOME as transfers are account-to-account only.
 export interface Family {
   id: string;
   name: string;
@@ -31,11 +30,12 @@ export interface Transaction {
   date: string; // ISO String
   amount: number;
   description: string;
-  accountId: string; // Cuenta origen (o única si no es traspaso)
-  transferAccountId?: string; // Solo para traspasos: Cuenta destino
-  familyId: string; // Agrupador Principal (Vacío en traspasos)
-  categoryId: string; // Detalle específico (Vacío en traspasos)
+  accountId: string; // Cuenta origen
+  transferAccountId?: string; // Solo para traspasos
+  familyId: string; // Agrupador Principal
+  categoryId: string; // Detalle específico
   type: TransactionType;
+  brandIcon?: string; // Logotipo detectado vía IA/Internet
 }
 
 export interface AppState {

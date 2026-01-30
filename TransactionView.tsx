@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { AppState, Transaction, TransactionType } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Loader2, Sparkles } from 'lucide-react';
+import { searchInternetLogos } from './services/iconService';
 
 interface TransactionViewProps {
   data: AppState;
@@ -13,6 +14,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filter, setFilter] = useState('');
   
+  // Form states
   const [type, setType] = useState<TransactionType>('EXPENSE');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -20,6 +22,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [accountId, setAccountId] = useState(data.accounts[0]?.id || '');
   const [selectedCategoryId, setSelectedCategoryId] = useState(''); 
   const [transferDestId, setTransferDestId] = useState('');
+  const [selectedBrandIcon, setSelectedBrandIcon] = useState<string | undefined>(undefined);
+
+  // Web search states
+  const [webLogos, setWebLogos] = useState<{url: string, source: string}[]>([]);
+  const [isSearchingWeb, setIsSearchingWeb] = useState(false);
+  const searchTimeoutRef = useRef<number | null>(null);
 
   const filteredTransactions = data.transactions
     .filter(t => t.description.toLowerCase().includes(filter.toLowerCase()) || 
@@ -30,14 +38,39 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const resetForm = () => {
       setAmount(''); setDescription(''); setDate(new Date().toISOString().split('T')[0]);
       setSelectedCategoryId(''); setTransferDestId('');
+      setSelectedBrandIcon(undefined); setWebLogos([]);
+  };
+
+  const triggerWebSearch = (text: string) => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (!text || text.length < 3) { setWebLogos([]); return; }
+    searchTimeoutRef.current = window.setTimeout(async () => {
+        setIsSearchingWeb(true);
+        const results = await searchInternetLogos(text);
+        setWebLogos(results);
+        setIsSearchingWeb(false);
+    }, 600);
+  };
+
+  const handleSelectWebLogo = async (url: string) => {
+      try {
+          const response = await fetch(url);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          reader.onloadend = () => setSelectedBrandIcon(reader.result as string);
+          reader.readAsDataURL(blob);
+      } catch (e) { 
+          setSelectedBrandIcon(url); 
+      }
+      setWebLogos([]);
   };
 
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
-      if (!iconStr) return null;
-      if (iconStr.startsWith('data:image') || iconStr.startsWith('http')) {
-          return <img src={iconStr} alt="icon" className={`${className} object-contain`} />;
+      const safeIcon = iconStr || '📂';
+      if (safeIcon.startsWith('data:image') || safeIcon.startsWith('http')) {
+          return <img src={safeIcon} alt="icon" className={`${className} object-contain`} />;
       }
-      return <span className={`text-2xl`}>{iconStr}</span>;
+      return <span className={`text-2xl`}>{safeIcon}</span>;
   }
 
   return (
@@ -68,18 +101,20 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         />
       </div>
 
-      {/* Lista Responsiva de Transacciones */}
       <div className="grid grid-cols-1 gap-4">
         {filteredTransactions.map(t => {
             const family = data.families.find(f => f.id === t.familyId);
             const account = data.accounts.find(a => a.id === t.accountId);
             const isTransfer = t.type === 'TRANSFER';
             const destAccount = isTransfer ? data.accounts.find(a => a.id === t.transferAccountId) : null;
+            
+            // Priorizar brandIcon sobre el icono de familia
+            const displayIcon = t.brandIcon || family?.icon || (isTransfer ? '' : '📂');
 
             return (
               <div key={t.id} className="bg-white p-5 rounded-[1.75rem] shadow-sm border border-slate-100 flex flex-col sm:flex-row items-center gap-5 hover:shadow-md transition-all">
-                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shrink-0">
-                   {isTransfer ? <ArrowRightLeft className="text-indigo-400" size={20} /> : renderIcon(family?.icon || '', "w-6 h-6")}
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shrink-0 overflow-hidden">
+                   {isTransfer ? <ArrowRightLeft className="text-indigo-400" size={20} /> : renderIcon(displayIcon, "w-8 h-8")}
                 </div>
                 
                 <div className="flex-1 text-center sm:text-left min-w-0">
@@ -111,11 +146,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         )}
       </div>
 
-      {/* Modal Responsivo */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm flex items-center justify-center z-[100] p-4 sm:p-6 animate-in fade-in duration-300">
             <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg p-6 sm:p-10 relative max-h-[95vh] overflow-y-auto custom-scrollbar">
-                <button onClick={() => setIsModalOpen(false)} className="absolute top-5 right-5 p-2.5 bg-slate-50 text-slate-400 rounded-full hover:bg-rose-50 hover:text-rose-600 transition-all"><X size={18}/></button>
+                <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="absolute top-5 right-5 p-2.5 bg-slate-50 text-slate-400 rounded-full hover:bg-rose-50 hover:text-rose-600 transition-all"><X size={18}/></button>
                 
                 <div className="mb-6">
                     <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Nuevo Registro.</h3>
@@ -141,9 +175,33 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Descripción</label>
-                        <input type="text" className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" value={description} onChange={e => setDescription(e.target.value)} placeholder="Ej. Compra semanal" />
+                    <div className="space-y-2">
+                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5"><Sparkles size={10} className="text-indigo-400"/> Descripción e Icono</label>
+                        <div className="relative">
+                            <input 
+                                type="text" 
+                                className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500 pr-14" 
+                                value={description} 
+                                onChange={e => { setDescription(e.target.value); triggerWebSearch(e.target.value); }} 
+                                placeholder="Ej. Netflix, Amazon, Mercadona..." 
+                            />
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center">
+                                {isSearchingWeb ? <Loader2 size={16} className="animate-spin text-indigo-500"/> : selectedBrandIcon && renderIcon(selectedBrandIcon, "w-6 h-6")}
+                            </div>
+                        </div>
+                        
+                        {(webLogos.length > 0 || isSearchingWeb) && (
+                            <div className="bg-slate-50 p-3 rounded-2xl border-2 border-slate-100 mt-2">
+                                <p className="text-[7px] font-black text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-1"><Sparkles size={10}/> Sugerencias de marca</p>
+                                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                                    {webLogos.map((logo, idx) => (
+                                        <button key={idx} onClick={() => handleSelectWebLogo(logo.url)} className="flex-shrink-0 w-12 h-12 bg-white rounded-xl border border-transparent hover:border-indigo-300 p-2 shadow-sm transition-all flex items-center justify-center overflow-hidden">
+                                            <img src={logo.url} className="w-full h-full object-contain" />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="space-y-1.5">
@@ -177,7 +235,15 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         type="button"
                         onClick={() => {
                             if (!amount || !description) return;
-                            const newTx: any = { id: crypto.randomUUID(), date, amount: parseFloat(amount), description, accountId, type };
+                            const newTx: any = { 
+                                id: Math.random().toString(36).substring(7), 
+                                date, 
+                                amount: parseFloat(amount), 
+                                description, 
+                                accountId, 
+                                type,
+                                brandIcon: selectedBrandIcon 
+                            };
                             if (type === 'TRANSFER') {
                                 if (!transferDestId || accountId === transferDestId) return;
                                 newTx.transferAccountId = transferDestId;
