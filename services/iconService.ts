@@ -27,16 +27,16 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
         if (apiKey) {
             const ai = new GoogleGenAI({ apiKey });
             
-            // Prompt especializado en distinguir Marca vs Concepto
+            // Prompt especializado en distinguir Marca vs Concepto con múltiples sinónimos
             const prompt = `Analiza el término: "${query}".
             TAREA:
-            1. Si es una marca comercial: lista sus 2 dominios más probables (ej: "amazon.es").
-            2. Si es un concepto genérico: busca los 5 términos en inglés más precisos para buscar un ICONO o PICTOGRAMA (ej: "supermercado" -> "grocery-store, shopping-basket, supermarket-cart").
+            1. Si es una marca comercial conocida: lista sus 2 dominios más probables (ej: "amazon.es").
+            2. Si es un concepto genérico: busca los 6 términos más precisos en inglés para buscar un ICONO (sinónimos cortos). Ej: "ahorro" -> "savings, pig-bank, wallet, money, coin, safe".
             
-            ADICIONALMENTE: Realiza una búsqueda en Google de "icono flat de ${query}" y devuelve las URLs de imágenes que encuentres.
+            ADICIONALMENTE: Realiza una búsqueda en Google de "transparent png icon for ${query}" y devuelve las URLs de imágenes.
             
             FORMATO DE RESPUESTA:
-            DOMINIOS: dom1.com, dom2.es | CONCEPTOS: term1, term2, term3`;
+            DOMINIOS: dom1.com, dom2.es | CONCEPTOS: term1, term2, term3, term4, term5, term6`;
 
             const response = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
@@ -48,21 +48,21 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
 
             const rawText = response.text || "";
             
-            // Extraer URLs reales encontradas en la búsqueda (Grounding)
+            // Extraer URLs reales de la red (Grounding)
             const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
             if (groundingChunks) {
                 groundingChunks.forEach((chunk: any) => {
                     if (chunk.web?.uri) {
-                        // Solo añadimos si parece una imagen o un sitio de iconos
                         const uri = chunk.web.uri;
-                        if (uri.match(/\.(png|jpg|jpeg|svg|webp)$/i) || uri.includes('icon') || uri.includes('logo') || uri.includes('vector')) {
+                        // Filtro agresivo para quedarnos con imágenes o sitios de recursos
+                        if (uri.match(/\.(png|jpg|jpeg|svg|webp)$/i) || uri.includes('icon') || uri.includes('logo') || uri.includes('vector') || uri.includes('cdn')) {
                             searchFoundUrls.push(uri);
                         }
                     }
                 });
             }
 
-            // Parsear dominios y conceptos del texto generado
+            // Parsear dominios y conceptos
             const parts = rawText.toLowerCase().split('|');
             parts.forEach(p => {
                 if (p.includes('dominios:')) {
@@ -81,44 +81,49 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
 
     const results: {url: string, source: string}[] = [];
 
-    // --- BLOQUE A: ICONOS CONCEPTUALES (Prioridad para términos genéricos) ---
+    // --- BLOQUE A: ICONOS CONCEPTUALES (Enriquecido con Iconify) ---
     const uniqueKeywords = Array.from(new Set(iconKeywords));
     if (uniqueKeywords.length > 0 || query.includes(' ')) {
         uniqueKeywords.forEach(k => {
             const term = k.replace(/\s+/g, '-');
             
-            // 1. DiceBear (Generador de iconos vectoriales - Muy fiable para conceptos)
-            results.push({ url: `https://api.dicebear.com/9.x/icons/svg?seed=${term}`, source: 'Icono Vectorial' });
+            // 1. Iconify API (Iconos vectoriales profesionales)
+            results.push({ url: `https://api.iconify.design/solar:${term}-bold-duotone.svg`, source: 'Solar Duotone' });
+            results.push({ url: `https://api.iconify.design/lucide:${term}.svg`, source: 'Lucide' });
+            results.push({ url: `https://api.iconify.design/ph:${term}-fill.svg`, source: 'Phosphor' });
+            results.push({ url: `https://api.iconify.design/tabler:${term}.svg`, source: 'Tabler' });
+            results.push({ url: `https://api.iconify.design/material-symbols:${term}.svg`, source: 'Material' });
             
-            // 2. Icons8 Variantes (Conceptos)
-            results.push({ url: `https://img.icons8.com/fluency/256/${term}.png`, source: 'Icono Fluency' });
-            results.push({ url: `https://img.icons8.com/color/256/${term}.png`, source: 'Icono Color' });
-            results.push({ url: `https://img.icons8.com/clouds/256/${term}.png`, source: 'Icono Clouds' });
+            // 2. DiceBear (Procedural)
+            results.push({ url: `https://api.dicebear.com/9.x/icons/svg?seed=${term}`, source: 'Vector Art' });
+            
+            // 3. Icons8 (Coloridos)
+            results.push({ url: `https://img.icons8.com/fluency/256/${term}.png`, source: 'Fluency' });
+            results.push({ url: `https://img.icons8.com/color/256/${term}.png`, source: 'Color' });
             results.push({ url: `https://img.icons8.com/stickers/256/${term}.png`, source: 'Sticker' });
-            results.push({ url: `https://img.icons8.com/cute-clipart/256/${term}.png`, source: 'Clipart' });
         });
     }
 
-    // --- BLOQUE B: LOGOTIPOS CORPORATIVOS ---
+    // --- BLOQUE B: LOGOTIPOS CORPORATIVOS (Se mantiene intacto) ---
     const uniqueDomains = Array.from(new Set(domains));
     uniqueDomains.forEach(domain => {
-        results.push({ url: `https://logo.clearbit.com/${domain}?size=256`, source: 'Logo Empresa' });
-        results.push({ url: `https://unavatar.io/${domain}?fallback=false`, source: 'Social Logo' });
+        results.push({ url: `https://logo.clearbit.com/${domain}?size=256`, source: 'Logo Oficial' });
+        results.push({ url: `https://unavatar.io/${domain}?fallback=false`, source: 'Social' });
         results.push({ url: `https://www.google.com/s2/favicons?domain=${domain}&sz=128`, source: 'Favicon' });
     });
 
-    // --- BLOQUE C: IMÁGENES ENCONTRADAS WEB (Google Grounding) ---
+    // --- BLOQUE C: IMÁGENES WEB (Google Search Grounding) ---
     searchFoundUrls.forEach(url => {
-        results.push({ url, source: 'Imagen Web' });
+        results.push({ url, source: 'Web Image' });
     });
 
-    // --- BLOQUE D: FALLBACK (Iniciales) ---
+    // --- BLOQUE D: FALLBACK ---
     results.push({
         url: `https://ui-avatars.com/api/?name=${encodeURIComponent(query)}&background=4f46e5&color=fff&size=512&bold=true`,
         source: 'Iniciales'
     });
 
-    // Limpieza de duplicados y filtrado de nulos
+    // Consolidación final
     const seenUrls = new Set<string>();
     const finalResults = results.filter(item => {
         if (!item.url || seenUrls.has(item.url)) return false;
@@ -126,5 +131,5 @@ export const searchInternetLogos = async (text: string): Promise<{url: string, s
         return true;
     });
 
-    return finalResults.slice(0, 36);
+    return finalResults.slice(0, 48); // Aumentamos el límite para dar más opciones
 };
