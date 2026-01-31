@@ -1,8 +1,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
+import { mapBankTransactions } from '../services/geminiService';
 import * as XLSX from 'xlsx';
 
 interface SettingsViewProps {
@@ -27,6 +28,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [hasSearched, setHasSearched] = useState(false);
   const searchTimeoutRef = useRef<number | null>(null);
 
+  // Estados de importación inteligente
+  const [isImporting, setIsImporting] = useState(false);
+  const [importStep, setImportStep] = useState<'IDLE' | 'PREVIEW' | 'MAPPING' | 'SUCCESS'>('IDLE');
+  const [importAccount, setImportAccount] = useState(data.accounts[0]?.id || '');
+  const [mappedTransactions, setMappedTransactions] = useState<any[]>([]);
+  const importFileRef = useRef<HTMLInputElement>(null);
+
+  // Importación rápida por texto/CSV
+  const [showQuickImport, setShowQuickImport] = useState(false);
+  const [pasteData, setPasteData] = useState('');
+
   // Estados de formulario Cuentas
   const [accId, setAccId] = useState<string | null>(null);
   const [accName, setAccName] = useState('');
@@ -48,7 +60,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [catIcon, setCatIcon] = useState('🏷️');
   const catFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Estados de formulario Recurrentes mejorados
+  // Estados de formulario Recurrentes
   const [recId, setRecId] = useState<string | null>(null);
   const [recDesc, setRecDesc] = useState('');
   const [recAmount, setRecAmount] = useState('');
@@ -80,6 +92,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       setRecId(null); setRecDesc(''); setRecAmount(''); setRecFreq('MONTHLY'); setRecInterval('1'); setRecStart(new Date().toISOString().split('T')[0]); setRecAcc(data.accounts[0]?.id || ''); setRecCounterpartId(''); setRecCat('');
       setFavId(null); setFavName(''); setFavAmount(''); setFavAcc(data.accounts[0]?.id || ''); setFavCounterpartId(''); setFavCat('');
       setWebLogos([]); setHasSearched(false);
+      setMappedTransactions([]); setImportStep('IDLE'); setShowQuickImport(false); setPasteData('');
   };
 
   const triggerWebSearch = (text: string) => {
@@ -111,14 +124,107 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     return <span className="text-2xl">{safeIcon}</span>;
   }
 
+  const handleQuickImport = () => {
+      if (!pasteData.trim()) return;
+      const lines = pasteData.trim().split('\n');
+      
+      if (activeTab === 'FAMILIES') {
+          const newFamilies: Family[] = lines.map(line => {
+              const [name, icon, type] = line.split(',').map(s => s.trim());
+              return {
+                  id: generateId(),
+                  name: name || 'Nueva Familia',
+                  icon: icon || '📂',
+                  type: (type === 'INCOME' ? 'INCOME' : 'EXPENSE') as 'INCOME' | 'EXPENSE'
+              };
+          });
+          onUpdateData({ families: [...data.families, ...newFamilies] });
+      } else if (activeTab === 'CATEGORIES') {
+          const newCategories: Category[] = lines.map(line => {
+              const [name, icon, familyName] = line.split(',').map(s => s.trim());
+              const family = data.families.find(f => f.name.toLowerCase() === familyName?.toLowerCase()) || data.families[0];
+              return {
+                  id: generateId(),
+                  name: name || 'Nueva Categoría',
+                  icon: icon || '🏷️',
+                  familyId: family?.id || ''
+              };
+          });
+          onUpdateData({ categories: [...data.categories, ...newCategories] });
+      } else if (activeTab === 'ACCOUNTS') {
+          const newAccounts: Account[] = lines.map(line => {
+              const [name, balance, icon] = line.split(',').map(s => s.trim());
+              return {
+                  id: generateId(),
+                  name: name || 'Nueva Cuenta',
+                  initialBalance: parseFloat(balance) || 0,
+                  currency: 'EUR',
+                  icon: icon || '🏦'
+              };
+          });
+          onUpdateData({ accounts: [...data.accounts, ...newAccounts] });
+      }
+      resetForm();
+  };
+
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setIsImporting(true);
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+          try {
+              const bstr = evt.target?.result;
+              const wb = XLSX.read(bstr, { type: 'binary' });
+              const wsname = wb.SheetNames[0];
+              const ws = wb.Sheets[wsname];
+              const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+              
+              const sample = rawData.slice(0, 50);
+              const mapped = await mapBankTransactions(sample, data.categories, data.families);
+              
+              setMappedTransactions(mapped);
+              setImportStep('PREVIEW');
+          } catch (err) {
+              console.error("Error parsing file", err);
+              alert("Error al leer el archivo.");
+          } finally {
+              setIsImporting(false);
+          }
+      };
+      reader.readAsBinaryString(file);
+  };
+
+  const confirmImport = () => {
+      const newTransactions: Transaction[] = mappedTransactions.map(item => ({
+          id: generateId(),
+          date: item.date,
+          amount: item.amount,
+          description: item.description,
+          accountId: importAccount,
+          type: item.type as TransactionType,
+          categoryId: item.categoryId,
+          familyId: item.familyId
+      }));
+
+      onUpdateData({ transactions: [...data.transactions, ...newTransactions] });
+      setImportStep('SUCCESS');
+      setTimeout(() => resetForm(), 3000);
+  };
+
+  // Fix: Added exportBackup function to handle exporting the app state as a JSON file.
   const exportBackup = () => {
-    const dataStr = JSON.stringify(data, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const exportFileDefaultName = `contamiki_backup_${new Date().toISOString().split('T')[0]}.json`;
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
+      const dataStr = JSON.stringify(data, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `contamiki_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
   };
 
   const renderIconInput = (icon: string, setIcon: (s: string) => void, currentName: string, fileRef: React.RefObject<HTMLInputElement>) => {
@@ -129,7 +235,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           <div className="flex flex-col sm:flex-row gap-4 items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <div className="relative group w-20 h-20 flex-shrink-0 flex items-center justify-center border-2 border-white rounded-2xl bg-white overflow-hidden shadow-sm cursor-pointer" onClick={() => fileRef.current?.click()}>
                     {isImage ? <img src={icon} className="w-full h-full object-contain p-2" alt="Icono" referrerPolicy="no-referrer" /> : <span className="text-3xl">{icon}</span>}
-                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><ImageIcon className="text-white" size={20} /></div>
+                    <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><ImageIcon className="text-white" size={20} /></div>
                 </div>
                 <div className="flex-1 text-center sm:text-left space-y-3">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Identidad Visual</p>
@@ -170,6 +276,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     );
   };
 
+  const renderQuickImport = () => (
+    <div className="bg-white p-8 rounded-[2.5rem] border-2 border-dashed border-indigo-100 shadow-sm space-y-6">
+        <div className="flex items-center justify-between">
+            <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><ClipboardPaste size={16} /> Importación Rápida</h4>
+            <button onClick={() => setShowQuickImport(false)} className="text-slate-300 hover:text-rose-500"><XCircle size={18}/></button>
+        </div>
+        <p className="text-[9px] font-bold text-slate-400 uppercase leading-relaxed">
+            Pega aquí tus datos. Formato: <span className="text-indigo-600">Nombre, Icono/Emoji, {activeTab === 'FAMILIES' ? 'Tipo (INCOME/EXPENSE)' : activeTab === 'CATEGORIES' ? 'Nombre Familia' : 'Saldo Inicial'}</span>. Una fila por elemento.
+        </p>
+        <textarea 
+            className="w-full h-32 p-4 bg-slate-50 border border-slate-100 rounded-xl font-mono text-[11px] outline-none focus:border-indigo-500 transition-all custom-scrollbar" 
+            placeholder="Ej: Gasolina, ⛽, Vehículo"
+            value={pasteData}
+            onChange={e => setPasteData(e.target.value)}
+        />
+        <div className="flex gap-2">
+            <button onClick={handleQuickImport} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-slate-950 transition-all">Importar Bloque</button>
+            <button onClick={() => resetForm()} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase">Cancelar</button>
+        </div>
+    </div>
+  );
+
   return (
     <div className="space-y-12 max-w-full overflow-hidden">
       <div className="text-center md:text-left space-y-2">
@@ -196,28 +324,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         {activeTab === 'ACCOUNTS' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
-                        <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Wallet size={24}/></div>
-                        {accId ? 'Editar Cuenta' : 'Nueva Cuenta'}
-                    </h3>
-                    <div className="space-y-6">
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre o Banco</label>
-                            <input type="text" placeholder="Ej: Caixabank, Santander..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900" value={accName} onChange={e => { setAccName(e.target.value); triggerWebSearch(e.target.value); }} />
-                        </div>
-                        {renderIconInput(accIcon, setAccIcon, accName, accFileInputRef)}
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Saldo Inicial (€)</label>
-                            <input type="number" placeholder="0.00" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
-                        </div>
-                        <button onClick={() => {
-                            if(!accName) return;
-                            const balanceVal = parseFloat(accBalance) || 0;
-                            if (accId) onUpdateData({ accounts: data.accounts.map(a => a.id === accId ? { ...a, name: accName, initialBalance: balanceVal, icon: accIcon } : a) });
-                            else onUpdateData({ accounts: [...data.accounts, { id: generateId(), name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon }] });
-                            resetForm();
-                        }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">{accId ? 'Guardar Cambios' : 'Crear Cuenta'}</button>
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
+                            <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Wallet size={24}/></div>
+                            {accId ? 'Editar Cuenta' : 'Nueva Cuenta'}
+                        </h3>
+                        {!showQuickImport && (
+                            <button onClick={() => setShowQuickImport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+                                <Plus size={14}/> Importar Masivo
+                            </button>
+                        )}
                     </div>
+                    {showQuickImport ? renderQuickImport() : (
+                        <div className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre o Banco</label>
+                                <input type="text" placeholder="Ej: Caixabank, Santander..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900" value={accName} onChange={e => { setAccName(e.target.value); triggerWebSearch(e.target.value); }} />
+                            </div>
+                            {renderIconInput(accIcon, setAccIcon, accName, accFileInputRef)}
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Saldo Inicial (€)</label>
+                                <input type="number" placeholder="0.00" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
+                            </div>
+                            <button onClick={() => {
+                                if(!accName) return;
+                                const balanceVal = parseFloat(accBalance) || 0;
+                                if (accId) onUpdateData({ accounts: data.accounts.map(a => a.id === accId ? { ...a, name: accName, initialBalance: balanceVal, icon: accIcon } : a) });
+                                else onUpdateData({ accounts: [...data.accounts, { id: generateId(), name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon }] });
+                                resetForm();
+                            }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">{accId ? 'Guardar Cambios' : 'Crear Cuenta'}</button>
+                        </div>
+                    )}
                 </div>
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
                     <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 px-4">Listado de Cuentas</h4>
@@ -225,7 +362,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                         {data.accounts.map(acc => (
                             <div key={acc.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-3xl border border-transparent hover:border-slate-200 transition-all">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center overflow-hidden border border-slate-100 p-2 shadow-sm shrink-0">
+                                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">
                                       {renderIcon(acc.icon || '🏦', "w-full h-full")}
                                     </div>
                                     <div>
@@ -239,6 +376,137 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                 </div>
                             </div>
                         ))}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'FAMILIES' && (
+            <div className="grid grid-cols-1 gap-10">
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
+                            <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Layers size={24}/></div>
+                            {famId ? 'Editar Familia' : 'Nueva Familia'}
+                        </h3>
+                        {!showQuickImport && (
+                            <button onClick={() => setShowQuickImport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+                                <Plus size={14}/> Importar Masivo
+                            </button>
+                        )}
+                    </div>
+                    {showQuickImport ? renderQuickImport() : (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre</label>
+                                    <input type="text" placeholder="Ej: Vivienda, Ocio..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={famName} onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo</label>
+                                    <div className="flex bg-slate-50 p-1 rounded-2xl border-2 border-slate-100 h-[64px]">
+                                        <button onClick={() => setFamType('EXPENSE')} className={`flex-1 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${famType === 'EXPENSE' ? 'bg-white text-rose-500 shadow-md' : 'text-slate-400'}`}>Gasto</button>
+                                        <button onClick={() => setFamType('INCOME')} className={`flex-1 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${famType === 'INCOME' ? 'bg-white text-emerald-500 shadow-md' : 'text-slate-400'}`}>Ingreso</button>
+                                    </div>
+                                </div>
+                            </div>
+                            {renderIconInput(famIcon, setFamIcon, famName, famFileInputRef)}
+                            <button onClick={() => {
+                                if(!famName) return;
+                                if (famId) onUpdateData({ families: data.families.map(f => f.id === famId ? { ...f, name: famName, type: famType, icon: famIcon } : f) });
+                                else onUpdateData({ families: [...data.families, { id: generateId(), name: famName, type: famType, icon: famIcon }] });
+                                resetForm();
+                            }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">Guardar Familia</button>
+                        </div>
+                    )}
+                </div>
+                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 px-4">Mantenimiento de Familias</h4>
+                    <div className="space-y-3">
+                        {data.families.map(fam => (
+                            <div key={fam.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-3xl border border-transparent hover:border-slate-200 transition-all">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">
+                                      {renderIcon(fam.icon || '📂', "w-full h-full")}
+                                    </div>
+                                    <div>
+                                        <span className="font-black text-slate-900 block text-xs uppercase">{fam.name}</span>
+                                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${fam.type === 'INCOME' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>{fam.type === 'INCOME' ? 'Ingreso' : 'Gasto'}</span>
+                                    </div>
+                                </div>
+                                <div className="flex gap-1">
+                                    <button onClick={() => { setFamId(fam.id); setFamName(fam.name); setFamType(fam.type); setFamIcon(fam.icon || '📂'); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button>
+                                    <button onClick={() => onUpdateData({families: data.families.filter(f=>f.id!==fam.id)})} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'CATEGORIES' && (
+            <div className="grid grid-cols-1 gap-10">
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
+                            <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Tag size={24}/></div>
+                            {catId ? 'Editar Categoría' : 'Nueva Categoría'}
+                        </h3>
+                        {!showQuickImport && (
+                            <button onClick={() => setShowQuickImport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+                                <Plus size={14}/> Importar Masivo
+                            </button>
+                        )}
+                    </div>
+                    {showQuickImport ? renderQuickImport() : (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre</label>
+                                    <input type="text" placeholder="Ej: Supermercado, Cine..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={catName} onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Familia Superior</label>
+                                    <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={catParent} onChange={e => setCatParent(e.target.value)}>
+                                        <option value="">Seleccionar...</option>
+                                        {data.families.map(f => <option key={f.id} value={f.id}>{f.icon} {f.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            {renderIconInput(catIcon, setCatIcon, catName, catFileInputRef)}
+                            <button onClick={() => {
+                                if(!catName || !catParent) return;
+                                if (catId) onUpdateData({ categories: data.categories.map(c => c.id === catId ? { ...c, name: catName, familyId: catParent, icon: catIcon } : c) });
+                                else onUpdateData({ categories: [...data.categories, { id: generateId(), name: catName, familyId: catParent, icon: catIcon }] });
+                                resetForm();
+                            }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">Guardar Categoría</button>
+                        </div>
+                    )}
+                </div>
+                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 px-4">Mantenimiento de Categorías</h4>
+                    <div className="space-y-3">
+                        {data.categories.map(cat => {
+                            const family = data.families.find(f => f.id === cat.familyId);
+                            return (
+                                <div key={cat.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-3xl border border-transparent hover:border-slate-200 transition-all">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">
+                                          {renderIcon(cat.icon || '🏷️', "w-full h-full")}
+                                        </div>
+                                        <div>
+                                            <span className="font-black text-slate-900 block text-xs uppercase">{cat.name}</span>
+                                            <span className="text-[8px] font-bold text-slate-400 uppercase">{family?.name || 'Sin Familia'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-1">
+                                        <button onClick={() => { setCatId(cat.id); setCatName(cat.name); setCatParent(cat.familyId); setCatIcon(cat.icon || '🏷️'); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button>
+                                        <button onClick={() => onUpdateData({categories: data.categories.filter(c=>c.id!==cat.id)})} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
@@ -438,11 +706,93 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         )}
 
         {activeTab === 'TOOLS' && (
-            <div className="space-y-10">
+            <div className="space-y-8">
+                {/* SMART IMPORT BANCARIO */}
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-50 pb-8">
+                        <div className="space-y-2">
+                            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3"><ShieldCheck className="text-indigo-600" size={28}/> Smart Bank Import</h3>
+                            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">IA impulsada por Gemini para volcado masivo</p>
+                        </div>
+                        <button onClick={() => importFileRef.current?.click()} className="flex items-center justify-center gap-3 px-8 py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-indigo-200">
+                           <FileSpreadsheet size={20} /> Seleccionar Extracto
+                        </button>
+                        <input type="file" ref={importFileRef} className="hidden" accept=".csv, .xlsx, .xls" onChange={handleFileImport} />
+                    </div>
+
+                    {isImporting ? (
+                        <div className="py-20 flex flex-col items-center justify-center gap-6 animate-pulse">
+                            <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                            <div className="text-center space-y-2">
+                                <p className="text-[10px] font-black text-slate-900 uppercase tracking-[0.4em]">Gemini está analizando tu extracto...</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Identificando columnas y categorizando movimientos</p>
+                            </div>
+                        </div>
+                    ) : importStep === 'IDLE' ? (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {[
+                                { icon: <Upload className="text-indigo-500" />, title: "Sube tu archivo", desc: "Descarga el Excel/CSV de cualquier banco y arrástralo aquí." },
+                                { icon: <Sparkles className="text-indigo-500" />, title: "IA de Mapeo", desc: "Nuestra IA identifica fechas, importes y sugiere categorías automáticamente." },
+                                { icon: <CheckCircle2 className="text-indigo-500" />, title: "Confirma y vuelca", desc: "Revisa los movimientos sugeridos y añádelos a tu cuenta en un clic." }
+                            ].map((step, i) => (
+                                <div key={i} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-3">
+                                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm border border-slate-100">{step.icon}</div>
+                                    <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-tight">{step.title}</h4>
+                                    <p className="text-[9px] font-bold text-slate-400 leading-relaxed uppercase">{step.desc}</p>
+                                </div>
+                            ))}
+                        </div>
+                    ) : importStep === 'PREVIEW' ? (
+                        <div className="space-y-8 animate-in fade-in zoom-in-95 duration-500">
+                            <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 flex flex-col md:flex-row items-center justify-between gap-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100"><Info size={24}/></div>
+                                    <div className="space-y-1">
+                                        <h4 className="text-[11px] font-black text-indigo-900 uppercase">Previsualización de Importación</h4>
+                                        <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Hemos identificado {mappedTransactions.length} movimientos potenciales.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4 w-full md:w-auto">
+                                    <select className="flex-1 md:w-48 px-4 py-4 bg-white border border-indigo-200 rounded-xl font-bold text-[10px] uppercase outline-none focus:border-indigo-600 transition-all" value={importAccount} onChange={e => setImportAccount(e.target.value)}>
+                                        {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                    </select>
+                                    <button onClick={confirmImport} className="px-8 py-4 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-100">Vuelcar ahora</button>
+                                </div>
+                            </div>
+                            
+                            <div className="max-h-[400px] overflow-y-auto pr-4 custom-scrollbar space-y-2">
+                                {mappedTransactions.map((tx, idx) => (
+                                    <div key={idx} className="p-4 bg-white rounded-2xl border border-slate-100 flex items-center justify-between gap-4 hover:border-indigo-200 transition-colors">
+                                        <div className="flex items-center gap-4 min-w-0">
+                                            <div className="bg-slate-50 px-3 py-2 rounded-lg text-[9px] font-black text-slate-400 shrink-0">{tx.date}</div>
+                                            <div className="min-w-0">
+                                                <p className="text-[10px] font-black text-slate-800 uppercase truncate">{tx.description}</p>
+                                                <p className="text-[8px] font-bold text-indigo-500 uppercase tracking-tighter">Categoría: {data.categories.find(c => c.id === tx.categoryId)?.name || 'Sin Categoría'}</p>
+                                            </div>
+                                        </div>
+                                        <span className={`text-xs font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'} shrink-0`}>
+                                            {tx.type === 'INCOME' ? '+' : '-'}{tx.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                            <button onClick={resetForm} className="w-full py-4 text-[10px] font-black uppercase text-slate-400 hover:text-rose-500 transition-colors">Cancelar Importación</button>
+                        </div>
+                    ) : (
+                        <div className="py-20 flex flex-col items-center justify-center gap-6 animate-in zoom-in-95 duration-500">
+                             <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-[2rem] flex items-center justify-center shadow-xl shadow-emerald-100"><ShieldCheck size={40}/></div>
+                             <div className="text-center space-y-2">
+                                <h4 className="text-xl font-black text-slate-900 uppercase">¡Importación Exitosa!</h4>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em]">Tus finanzas han sido actualizadas correctamente</p>
+                             </div>
+                        </div>
+                    )}
+                </div>
+
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-10 text-center">
                     <div className="mx-auto bg-indigo-100 text-indigo-600 w-20 h-20 rounded-3xl flex items-center justify-center shadow-xl shadow-indigo-500/10"><Upload size={36} /></div>
-                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Importación & Exportación</h3>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest leading-relaxed">Sincroniza tus datos de forma masiva o realiza respaldos locales.</p>
+                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Exportación de Datos</h3>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest leading-relaxed">Genera copias de seguridad de tus datos para máxima soberanía.</p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
                         <button onClick={exportBackup} className="flex-1 flex items-center justify-center gap-3 p-6 bg-slate-950 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] hover:bg-indigo-600 transition-all shadow-xl active:scale-95"><FileJson size={20} /> Exportar JSON</button>
                         <button onClick={() => window.print()} className="flex-1 flex items-center justify-center gap-3 p-6 bg-white text-slate-900 rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] border-2 border-slate-100 hover:bg-slate-50 transition-all active:scale-95"><Download size={20} /> Informe PDF</button>
