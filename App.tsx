@@ -22,6 +22,7 @@ const App: React.FC = () => {
   });
   const [currentView, setCurrentView] = useState<View>('RESUMEN');
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [pendingFilters, setPendingFilters] = useState<any>(null);
   const saveTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -74,13 +75,9 @@ const App: React.FC = () => {
     setData(prev => ({...prev, transactions: prev.transactions.filter(tx => tx.id !== id)}));
   };
 
-  const handleUpdateRecurrent = (r: RecurrentMovement) => {
-    setData(prev => ({
-        ...prev,
-        recurrents: prev.recurrents?.some(x => x.id === r.id) 
-            ? prev.recurrents.map(x => x.id === r.id ? r : x)
-            : [...(prev.recurrents || []), r]
-    }));
+  const handleNavigateWithFilters = (view: View, filters: any) => {
+    setPendingFilters(filters);
+    setCurrentView(view);
   };
 
   if (!isLoggedIn) {
@@ -103,6 +100,7 @@ const App: React.FC = () => {
             data={data} 
             onAddTransaction={handleAddTransaction}
             onUpdateData={(newData) => setData(prev => ({...prev, ...newData}))}
+            onNavigateToTransactions={(filters) => handleNavigateWithFilters('TRANSACTIONS', filters)}
         />
       )}
       {currentView === 'TRANSACTIONS' && (
@@ -112,6 +110,8 @@ const App: React.FC = () => {
           onDeleteTransaction={handleDeleteTransaction}
           onUpdateTransaction={handleUpdateTransaction}
           onUpdateData={(newData) => setData(prev => ({...prev, ...newData}))}
+          initialFilters={pendingFilters}
+          clearInitialFilters={() => setPendingFilters(null)}
         />
       )}
       {currentView === 'SETTINGS' && (

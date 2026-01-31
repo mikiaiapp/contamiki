@@ -1,8 +1,7 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, Family, Category, Account, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Loader2, Sparkles, Paperclip, FileText, Image as ImageIcon, Calendar, Filter, ChevronDown, MoreVertical, Repeat, Star, Edit3, CheckCircle2, AlertTriangle, Info, Tag, Clock, ArrowRight, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
-import { searchInternetLogos } from './services/iconService';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Sparkles, Paperclip, Calendar, Filter, ChevronDown, MoreVertical, Repeat, Star, Edit3, AlertTriangle, Tag, ChevronUp, ChevronLeft, ChevronRight, Copy, Save, Clock } from 'lucide-react';
 
 interface TransactionViewProps {
   data: AppState;
@@ -10,18 +9,30 @@ interface TransactionViewProps {
   onDeleteTransaction: (id: string) => void;
   onUpdateTransaction: (t: Transaction) => void;
   onUpdateData: (newData: Partial<AppState>) => void;
+  initialFilters?: any;
+  clearInitialFilters?: () => void;
 }
 
 type TimeRange = 'ALL' | 'MONTH' | 'QUARTER' | 'YEAR' | 'CUSTOM';
 type SortField = 'DATE' | 'DEBE' | 'CONCEPTO' | 'HABER' | 'AMOUNT';
 type SortDirection = 'ASC' | 'DESC';
 
-export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTransaction, onDeleteTransaction, onUpdateTransaction, onUpdateData }) => {
+const generateId = () => Math.random().toString(36).substring(2, 15);
+
+export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTransaction, onDeleteTransaction, onUpdateTransaction, onUpdateData, initialFilters, clearInitialFilters }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isFavModalOpen, setIsFavModalOpen] = useState(false);
   const [favSearch, setFavSearch] = useState('');
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<string | null>(null);
   
+  // Modales de conversión
+  const [txToFavorite, setTxToFavorite] = useState<Transaction | null>(null);
+  const [txToRecurrent, setTxToRecurrent] = useState<Transaction | null>(null);
+  const [favName, setFavName] = useState('');
+  const [recFreq, setRecFreq] = useState<RecurrenceFrequency>('MONTHLY');
+  const [recInterval, setRecInterval] = useState('1');
+
   // Ordenación
   const [sortField, setSortField] = useState<SortField>('DATE');
   const [sortDirection, setSortDirection] = useState<SortDirection>('DESC');
@@ -36,11 +47,26 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [filterCategory, setFilterCategory] = useState<string>('ALL');
   const [filterAccount, setFilterAccount] = useState<string>('ALL');
 
-  // Menús de acción
+  // Aplicar filtros iniciales desde el Dashboard
+  useEffect(() => {
+    if (initialFilters) {
+      if (initialFilters.filterTime) setFilterTime(initialFilters.filterTime);
+      if (initialFilters.referenceDate) setReferenceDate(initialFilters.referenceDate);
+      if (initialFilters.customStart) setCustomStart(initialFilters.customStart);
+      if (initialFilters.customEnd) setCustomEnd(initialFilters.customEnd);
+      if (initialFilters.filterCategory) setFilterCategory(initialFilters.filterCategory);
+      
+      if (initialFilters.filterCategory && initialFilters.filterCategory !== 'ALL') {
+          const cat = data.categories.find(c => c.id === initialFilters.filterCategory);
+          if (cat) setFilterFamily(cat.familyId);
+      }
+      if (clearInitialFilters) clearInitialFilters();
+    }
+  }, [initialFilters, data.categories]);
+
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // Estados Formulario
   const [type, setType] = useState<TransactionType>('EXPENSE');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -48,7 +74,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [accountId, setAccountId] = useState(data.accounts[0]?.id || '');
   const [selectedCategoryId, setSelectedCategoryId] = useState(''); 
   const [transferDestId, setTransferDestId] = useState('');
-  const [selectedBrandIcon, setSelectedBrandIcon] = useState<string | undefined>(undefined);
   const [attachment, setAttachment] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,18 +85,18 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     const isIncome = t.type === 'INCOME';
     const isExpense = t.type === 'EXPENSE';
 
-    let debe: { name: string, icon: string, label: string };
-    let haber: { name: string, icon: string, label: string };
+    let debe: { name: string, icon: string, id: string, type: 'ACCOUNT' | 'CATEGORY' };
+    let haber: { name: string, icon: string, id: string, type: 'ACCOUNT' | 'CATEGORY' };
 
     if (isExpense) {
-        debe = { name: category?.name || 'Gasto', icon: category?.icon || '📂', label: 'Aplicación' };
-        haber = { name: account?.name || 'Cuenta', icon: account?.icon || '🏦', label: 'Origen' };
+        debe = { name: category?.name || 'Gasto', icon: category?.icon || '📂', id: t.categoryId, type: 'CATEGORY' };
+        haber = { name: account?.name || 'Cuenta', icon: account?.icon || '🏦', id: t.accountId, type: 'ACCOUNT' };
     } else if (isIncome) {
-        debe = { name: account?.name || 'Cuenta', icon: account?.icon || '🏦', label: 'Destino' };
-        haber = { name: category?.name || 'Ingreso', icon: category?.icon || '💰', label: 'Fuente' };
+        debe = { name: account?.name || 'Cuenta', icon: account?.icon || '🏦', id: t.accountId, type: 'ACCOUNT' };
+        haber = { name: category?.name || 'Ingreso', icon: category?.icon || '💰', id: t.categoryId, type: 'CATEGORY' };
     } else {
-        debe = { name: transferDest?.name || 'Destino', icon: transferDest?.icon || '🏦', label: 'Entrada' };
-        haber = { name: account?.name || 'Origen', icon: account?.icon || '🏦', label: 'Salida' };
+        debe = { name: transferDest?.name || 'Destino', icon: transferDest?.icon || '🏦', id: t.transferAccountId || '', type: 'ACCOUNT' };
+        haber = { name: account?.name || 'Origen', icon: account?.icon || '🏦', id: t.accountId, type: 'ACCOUNT' };
     }
     return { debe, haber };
   };
@@ -85,26 +110,29 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setReferenceDate(newDate);
   };
 
-  const dateFilter = useMemo(() => {
+  const dateBounds = useMemo(() => {
     if (filterTime === 'ALL') return null;
-
-    let start = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
-    let end = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0);
-
-    if (filterTime === 'QUARTER') {
-      const quarter = Math.floor(referenceDate.getMonth() / 3);
-      start = new Date(referenceDate.getFullYear(), quarter * 3, 1);
-      end = new Date(referenceDate.getFullYear(), quarter * 3 + 3, 0);
+    const y = referenceDate.getFullYear();
+    const m = referenceDate.getMonth();
+    let startStr = '';
+    let endStr = '';
+    if (filterTime === 'MONTH') {
+      startStr = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      endStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else if (filterTime === 'QUARTER') {
+      const quarter = Math.floor(m / 3);
+      startStr = `${y}-${String(quarter * 3 + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(y, quarter * 3 + 3, 0).getDate();
+      endStr = `${y}-${String(quarter * 3 + 3).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
     } else if (filterTime === 'YEAR') {
-      start = new Date(referenceDate.getFullYear(), 0, 1);
-      end = new Date(referenceDate.getFullYear(), 11, 31);
+      startStr = `${y}-01-01`;
+      endStr = `${y}-12-31`;
     } else if (filterTime === 'CUSTOM' && customStart && customEnd) {
-      start = new Date(customStart);
-      start.setHours(0,0,0,0);
-      end = new Date(customEnd);
-      end.setHours(23,59,59,999);
+      startStr = customStart;
+      endStr = customEnd;
     }
-    return { start, end };
+    return { startStr, endStr };
   }, [filterTime, referenceDate, customStart, customEnd]);
 
   const filteredTransactions = useMemo(() => {
@@ -118,9 +146,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       if (filterFamily !== 'ALL' && t.familyId !== filterFamily) return false;
       if (filterCategory !== 'ALL' && t.categoryId !== filterCategory) return false;
 
-      if (dateFilter) {
-        const tDate = new Date(t.date);
-        if (tDate < dateFilter.start || tDate > dateFilter.end) return false;
+      if (dateBounds) {
+        if (t.date < dateBounds.startStr || t.date > dateBounds.endStr) return false;
       }
       return true;
     });
@@ -128,11 +155,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     result.sort((a, b) => {
         let valA: any; let valB: any;
         switch(sortField) {
-            case 'DATE': valA = new Date(a.date).getTime(); valB = new Date(b.date).getTime(); break;
+            case 'DATE': valA = a.date; valB = b.date; break;
             case 'AMOUNT': valA = a.amount; valB = b.amount; break;
             case 'CONCEPTO': valA = a.description.toLowerCase(); valB = b.description.toLowerCase(); break;
-            case 'DEBE': valA = getTransactionEntities(a).debe.name.toLowerCase(); valB = getTransactionEntities(b).debe.name.toLowerCase(); break;
-            case 'HABER': valA = getTransactionEntities(a).haber.name.toLowerCase(); valB = getTransactionEntities(b).haber.name.toLowerCase(); break;
             default: valA = a.date; valB = b.date;
         }
         if (valA < valB) return sortDirection === 'ASC' ? -1 : 1;
@@ -140,13 +165,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         return 0;
     });
     return result;
-  }, [data.transactions, searchTerm, filterTime, dateFilter, filterFamily, filterCategory, filterAccount, sortField, sortDirection]);
+  }, [data.transactions, searchTerm, filterTime, dateBounds, filterFamily, filterCategory, filterAccount, sortField, sortDirection]);
 
   const resetForm = () => {
       setAmount(''); setDescription(''); setDate(new Date().toISOString().split('T')[0]);
       setSelectedCategoryId(''); setTransferDestId('');
-      setSelectedBrandIcon(undefined); setAttachment(undefined);
-      setEditingTx(null); setActionMenuId(null);
+      setAttachment(undefined); setEditingTx(null); setActionMenuId(null);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,10 +191,70 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setAccountId(t.accountId);
     setSelectedCategoryId(t.categoryId);
     setTransferDestId(t.transferAccountId || '');
-    setSelectedBrandIcon(t.brandIcon);
     setAttachment(t.attachment);
     setIsModalOpen(true);
     setActionMenuId(null);
+  };
+
+  const handleDuplicate = (t: Transaction) => {
+      const newTx: Transaction = {
+          ...t,
+          id: generateId(),
+          date: new Date().toISOString().split('T')[0]
+      };
+      onAddTransaction(newTx);
+      setActionMenuId(null);
+  };
+
+  const openSaveFavorite = (t: Transaction) => {
+      setTxToFavorite(t);
+      setFavName(t.description);
+      setActionMenuId(null);
+  };
+
+  const confirmSaveFavorite = () => {
+      if (!txToFavorite || !favName) return;
+      const newFav: FavoriteMovement = {
+          id: generateId(),
+          name: favName,
+          description: txToFavorite.description,
+          amount: txToFavorite.amount,
+          type: txToFavorite.type,
+          accountId: txToFavorite.accountId,
+          transferAccountId: txToFavorite.transferAccountId,
+          familyId: txToFavorite.familyId,
+          categoryId: txToFavorite.categoryId
+      };
+      onUpdateData({ favorites: [...(data.favorites || []), newFav] });
+      setTxToFavorite(null);
+  };
+
+  const openCreateRecurrence = (t: Transaction) => {
+      setTxToRecurrent(t);
+      setRecFreq('MONTHLY');
+      setRecInterval('1');
+      setActionMenuId(null);
+  };
+
+  const confirmCreateRecurrence = () => {
+      if (!txToRecurrent) return;
+      const newRec: RecurrentMovement = {
+          id: generateId(),
+          description: txToRecurrent.description,
+          amount: txToRecurrent.amount,
+          type: txToRecurrent.type,
+          accountId: txToRecurrent.accountId,
+          transferAccountId: txToRecurrent.transferAccountId,
+          familyId: txToRecurrent.familyId,
+          categoryId: txToRecurrent.categoryId,
+          frequency: recFreq,
+          interval: parseInt(recInterval) || 1,
+          startDate: new Date().toISOString().split('T')[0],
+          nextDueDate: new Date().toISOString().split('T')[0],
+          active: true
+      };
+      onUpdateData({ recurrents: [...(data.recurrents || []), newRec] });
+      setTxToRecurrent(null);
   };
 
   const handleSort = (field: SortField) => {
@@ -190,64 +274,37 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       return <span className={`text-xl`}>{safeIcon}</span>;
   }
 
-  const availableCategories = useMemo(() => {
-    return data.families
-        .filter(f => f.type === (type === 'INCOME' ? 'INCOME' : 'EXPENSE'))
-        .map(f => ({
-            family: f,
-            categories: data.categories.filter(c => c.familyId === f.id)
-        }));
-  }, [data.families, data.categories, type]);
+  const handleEntityClick = (entity: { id: string, type: 'ACCOUNT' | 'CATEGORY' }) => {
+      // Al pulsar un icono, limpiamos la búsqueda y el filtro de tiempo para que la "nueva pantalla" sea clara
+      setSearchTerm('');
+      setFilterTime('ALL');
+      if (entity.type === 'ACCOUNT') {
+          setFilterAccount(entity.id);
+          setFilterFamily('ALL');
+          setFilterCategory('ALL');
+      } else {
+          setFilterCategory(entity.id);
+          setFilterAccount('ALL');
+          const cat = data.categories.find(c => c.id === entity.id);
+          if (cat) setFilterFamily(cat.familyId);
+      }
+  };
 
-  // Fix: changed size(14) to size={14} on lines 205 and 206 to correctly pass props in JSX
   const SortIndicator = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <ChevronDown size={14} className="opacity-0 group-hover:opacity-30 ml-1" />;
-    return sortDirection === 'ASC' ? <ChevronUp size={14} className="ml-1 text-indigo-500" /> : <ChevronDown size={14} className="ml-1 text-indigo-500" />;
+    if (sortField !== field) return <ChevronDown size={14} className="opacity-0 group-hover:opacity-30 ml-1 shrink-0" />;
+    return sortDirection === 'ASC' ? <ChevronUp size={14} className="ml-1 text-indigo-500 shrink-0" /> : <ChevronDown size={14} className="ml-1 text-indigo-500 shrink-0" />;
   };
 
   const years = Array.from({length: 10}, (_, i) => new Date().getFullYear() - 5 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-  const activeFilters = useMemo(() => {
-    const filters = [];
-    if (filterAccount !== 'ALL') {
-      const acc = data.accounts.find(a => a.id === filterAccount);
-      if (acc) filters.push({ id: 'account', label: acc.name, icon: acc.icon, type: 'ACCOUNT' });
-    }
-    if (filterFamily !== 'ALL') {
-      const fam = data.families.find(f => f.id === filterFamily);
-      if (fam) filters.push({ id: 'family', label: fam.name, icon: fam.icon, type: 'FAMILY' });
-    }
-    if (filterCategory !== 'ALL') {
-      const cat = data.categories.find(c => c.id === filterCategory);
-      if (cat) filters.push({ id: 'category', label: cat.name, icon: cat.icon, type: 'CATEGORY' });
-    }
-    if (searchTerm) {
-      filters.push({ id: 'search', label: `"${searchTerm}"`, icon: '🔍', type: 'SEARCH' });
-    }
-    return filters;
-  }, [filterAccount, filterFamily, filterCategory, searchTerm, data]);
-
-  const clearFilter = (type: string) => {
-    if (type === 'ACCOUNT') setFilterAccount('ALL');
-    if (type === 'FAMILY') { setFilterFamily('ALL'); setFilterCategory('ALL'); }
-    if (type === 'CATEGORY') setFilterCategory('ALL');
-    if (type === 'SEARCH') setSearchTerm('');
-  };
-
   const clearAllFilters = () => {
-    setSearchTerm('');
-    setFilterTime('ALL');
-    setFilterAccount('ALL');
-    setFilterFamily('ALL');
-    setFilterCategory('ALL');
-    setCustomStart('');
-    setCustomEnd('');
-    setReferenceDate(new Date());
+    setSearchTerm(''); setFilterTime('ALL'); setFilterAccount('ALL'); setFilterFamily('ALL'); setFilterCategory('ALL');
+    setCustomStart(''); setCustomEnd(''); setReferenceDate(new Date());
   };
 
   return (
-    <div className="space-y-8 md:space-y-12">
+    <div className="space-y-8 md:space-y-12 pb-24 md:pb-0">
       {/* CABECERA */}
       <div className="flex flex-col xl:flex-row justify-between items-center xl:items-end gap-6">
         <div className="space-y-2 text-center md:text-left">
@@ -255,46 +312,26 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter leading-none">Movimientos.</h2>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3 w-full xl:w-auto">
-            <button 
-                onClick={() => setIsFavModalOpen(true)}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-amber-50 text-amber-600 border border-amber-100 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-100 transition-all active:scale-95"
-            >
-                <Star size={16} fill="currentColor" /> Mis Favoritos
+            <button onClick={() => setIsFavModalOpen(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-amber-50 text-amber-600 border border-amber-100 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-100 transition-all active:scale-95 shadow-sm">
+                <Star size={16} fill="currentColor" /> Favoritos
             </button>
-            <button 
-                onClick={() => { resetForm(); setType('EXPENSE'); setIsModalOpen(true); }}
-                className="flex-1 sm:flex-none bg-slate-950 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-2xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-3 active:scale-95"
-            >
+            <button onClick={() => { resetForm(); setType('EXPENSE'); setIsModalOpen(true); }} className="flex-1 sm:flex-none bg-slate-950 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-2xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-3 active:scale-95">
                 <Plus size={18} /> Nuevo Movimiento
             </button>
         </div>
       </div>
 
-      {/* FILTROS REDISEÑADOS */}
-      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
-          {/* Fila 1: Buscador */}
+      {/* FILTROS INTEGRADOS */}
+      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
           <div className="relative group w-full">
-              <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors">
-                  <Search size={22} />
-              </div>
-              <input 
-                  type="text" 
-                  placeholder="Buscar descripción, concepto o categoría..." 
-                  className="w-full pl-16 pr-6 py-5 bg-slate-50 border-2 border-transparent rounded-[1.5rem] focus:outline-none focus:bg-white focus:border-indigo-500 text-sm font-bold tracking-tight transition-all shadow-inner"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-              />
+              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors" size={22} />
+              <input type="text" placeholder="Buscar movimientos..." className="w-full pl-16 pr-6 py-5 bg-slate-50 border-2 border-transparent rounded-[1.5rem] focus:outline-none focus:bg-white focus:border-indigo-500 text-sm font-bold tracking-tight transition-all shadow-inner" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
           
-          {/* Fila 2: Controles temporales y navegación */}
           <div className="flex flex-col lg:flex-row items-center justify-between gap-6 pt-2 border-t border-slate-50">
               <div className="flex bg-slate-100/80 p-1 rounded-xl shadow-inner border border-slate-200/50 w-full lg:w-auto overflow-x-auto scrollbar-hide">
                   {['ALL', 'MONTH', 'QUARTER', 'YEAR', 'CUSTOM'].map((range) => (
-                      <button 
-                          key={range}
-                          onClick={() => { setFilterTime(range as any); if(range !== 'CUSTOM') setReferenceDate(new Date()); }}
-                          className={`flex-1 lg:flex-none px-5 py-3 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${filterTime === range ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                      >
+                      <button key={range} onClick={() => { setFilterTime(range as any); if(range !== 'CUSTOM') setReferenceDate(new Date()); }} className={`flex-1 lg:flex-none px-5 py-3 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${filterTime === range ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                           {range === 'ALL' ? 'Todo' : range === 'MONTH' ? 'Mes' : range === 'QUARTER' ? 'Trim' : range === 'YEAR' ? 'Año' : 'Pers'}
                       </button>
                   ))}
@@ -303,49 +340,25 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
               <div className="flex items-center gap-4 w-full lg:w-auto justify-center">
                   {filterTime !== 'ALL' && filterTime !== 'CUSTOM' && (
                       <div className="flex items-center gap-2">
-                          <button onClick={() => navigatePeriod('prev')} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all shadow-sm active:scale-90"><ChevronLeft size={18} /></button>
-                          <button onClick={() => navigatePeriod('next')} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all shadow-sm active:scale-90"><ChevronRight size={18} /></button>
+                          <button onClick={() => navigatePeriod('prev')} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={18} /></button>
+                          <button onClick={() => navigatePeriod('next')} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={18} /></button>
                       </div>
                   )}
-                  
                   <div className="flex items-center gap-2">
                       {filterTime !== 'ALL' && filterTime !== 'CUSTOM' && (
-                          <select 
-                              className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-black text-[10px] outline-none focus:border-indigo-500 cursor-pointer uppercase shadow-sm"
-                              value={referenceDate.getFullYear()}
-                              onChange={(e) => { const d = new Date(referenceDate); d.setFullYear(parseInt(e.target.value)); setReferenceDate(d); }}
-                          >
+                          <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-black text-[10px] outline-none focus:border-indigo-500 shadow-sm" value={referenceDate.getFullYear()} onChange={(e) => { const d = new Date(referenceDate); d.setFullYear(parseInt(e.target.value)); setReferenceDate(d); }}>
                               {years.map(y => <option key={y} value={y}>{y}</option>)}
                           </select>
                       )}
-
                       {filterTime === 'MONTH' && (
-                          <select 
-                              className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-black text-[10px] outline-none focus:border-indigo-500 cursor-pointer uppercase shadow-sm"
-                              value={referenceDate.getMonth()}
-                              onChange={(e) => { const d = new Date(referenceDate); d.setMonth(parseInt(e.target.value)); setReferenceDate(d); }}
-                          >
+                          <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-black text-[10px] outline-none focus:border-indigo-500 shadow-sm" value={referenceDate.getMonth()} onChange={(e) => { const d = new Date(referenceDate); d.setMonth(parseInt(e.target.value)); setReferenceDate(d); }}>
                               {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
                           </select>
                       )}
-
-                      {filterTime === 'QUARTER' && (
-                          <select 
-                              className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-black text-[10px] outline-none focus:border-indigo-500 cursor-pointer uppercase shadow-sm"
-                              value={Math.floor(referenceDate.getMonth() / 3) + 1}
-                              onChange={(e) => { const d = new Date(referenceDate); d.setMonth((parseInt(e.target.value) - 1) * 3); setReferenceDate(d); }}
-                          >
-                              <option value="1">1º Trim</option>
-                              <option value="2">2º Trim</option>
-                              <option value="3">3º Trim</option>
-                              <option value="4">4º Trim</option>
-                          </select>
-                      )}
-
                       {filterTime === 'CUSTOM' && (
-                          <div className="flex items-center gap-3 bg-white p-2 border border-slate-200 rounded-xl animate-in zoom-in-95 duration-200 shadow-sm">
+                          <div className="flex items-center gap-3 bg-white p-2 border border-slate-200 rounded-xl shadow-sm">
                               <input type="date" className="bg-transparent font-black text-[10px] outline-none text-slate-700" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
-                              <span className="text-slate-300 text-[9px] font-black uppercase">a</span>
+                              <span className="text-slate-300 text-[9px] font-black uppercase tracking-tighter">a</span>
                               <input type="date" className="bg-transparent font-black text-[10px] outline-none text-slate-700" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
                           </div>
                       )}
@@ -353,169 +366,126 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
               </div>
           </div>
 
-          {/* Fila 3: Filtros por entidad */}
-          <div className="flex flex-wrap items-center gap-3 pt-4">
-              <div className="flex items-center bg-slate-50 rounded-xl border border-slate-100 px-4 py-2.5 shadow-inner min-w-[140px] flex-1">
-                <ArrowRightLeft size={14} className="text-slate-400 mr-2" />
+          <div className="flex flex-row items-center gap-2 pt-2 overflow-x-auto scrollbar-hide no-wrap w-full">
+              <div className="flex items-center bg-slate-50 rounded-xl border border-slate-100 px-3 py-2.5 shadow-inner shrink-0 flex-1 min-w-[140px]">
+                <ArrowRightLeft size={14} className="text-slate-400 mr-2 shrink-0" />
                 <select className="bg-transparent text-[9px] font-black uppercase tracking-widest outline-none cursor-pointer w-full" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
-                    <option value="ALL">Todas las Cuentas</option>
+                    <option value="ALL">CUENTA</option>
                     {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>
-
-              <div className="flex items-center bg-slate-50 rounded-xl border border-slate-100 px-4 py-2.5 shadow-inner min-w-[140px] flex-1">
-                <Filter size={14} className="text-slate-400 mr-2" />
+              <div className="flex items-center bg-slate-50 rounded-xl border border-slate-100 px-3 py-2.5 shadow-inner shrink-0 flex-1 min-w-[140px]">
+                <Filter size={14} className="text-slate-400 mr-2 shrink-0" />
                 <select className="bg-transparent text-[9px] font-black uppercase tracking-widest outline-none cursor-pointer w-full" value={filterFamily} onChange={e => { setFilterFamily(e.target.value); setFilterCategory('ALL'); }}>
-                    <option value="ALL">Todas las Familias</option>
+                    <option value="ALL">FAMILIA</option>
                     {data.families.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
               </div>
-
-              <div className="flex items-center bg-slate-50 rounded-xl border border-slate-100 px-4 py-2.5 shadow-inner min-w-[140px] flex-1">
-                <Tag size={14} className="text-slate-400 mr-2" />
+              <div className="flex items-center bg-slate-50 rounded-xl border border-slate-100 px-3 py-2.5 shadow-inner shrink-0 flex-1 min-w-[140px]">
+                <Tag size={14} className="text-slate-400 mr-2 shrink-0" />
                 <select className="bg-transparent text-[9px] font-black uppercase tracking-widest outline-none cursor-pointer w-full" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-                    <option value="ALL">Todas las Categorías</option>
+                    <option value="ALL">CATEGORÍA</option>
                     {data.categories.filter(c => filterFamily === 'ALL' || c.familyId === filterFamily).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
           </div>
 
-          {/* Fila 4: Visualización de filtros activos (Chips) */}
-          {(activeFilters.length > 0 || filterTime !== 'ALL') && (
-            <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-slate-50 animate-in fade-in duration-500">
-                <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mr-2">Filtros Activos:</p>
-                {activeFilters.map((f) => (
-                  <div key={f.id} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100 animate-in zoom-in-95">
-                    <span className="text-xs">{f.icon}</span>
-                    <span className="text-[9px] font-black uppercase tracking-tight">{f.label}</span>
-                    <button onClick={() => clearFilter(f.type)} className="p-0.5 hover:bg-indigo-200 rounded-full transition-colors">
-                      <X size={10} />
-                    </button>
-                  </div>
-                ))}
-                {filterTime !== 'ALL' && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 text-slate-500 rounded-full border border-slate-200 animate-in zoom-in-95">
-                    <Calendar size={10} />
-                    <span className="text-[9px] font-black uppercase tracking-tight">Periodo: {filterTime}</span>
-                    <button onClick={() => setFilterTime('ALL')} className="p-0.5 hover:bg-slate-200 rounded-full transition-colors">
-                      <X size={10} />
-                    </button>
-                  </div>
-                )}
-                <button 
-                  onClick={clearAllFilters} 
-                  className="ml-auto text-rose-500 text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-rose-50 px-5 py-2.5 rounded-xl transition-colors border border-rose-100 active:scale-95 shadow-sm bg-white"
-                >
-                  <Trash2 size={16} /> Borrar todos los filtros
+          {(filterTime !== 'ALL' || searchTerm || filterAccount !== 'ALL' || filterFamily !== 'ALL' || filterCategory !== 'ALL') && (
+            <div className="flex justify-end pt-2 border-t border-slate-50">
+                <button onClick={clearAllFilters} className="text-rose-500 text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-rose-50 px-5 py-2 rounded-xl transition-colors border border-rose-100">
+                  <Trash2 size={14} /> Limpiar Filtros
                 </button>
             </div>
           )}
       </div>
 
-      {/* CABECERA DE TABLA SIMPLIFICADA */}
-      <div className="hidden md:grid grid-cols-[1fr_1.2fr_1fr_140px_60px] gap-8 px-10 py-4 mb-2">
-          <button onClick={() => handleSort('DEBE')} className="flex items-center group cursor-pointer text-[9px] font-black text-slate-400 uppercase tracking-widest text-left">
-            DEBE <SortIndicator field="DEBE" />
-          </button>
-          <button onClick={() => handleSort('CONCEPTO')} className="flex items-center group cursor-pointer text-[9px] font-black text-slate-400 uppercase tracking-widest text-left">
-            CONCEPTO <SortIndicator field="CONCEPTO" />
-          </button>
-          <button onClick={() => handleSort('HABER')} className="flex items-center group cursor-pointer text-[9px] font-black text-slate-400 uppercase tracking-widest text-left">
-            HABER <SortIndicator field="HABER" />
-          </button>
-          <button onClick={() => handleSort('AMOUNT')} className="flex items-center justify-end group cursor-pointer text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">
-            IMPORTE <SortIndicator field="AMOUNT" />
-          </button>
-          <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">ACC.</div>
-      </div>
-
       {/* LISTADO DE MOVIMIENTOS */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         {filteredTransactions.map(t => {
             const { debe, haber } = getTransactionEntities(t);
             const isIncome = t.type === 'INCOME';
             const isExpense = t.type === 'EXPENSE';
 
             return (
-              <div key={t.id} className="group bg-white rounded-[2.25rem] shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-100 transition-all relative">
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr_1fr_140px_auto] items-center gap-4 md:gap-8 p-6">
-                    
-                    {/* COLUMNA 1: DEBE */}
-                    <div className="flex items-center gap-4 min-w-0">
-                        <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shrink-0 overflow-hidden p-1.5">
+              <div key={t.id} className="group bg-white rounded-2xl md:rounded-[2.25rem] shadow-sm border border-slate-100 hover:shadow-lg hover:border-indigo-100 transition-all relative">
+                <div className="flex flex-row items-center justify-between gap-3 p-3 md:grid md:grid-cols-[1fr_1.2fr_1fr_140px_100px] md:gap-8 md:p-6">
+                    {/* FECHA / DEBE */}
+                    <div className="flex items-center gap-1.5 md:gap-4 shrink-0 md:min-w-0">
+                        <button 
+                            onClick={() => handleEntityClick(debe)}
+                            className="w-9 h-9 md:w-11 md:h-11 bg-slate-50 rounded-full md:rounded-xl flex items-center justify-center border border-slate-100 shrink-0 p-1 shadow-sm hover:scale-110 active:scale-90 transition-transform cursor-pointer"
+                        >
                            {renderIcon(debe.icon, "w-full h-full")}
-                        </div>
-                        <div className="min-w-0">
+                        </button>
+                        <div className="hidden md:block min-w-0">
                             <span className="text-[11px] font-black text-slate-800 uppercase tracking-tight truncate block leading-none">{debe.name}</span>
-                            <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest leading-none mt-1">{debe.label}</p>
+                            <span className="text-[8px] font-bold text-slate-400 block mt-1">{t.date}</span>
+                        </div>
+                        <div className="md:hidden">
+                            <span className="text-[7px] font-black text-slate-400 block tracking-tighter">{t.date}</span>
                         </div>
                     </div>
 
-                    {/* COLUMNA 2: CONCEPTO CENTRAL */}
-                    <div className="flex flex-col justify-center min-w-0 md:border-x border-slate-50 px-0 md:px-6">
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{t.date}</span>
-                            {t.isFromRecurrence && <Repeat size={10} className="text-amber-500" />}
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <h4 className="text-xs font-black text-indigo-500 tracking-tight truncate leading-tight uppercase flex-1">{t.description}</h4>
-                            <Paperclip 
-                                size={14} 
-                                className={`transition-all shrink-0 ${t.attachment ? 'text-indigo-600 drop-shadow-[0_0_8px_rgba(79,70,229,0.5)]' : 'text-slate-200 opacity-30'}`} 
-                            />
+                    {/* CONCEPTO */}
+                    <div className="flex flex-col justify-center min-w-0 md:border-x border-slate-50 px-0 md:px-6 flex-1">
+                        <div className="flex items-center gap-2">
+                            <h4 className="text-[10px] md:text-xs font-black text-indigo-500 tracking-tight truncate leading-tight uppercase flex-1">{t.description}</h4>
+                            <button 
+                              onClick={() => t.attachment && setPreviewAttachment(t.attachment)} 
+                              className={`shrink-0 transition-all ${t.attachment ? 'text-indigo-600 hover:scale-125 active:scale-90 drop-shadow-[0_0_8px_rgba(79,70,229,0.3)]' : 'text-slate-200 pointer-events-none opacity-40'}`}
+                            >
+                                <Paperclip size={16} />
+                            </button>
                         </div>
                     </div>
 
-                    {/* COLUMNA 3: HABER */}
-                    <div className="flex items-center gap-4 min-w-0">
-                        <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shrink-0 overflow-hidden p-1.5">
+                    {/* HABER */}
+                    <div className="flex items-center justify-center gap-1 md:gap-4 shrink-0 md:min-w-0">
+                        <button 
+                            onClick={() => handleEntityClick(haber)}
+                            className="w-9 h-9 md:w-11 md:h-11 bg-slate-50 rounded-full md:rounded-xl flex items-center justify-center border border-slate-100 shrink-0 p-1 shadow-sm hover:scale-110 active:scale-90 transition-transform cursor-pointer"
+                        >
                            {renderIcon(haber.icon, "w-full h-full")}
-                        </div>
-                        <div className="min-w-0">
+                        </button>
+                        <div className="hidden md:block min-w-0">
                             <span className="text-[11px] font-black text-slate-400 uppercase tracking-tight truncate block leading-none">{haber.name}</span>
-                            <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest leading-none mt-1">{haber.label}</p>
                         </div>
                     </div>
 
-                    {/* COLUMNA 4: IMPORTE */}
-                    <div className="text-right">
-                        <span className={`text-xl font-black tracking-tighter ${isIncome ? 'text-emerald-600' : isExpense ? 'text-rose-600' : 'text-slate-400'}`}>
+                    {/* IMPORTE */}
+                    <div className="text-right min-w-[70px] md:min-w-[140px]">
+                        <span className={`text-[11px] md:text-xl font-black tracking-tighter ${isIncome ? 'text-emerald-600' : isExpense ? 'text-rose-600' : 'text-slate-400'}`}>
                             {isIncome ? '+' : isExpense ? '-' : ''}{t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
                         </span>
                     </div>
 
                     {/* ACCIONES */}
-                    <div className="flex justify-end relative">
-                        <div className="relative">
-                            <button 
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActionMenuId(actionMenuId === t.id ? null : t.id);
-                                }} 
-                                className={`p-3 rounded-xl transition-all border ${actionMenuId === t.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-400 border-transparent hover:border-slate-200'}`}
-                            >
-                                <MoreVertical size={18} />
-                            </button>
-                            
-                            {actionMenuId === t.id && (
-                                <>
-                                    <div className="fixed inset-0 z-[100]" onClick={() => setActionMenuId(null)} />
-                                    <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-slate-100 p-2 z-[101] animate-in slide-in-from-top-2">
-                                        <button onClick={() => openEdit(t)} className="w-full flex items-center gap-3 px-4 py-3 text-[10px] font-black uppercase text-slate-600 hover:bg-slate-50 rounded-xl transition-colors text-left"><Edit3 size={14}/> Editar</button>
-                                        <button onClick={() => { setDeleteConfirmId(t.id); setActionMenuId(null); }} className="w-full flex items-center gap-3 px-4 py-3 text-[10px] font-black uppercase text-rose-500 hover:bg-rose-50 rounded-xl transition-colors text-left"><Trash2 size={14}/> Eliminar</button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
+                    <div className="flex justify-end relative shrink-0">
+                        <button onClick={(e) => { e.stopPropagation(); setActionMenuId(actionMenuId === t.id ? null : t.id); }} className={`p-2 md:p-3 rounded-lg transition-all border ${actionMenuId === t.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 text-slate-400 border-transparent hover:border-slate-200'}`}>
+                            <MoreVertical size={16} />
+                        </button>
+                        {actionMenuId === t.id && (
+                            <>
+                                <div className="fixed inset-0 z-[100]" onClick={() => setActionMenuId(null)} />
+                                <div className="absolute right-0 top-full mt-2 w-60 bg-white rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.25)] border border-slate-100 p-2.5 z-[101] animate-in slide-in-from-top-2 origin-top-right">
+                                    <button onClick={() => openEdit(t)} className="w-full flex items-center gap-3 px-4 py-3.5 text-[10px] font-black uppercase text-slate-600 hover:bg-slate-50 rounded-xl transition-colors text-left"><Edit3 size={15} className="text-slate-400" /> Editar</button>
+                                    <button onClick={() => handleDuplicate(t)} className="w-full flex items-center gap-3 px-4 py-3.5 text-[10px] font-black uppercase text-slate-600 hover:bg-slate-50 rounded-xl transition-colors text-left"><Copy size={15} className="text-slate-400" /> Duplicar</button>
+                                    <button onClick={() => openSaveFavorite(t)} className="w-full flex items-center gap-3 px-4 py-3.5 text-[10px] font-black uppercase text-amber-500 hover:bg-amber-50 rounded-xl transition-colors text-left"><Star size={15} fill="currentColor" /> Favorito</button>
+                                    <button onClick={() => openCreateRecurrence(t)} className="w-full flex items-center gap-3 px-4 py-3.5 text-[10px] font-black uppercase text-indigo-500 hover:bg-indigo-50 rounded-xl transition-colors text-left"><Clock size={15} /> Recurrente</button>
+                                    <div className="h-px bg-slate-100 my-1.5 mx-2"></div>
+                                    <button onClick={() => { setDeleteConfirmId(t.id); setActionMenuId(null); }} className="w-full flex items-center gap-3 px-4 py-3.5 text-[10px] font-black uppercase text-rose-500 hover:bg-rose-50 rounded-xl transition-colors text-left"><Trash2 size={15} /> Eliminar</button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
 
                 {deleteConfirmId === t.id && (
-                    <div className="absolute inset-0 bg-white/95 backdrop-blur-sm rounded-[2rem] z-[110] flex items-center justify-center gap-6 px-10 animate-in fade-in">
-                        <p className="text-[11px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-3"><AlertTriangle className="text-rose-500" /> ¿Borrar movimiento?</p>
+                    <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-[110] flex items-center justify-center gap-4 px-4 animate-in fade-in duration-200 rounded-2xl md:rounded-[2.25rem]">
+                        <p className="text-[9px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><AlertTriangle className="text-rose-500" size={14} /> ¿Confirmas borrado?</p>
                         <div className="flex gap-2">
-                            <button onClick={() => { onDeleteTransaction(t.id); setDeleteConfirmId(null); }} className="bg-rose-500 text-white px-6 py-3 rounded-xl font-black text-[9px] uppercase shadow-lg shadow-rose-500/20 active:scale-95 transition-all">Sí, eliminar</button>
-                            <button onClick={() => setDeleteConfirmId(null)} className="bg-slate-100 text-slate-500 px-6 py-3 rounded-xl font-black text-[9px] uppercase hover:bg-slate-200 transition-all">Cancelar</button>
+                            <button onClick={() => { onDeleteTransaction(t.id); setDeleteConfirmId(null); }} className="bg-rose-500 text-white px-5 py-2.5 rounded-xl font-black text-[9px] uppercase shadow-lg shadow-rose-500/20 transition-all active:scale-95">Eliminar</button>
+                            <button onClick={() => setDeleteConfirmId(null)} className="bg-slate-100 text-slate-500 px-5 py-2.5 rounded-xl font-black text-[9px] uppercase hover:bg-slate-200 transition-all">Cancelar</button>
                         </div>
                     </div>
                 )}
@@ -524,15 +494,93 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         })}
       </div>
 
+      {/* MODAL GUARDAR FAVORITO */}
+      {txToFavorite && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[250] p-4 animate-in fade-in duration-300">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm p-8 relative animate-in zoom-in-95">
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-6 flex items-center gap-3"><Star className="text-amber-500" fill="currentColor" size={24} /> Nuevo Favorito</h3>
+                  <div className="space-y-4">
+                      <div className="space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Nombre del Atajo</label>
+                          <input type="text" className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={favName} onChange={e => setFavName(e.target.value)} autoFocus />
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-xl text-[10px] font-bold text-slate-400 space-y-1 border border-slate-100">
+                          <p>Importe: <span className="text-slate-900">{txToFavorite.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span></p>
+                          <p>Descripción: <span className="text-slate-900">{txToFavorite.description}</span></p>
+                      </div>
+                      <div className="flex gap-2 pt-4">
+                          <button onClick={confirmSaveFavorite} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-700 transition-all">Guardar</button>
+                          <button onClick={() => setTxToFavorite(null)} className="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-slate-200 transition-all">Cancelar</button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL CREAR RECURRENTE */}
+      {txToRecurrent && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[250] p-4 animate-in fade-in duration-300">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm p-8 relative animate-in zoom-in-95">
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-6 flex items-center gap-3"><Repeat className="text-indigo-600" size={24} /> Automatizar</h3>
+                  <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                              <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Cada (X)</label>
+                              <input type="number" className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recInterval} onChange={e => setRecInterval(e.target.value)} min="1" />
+                          </div>
+                          <div className="space-y-1">
+                              <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Periodo</label>
+                              <select className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recFreq} onChange={e => setRecFreq(e.target.value as any)}>
+                                  <option value="DAYS">Días</option>
+                                  <option value="WEEKS">Semanas</option>
+                                  <option value="MONTHLY">Meses</option>
+                                  <option value="YEARS">Años</option>
+                              </select>
+                          </div>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-xl text-[10px] font-bold text-slate-400 space-y-1 border border-slate-100">
+                          <p>Concepto: <span className="text-slate-900">{txToRecurrent.description}</span></p>
+                          <p>Importe: <span className="text-slate-900">{txToRecurrent.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span></p>
+                      </div>
+                      <div className="flex gap-2 pt-4">
+                          <button onClick={confirmCreateRecurrence} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-700 transition-all">Activar</button>
+                          <button onClick={() => setTxToRecurrent(null)} className="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-slate-200 transition-all">Cancelar</button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL PREVIEW ADJUNTO */}
+      {previewAttachment && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[300] p-4 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl p-6 relative flex flex-col max-h-[90vh]">
+                <button onClick={() => setPreviewAttachment(null)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full hover:bg-rose-50 hover:text-rose-600 transition-all"><X size={20}/></button>
+                <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
+                    <Paperclip className="text-indigo-600" />
+                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Comprobante Adjunto</h3>
+                </div>
+                <div className="flex-1 overflow-auto bg-slate-50 rounded-xl p-4 flex items-center justify-center min-h-[300px]">
+                    {previewAttachment.startsWith('data:image') ? (
+                        <img src={previewAttachment} className="max-w-full max-h-full object-contain shadow-sm rounded-lg" alt="Adjunto" />
+                    ) : (
+                        <iframe src={previewAttachment} className="w-full h-full min-h-[500px] rounded-lg" title="Documento" />
+                    )}
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <button onClick={() => setPreviewAttachment(null)} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 transition-all">Cerrar Visor</button>
+                </div>
+            </div>
+        </div>
+      )}
+
       {/* MODAL NUEVO / EDITAR */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[210] p-4 sm:p-6 animate-in fade-in duration-300">
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[210] p-4 animate-in fade-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-6 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar">
                 <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:bg-rose-50 hover:text-rose-600 transition-all"><X size={20}/></button>
                 <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase mb-8">{editingTx ? 'Editar Movimiento' : 'Nuevo Movimiento'}</h3>
-                
                 <form className="space-y-6">
-                    {/* TIPO DE MOVIMIENTO */}
                     <div className="bg-slate-100 p-1.5 rounded-2xl flex gap-1.5 shadow-inner">
                         {['EXPENSE', 'INCOME', 'TRANSFER'].map((m) => (
                             <button key={m} type="button" onClick={() => { setType(m as any); setSelectedCategoryId(''); }} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all ${type === m ? 'bg-white text-indigo-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -540,210 +588,60 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             </button>
                         ))}
                     </div>
-
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe (€)</label>
-                            <input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-xl font-black outline-none focus:border-indigo-500" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha</label>
-                            <input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500" value={date} onChange={e => setDate(e.target.value)} />
-                        </div>
+                        <div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe</label><input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-xl font-black outline-none focus:border-indigo-500 transition-all" value={amount} onChange={e => setAmount(e.target.value)} /></div>
+                        <div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={date} onChange={e => setDate(e.target.value)} /></div>
                     </div>
-
-                    <div className="space-y-2">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Sparkles size={14} className="text-indigo-400"/> Descripción / Concepto</label>
-                        <input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500" value={description} onChange={e => setDescription(e.target.value)} placeholder="Ej. Amazon, Nómina, Restaurante..." />
-                    </div>
-
-                    {/* DISPOSICIÓN DINÁMICA SEGÚN PARTIDA DOBLE */}
+                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Sparkles size={14} className="text-indigo-400"/> Descripción</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={description} onChange={e => setDescription(e.target.value)} /></div>
+                    
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {type === 'EXPENSE' && (
-                            <>
-                                <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoría (Debe)</label>
-                                    <select 
-                                        className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none appearance-none" 
-                                        value={selectedCategoryId} 
-                                        onChange={e => setSelectedCategoryId(e.target.value)}
-                                    >
-                                        <option value="">Seleccionar...</option>
-                                        {availableCategories.map(group => (
-                                            <optgroup key={group.family.id} label={group.family.name.toUpperCase()}>
-                                                {group.categories.map(c => (
-                                                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-                                                ))}
-                                            </optgroup>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Cuenta (Haber)</label>
-                                    <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none appearance-none" value={accountId} onChange={e => setAccountId(e.target.value)}>
-                                        {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                    </select>
-                                </div>
-                            </>
+                            <><div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={selectedCategoryId} onChange={e => setSelectedCategoryId(e.target.value)}><option value="">Seleccionar...</option>{data.categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select></div><div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Cuenta</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accountId} onChange={e => setAccountId(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div></>
                         )}
-
                         {type === 'INCOME' && (
-                            <>
-                                <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Cuenta (Debe)</label>
-                                    <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none appearance-none" value={accountId} onChange={e => setAccountId(e.target.value)}>
-                                        {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoría (Haber)</label>
-                                    <select 
-                                        className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none appearance-none" 
-                                        value={selectedCategoryId} 
-                                        onChange={e => setSelectedCategoryId(e.target.value)}
-                                    >
-                                        <option value="">Seleccionar...</option>
-                                        {availableCategories.map(group => (
-                                            <optgroup key={group.family.id} label={group.family.name.toUpperCase()}>
-                                                {group.categories.map(c => (
-                                                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-                                                ))}
-                                            </optgroup>
-                                        ))}
-                                    </select>
-                                </div>
-                            </>
+                            <><div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Cuenta</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accountId} onChange={e => setAccountId(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div><div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={selectedCategoryId} onChange={e => setSelectedCategoryId(e.target.value)}><option value="">Seleccionar...</option>{data.categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select></div></>
                         )}
-
                         {type === 'TRANSFER' && (
-                            <>
-                                <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Hacia (Debe)</label>
-                                    <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none appearance-none" value={transferDestId} onChange={e => setTransferDestId(e.target.value)}>
-                                        <option value="">Seleccionar...</option>
-                                        {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Desde (Haber)</label>
-                                    <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none appearance-none" value={accountId} onChange={e => setAccountId(e.target.value)}>
-                                        {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                    </select>
-                                </div>
-                            </>
+                            <><div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Hacia</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={transferDestId} onChange={e => setTransferDestId(e.target.value)}><option value="">Seleccionar...</option>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div><div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Desde</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accountId} onChange={e => setAccountId(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div></>
                         )}
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                          <Paperclip size={14} className="text-indigo-400" /> Adjuntar Comprobante
-                        </label>
-                        <div className="flex items-center gap-3">
-                            <button 
-                              type="button" 
-                              onClick={() => fileInputRef.current?.click()} 
-                              className={`flex-1 flex items-center justify-center gap-3 px-6 py-4 border-2 border-dashed rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest ${attachment ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-indigo-200 hover:bg-slate-50'}`}
-                            >
-                                {attachment ? <><ImageIcon size={16} /> Cambiar Archivo</> : <><Paperclip size={16} /> Seleccionar Archivo</>}
-                            </button>
-                            {attachment && (
-                              <button type="button" onClick={() => setAttachment(undefined)} className="p-4 bg-rose-50 text-rose-500 rounded-2xl border border-rose-100 hover:bg-rose-100 transition-colors">
-                                <Trash2 size={20} />
-                              </button>
-                            )}
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Paperclip size={14} /> Adjuntar Comprobante</label>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => fileInputRef.current?.click()} className={`flex-1 flex items-center justify-center gap-3 px-6 py-4 border-2 border-dashed rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest ${attachment ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-indigo-200 hover:bg-slate-50'}`}>
+                              {attachment ? 'Cambiar Archivo' : 'Seleccionar Archivo'}
+                          </button>
+                          {attachment && <button type="button" onClick={() => setAttachment(undefined)} className="p-4 bg-rose-50 text-rose-500 rounded-2xl border border-rose-100 shadow-sm"><Trash2 size={20}/></button>}
                         </div>
                         <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileChange} />
                     </div>
 
-                    <button 
-                        type="button" 
-                        onClick={() => {
-                            if (!amount || !description) {
-                                alert("Por favor completa el importe y la descripción.");
-                                return;
-                            }
-                            if (type !== 'TRANSFER' && !selectedCategoryId) {
-                                alert("Debes seleccionar una categoría.");
-                                return;
-                            }
-                            if (type === 'TRANSFER' && !transferDestId) {
-                                alert("Debes seleccionar una cuenta de destino para el traspaso.");
-                                return;
-                            }
-
-                            const finalTx: Transaction = { 
-                                id: editingTx ? editingTx.id : Math.random().toString(36).substring(7), 
-                                date, 
-                                amount: parseFloat(amount), 
-                                description, 
-                                accountId, 
-                                type,
-                                brandIcon: selectedBrandIcon,
-                                attachment: attachment,
-                                familyId: '',
-                                categoryId: ''
-                            };
-
-                            if (type === 'TRANSFER') {
-                                finalTx.transferAccountId = transferDestId;
-                            } else {
-                                const cat = data.categories.find(c => c.id === selectedCategoryId);
-                                if (cat) { 
-                                    finalTx.familyId = cat.familyId; 
-                                    finalTx.categoryId = cat.id; 
-                                }
-                            }
-
+                    <button type="button" onClick={() => {
+                            if (!amount || !description) return alert("Completa importe y descripción.");
+                            const finalTx: Transaction = { id: editingTx ? editingTx.id : generateId(), date, amount: parseFloat(amount), description, accountId, type, familyId: '', categoryId: '', attachment };
+                            if (type === 'TRANSFER') finalTx.transferAccountId = transferDestId;
+                            else { const cat = data.categories.find(c => c.id === selectedCategoryId); if (cat) { finalTx.familyId = cat.familyId; finalTx.categoryId = cat.id; } }
                             editingTx ? onUpdateTransaction(finalTx) : onAddTransaction(finalTx);
                             setIsModalOpen(false); resetForm();
-                        }} 
-                        className="w-full py-6 bg-slate-950 text-white rounded-3xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all mt-6"
-                    >
-                        Confirmar Movimiento
-                    </button>
+                        }} className="w-full py-6 bg-slate-950 text-white rounded-3xl font-black uppercase text-[11px] shadow-2xl hover:bg-indigo-600 transition-all mt-6">Confirmar</button>
                 </form>
             </div>
         </div>
       )}
       
-      {/* MODAL FAVORITOS */}
       {isFavModalOpen && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 relative animate-in zoom-in-95 max-h-[80vh] flex flex-col">
                   <button onClick={() => setIsFavModalOpen(false)} className="absolute top-8 right-8 p-3 bg-slate-50 rounded-full text-slate-400 hover:text-rose-500 transition-colors"><X size={20}/></button>
                   <div className="mb-6 space-y-4">
-                      <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Mis Favoritos</h3>
-                      <div className="relative">
-                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                          <input 
-                            type="text" 
-                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-indigo-500 font-bold" 
-                            placeholder="Buscar favorito..." 
-                            value={favSearch}
-                            onChange={e => setFavSearch(e.target.value)}
-                          />
-                      </div>
+                      <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3"><Star className="text-amber-500" fill="currentColor" size={24} /> Favoritos</h3>
+                      <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} /><input type="text" className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500" placeholder="Buscar favorito..." value={favSearch} onChange={e => setFavSearch(e.target.value)} /></div>
                   </div>
                   <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
                       {(data.favorites || []).filter(f => f.name.toLowerCase().includes(favSearch.toLowerCase())).map(f => (
-                          <button key={f.id} onClick={() => {
-                              resetForm();
-                              setType(f.type);
-                              setAmount(f.amount.toString());
-                              setDescription(f.description);
-                              setAccountId(f.accountId);
-                              setTransferDestId(f.transferAccountId || '');
-                              setSelectedCategoryId(f.categoryId);
-                              setIsFavModalOpen(false);
-                              setIsModalOpen(true);
-                          }} className="w-full flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-transparent hover:border-indigo-500 hover:bg-white transition-all group text-left">
-                              <div className="flex items-center gap-4">
-                                  <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-amber-500 shadow-sm"><Star size={20} fill="currentColor" /></div>
-                                  <div>
-                                      <p className="font-black text-slate-900 text-sm uppercase">{f.name}</p>
-                                      <p className="text-[9px] font-bold text-slate-400 uppercase">{data.categories.find(c => c.id === f.categoryId)?.name || 'Sin categoría'}</p>
-                                  </div>
-                              </div>
+                          <button key={f.id} onClick={() => { resetForm(); setType(f.type); setAmount(f.amount.toString()); setDescription(f.description); setAccountId(f.accountId); setTransferDestId(f.transferAccountId || ''); setSelectedCategoryId(f.categoryId); setIsFavModalOpen(false); setIsModalOpen(true); }} className="w-full flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-transparent hover:border-indigo-500 hover:bg-white transition-all text-left group shadow-sm">
+                              <div className="flex items-center gap-4"><div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-amber-500 shadow-sm border border-slate-100 group-hover:scale-110 transition-transform"><Star size={20} fill="currentColor" /></div><div><p className="font-black text-slate-900 text-sm uppercase tracking-tight">{f.name}</p></div></div>
                               <p className="text-lg font-black text-slate-800 tracking-tighter">{f.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
                           </button>
                       ))}
