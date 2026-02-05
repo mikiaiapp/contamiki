@@ -1,9 +1,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText, MoveRight } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
-import { mapBankTransactions } from '../services/geminiService';
+import { mapBankTransactions, parseMigrationData } from '../services/geminiService';
 import * as XLSX from 'xlsx';
 
 interface SettingsViewProps {
@@ -28,12 +28,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [hasSearched, setHasSearched] = useState(false);
   const searchTimeoutRef = useRef<number | null>(null);
 
-  // Estados de importación inteligente
+  // Estados de importación inteligente (Bancos)
   const [isImporting, setIsImporting] = useState(false);
   const [importStep, setImportStep] = useState<'IDLE' | 'PREVIEW' | 'MAPPING' | 'SUCCESS'>('IDLE');
   const [importAccount, setImportAccount] = useState(data.accounts[0]?.id || '');
   const [mappedTransactions, setMappedTransactions] = useState<any[]>([]);
   const importFileRef = useRef<HTMLInputElement>(null);
+
+  // Importador de Entidades (CSV/Excel para Cuentas/Familias/Categorias)
+  const entityImportFileRef = useRef<HTMLInputElement>(null);
+
+  // Estado Migración Legacy (Contamoney)
+  const [migrationText, setMigrationText] = useState('');
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationPreview, setMigrationPreview] = useState<{accounts: any[], families: any[], categories: any[]} | null>(null);
 
   // Importación rápida por texto/CSV
   const [showQuickImport, setShowQuickImport] = useState(false);
@@ -93,6 +101,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       setFavId(null); setFavName(''); setFavAmount(''); setFavAcc(data.accounts[0]?.id || ''); setFavCounterpartId(''); setFavCat('');
       setWebLogos([]); setHasSearched(false);
       setMappedTransactions([]); setImportStep('IDLE'); setShowQuickImport(false); setPasteData('');
+      setMigrationText(''); setMigrationPreview(null);
+      if (entityImportFileRef.current) entityImportFileRef.current.value = '';
   };
 
   const triggerWebSearch = (text: string) => {
@@ -123,6 +133,86 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     }
     return <span className="text-2xl">{safeIcon}</span>;
   }
+
+  const handleEntityFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+          try {
+              const bstr = evt.target?.result;
+              const wb = XLSX.read(bstr, { type: 'binary' });
+              const wsname = wb.SheetNames[0];
+              const ws = wb.Sheets[wsname];
+              const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+
+              const rows = rawData.filter(row => row && row.length > 0);
+              
+              let count = 0;
+
+              if (activeTab === 'FAMILIES') {
+                  const newFamilies: Family[] = [];
+                  rows.forEach(row => {
+                      const name = row[0]?.toString().trim();
+                      // Simple skip for header row
+                      if (!name || name.toLowerCase() === 'nombre') return;
+                      
+                      const icon = row[1]?.toString().trim() || '📂';
+                      let typeStr = row[2]?.toString().trim().toUpperCase();
+                      const type = (typeStr === 'INCOME' || typeStr === 'INGRESO') ? 'INCOME' : 'EXPENSE';
+                      
+                      newFamilies.push({ id: generateId(), name, icon, type });
+                  });
+                  if(newFamilies.length > 0) {
+                      onUpdateData({ families: [...data.families, ...newFamilies] });
+                      count = newFamilies.length;
+                  }
+              } else if (activeTab === 'CATEGORIES') {
+                  const newCategories: Category[] = [];
+                  rows.forEach(row => {
+                      const name = row[0]?.toString().trim();
+                      if (!name || name.toLowerCase() === 'nombre') return;
+
+                      const icon = row[1]?.toString().trim() || '🏷️';
+                      const familyName = row[2]?.toString().trim();
+                      
+                      const family = data.families.find(f => f.name.toLowerCase() === familyName?.toLowerCase()) || data.families[0];
+                      
+                      newCategories.push({ id: generateId(), name, icon, familyId: family?.id || '' });
+                  });
+                  if(newCategories.length > 0) {
+                      onUpdateData({ categories: [...data.categories, ...newCategories] });
+                      count = newCategories.length;
+                  }
+              } else if (activeTab === 'ACCOUNTS') {
+                  const newAccounts: Account[] = [];
+                  rows.forEach(row => {
+                      const name = row[0]?.toString().trim();
+                      if (!name || name.toLowerCase() === 'nombre') return;
+
+                      const balance = parseFloat(row[1]?.toString().replace(',','.') || '0');
+                      const icon = row[2]?.toString().trim() || '🏦';
+
+                      newAccounts.push({ id: generateId(), name, initialBalance: balance || 0, currency: 'EUR', icon });
+                  });
+                  if(newAccounts.length > 0) {
+                      onUpdateData({ accounts: [...data.accounts, ...newAccounts] });
+                      count = newAccounts.length;
+                  }
+              }
+              
+              if (count > 0) alert(`¡Importación exitosa! Se han añadido ${count} elementos.`);
+              else alert("No se encontraron datos válidos o el formato no es correcto.");
+              
+              resetForm();
+          } catch (err) {
+              console.error("Error parsing entity file", err);
+              alert("Error al leer el archivo. Asegúrate de que sea un CSV o Excel válido.");
+          }
+      };
+      reader.readAsBinaryString(file);
+  };
 
   const handleQuickImport = () => {
       if (!pasteData.trim()) return;
@@ -165,6 +255,59 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           onUpdateData({ accounts: [...data.accounts, ...newAccounts] });
       }
       resetForm();
+  };
+
+  const handleMigrationProcess = async () => {
+      if (!migrationText.trim()) return;
+      setIsMigrating(true);
+      try {
+          const result = await parseMigrationData(migrationText);
+          setMigrationPreview(result);
+      } catch (e) {
+          alert("Error al analizar los datos de migración.");
+      } finally {
+          setIsMigrating(false);
+      }
+  };
+
+  const confirmMigration = () => {
+      if (!migrationPreview) return;
+      
+      const newAccounts = migrationPreview.accounts.map(a => ({
+          id: generateId(),
+          name: a.name,
+          initialBalance: a.balance || 0,
+          currency: 'EUR',
+          icon: '🏦'
+      }));
+
+      const newFamilies = migrationPreview.families.map(f => ({
+          id: generateId(),
+          name: f.name,
+          type: (f.type === 'INCOME' ? 'INCOME' : 'EXPENSE') as any,
+          icon: '📂'
+      }));
+
+      // Mapear categorías a las nuevas familias
+      const newCategories = migrationPreview.categories.map(c => {
+          // Intentar buscar familia existente por nombre o en las nuevas creadas
+          const fam = [...data.families, ...newFamilies].find(f => f.name.toLowerCase() === c.familyName?.toLowerCase()) || newFamilies[0];
+          return {
+              id: generateId(),
+              name: c.name,
+              familyId: fam?.id || '',
+              icon: '🏷️'
+          };
+      });
+
+      onUpdateData({
+          accounts: [...data.accounts, ...newAccounts],
+          families: [...data.families, ...newFamilies],
+          categories: [...data.categories, ...newCategories]
+      });
+      
+      resetForm();
+      alert("¡Migración completada! Se han añadido las estructuras nuevas.");
   };
 
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -213,7 +356,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       setTimeout(() => resetForm(), 3000);
   };
 
-  // Fix: Added exportBackup function to handle exporting the app state as a JSON file.
   const exportBackup = () => {
       const dataStr = JSON.stringify(data, null, 2);
       const blob = new Blob([dataStr], { type: 'application/json' });
@@ -276,27 +418,52 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     );
   };
 
-  const renderQuickImport = () => (
-    <div className="bg-white p-8 rounded-[2.5rem] border-2 border-dashed border-indigo-100 shadow-sm space-y-6">
-        <div className="flex items-center justify-between">
-            <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><ClipboardPaste size={16} /> Importación Rápida</h4>
-            <button onClick={() => setShowQuickImport(false)} className="text-slate-300 hover:text-rose-500"><XCircle size={18}/></button>
+  const renderQuickImport = () => {
+    let importHint = "";
+    let placeholderExample = "";
+
+    switch(activeTab) {
+        case 'ACCOUNTS':
+            importHint = "Nombre, Saldo Inicial, Icono/Emoji";
+            placeholderExample = "BBVA, 1500.00, 🏦\nCartera Efectivo, 85.50, 💶\nTarjeta Revolut, 300.00, 💳";
+            break;
+        case 'FAMILIES':
+            importHint = "Nombre, Icono/Emoji, Tipo (INCOME/EXPENSE)";
+            placeholderExample = "Vivienda, 🏠, EXPENSE\nNómina, 💼, INCOME\nOcio y Viajes, ✈️, EXPENSE";
+            break;
+        case 'CATEGORIES':
+            importHint = "Nombre, Icono/Emoji, Nombre de Familia";
+            placeholderExample = "Alquiler, 🔑, Vivienda\nSupermercado, 🛒, Alimentación\nGasolina, ⛽, Vehículo";
+            break;
+        default:
+            importHint = "Formato genérico";
+            placeholderExample = "Dato1, Dato2, Dato3";
+    }
+
+    return (
+        <div className="bg-white p-8 rounded-[2.5rem] border-2 border-dashed border-indigo-100 shadow-sm space-y-6">
+            <div className="flex items-center justify-between">
+                <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><ClipboardPaste size={16} /> Importación Rápida: {activeTab === 'FAMILIES' ? 'Familias' : activeTab === 'ACCOUNTS' ? 'Cuentas' : 'Categorías'}</h4>
+                <button onClick={() => setShowQuickImport(false)} className="text-slate-300 hover:text-rose-500"><XCircle size={18}/></button>
+            </div>
+            <p className="text-[9px] font-bold text-slate-400 uppercase leading-relaxed">
+                Pega aquí tus datos. Formato esperado: <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg">{importHint}</span>. Una fila por elemento.
+            </p>
+            <textarea 
+                className="w-full h-40 p-5 bg-slate-50 border border-slate-100 rounded-xl font-mono text-[11px] outline-none focus:border-indigo-500 transition-all custom-scrollbar placeholder:text-slate-300" 
+                placeholder={placeholderExample}
+                value={pasteData}
+                onChange={e => setPasteData(e.target.value)}
+            />
+            <div className="flex flex-wrap gap-2">
+                <button onClick={handleQuickImport} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-slate-950 transition-all">Importar Texto</button>
+                <button onClick={() => entityImportFileRef.current?.click()} className="flex-1 py-4 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"><Upload size={14}/> Subir CSV/Excel</button>
+                <input type="file" ref={entityImportFileRef} className="hidden" accept=".csv, .xlsx, .xls" onChange={handleEntityFileImport} />
+                <button onClick={() => resetForm()} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase">Cancelar</button>
+            </div>
         </div>
-        <p className="text-[9px] font-bold text-slate-400 uppercase leading-relaxed">
-            Pega aquí tus datos. Formato: <span className="text-indigo-600">Nombre, Icono/Emoji, {activeTab === 'FAMILIES' ? 'Tipo (INCOME/EXPENSE)' : activeTab === 'CATEGORIES' ? 'Nombre Familia' : 'Saldo Inicial'}</span>. Una fila por elemento.
-        </p>
-        <textarea 
-            className="w-full h-32 p-4 bg-slate-50 border border-slate-100 rounded-xl font-mono text-[11px] outline-none focus:border-indigo-500 transition-all custom-scrollbar" 
-            placeholder="Ej: Gasolina, ⛽, Vehículo"
-            value={pasteData}
-            onChange={e => setPasteData(e.target.value)}
-        />
-        <div className="flex gap-2">
-            <button onClick={handleQuickImport} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-slate-950 transition-all">Importar Bloque</button>
-            <button onClick={() => resetForm()} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase">Cancelar</button>
-        </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-12 max-w-full overflow-hidden">
@@ -321,6 +488,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       </div>
 
       <div className="max-w-4xl mx-auto">
+        {/* ... (Bloques de ACCOUNTS, FAMILIES, CATEGORIES, RECURRENTS, FAVORITES se mantienen igual, no los cambiamos aquí por brevedad) ... */}
         {activeTab === 'ACCOUNTS' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -380,7 +548,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 </div>
             </div>
         )}
-
+        
         {activeTab === 'FAMILIES' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -512,8 +680,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             </div>
         )}
 
+        {/* ... (RECURRENTS y FAVORITES se mantienen igual) ... */}
         {activeTab === 'RECURRENTS' && (
             <div className="grid grid-cols-1 gap-10">
+                {/* ... (Contenido de RECURRENTS sin cambios) ... */}
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
                         <div className="bg-amber-500 p-3 rounded-2xl text-white shadow-2xl"><Repeat size={24}/></div>
@@ -624,6 +794,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
         {activeTab === 'FAVORITES' && (
             <div className="grid grid-cols-1 gap-10">
+                {/* ... (Contenido de FAVORITES sin cambios) ... */}
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
                         <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Star size={24}/></div>
@@ -707,7 +878,69 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
         {activeTab === 'TOOLS' && (
             <div className="space-y-8">
-                {/* SMART IMPORT BANCARIO */}
+                
+                {/* --- NUEVO BLOQUE: MIGRACIÓN CONTAMONEY (Legacy) --- */}
+                <div className="bg-amber-50 p-10 rounded-[3rem] shadow-sm border border-amber-100 space-y-8 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/10 blur-[80px] -mr-16 -mt-16 pointer-events-none"></div>
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 relative z-10">
+                        <div className="space-y-2 max-w-lg">
+                            <h3 className="text-2xl font-black text-amber-900 uppercase tracking-tighter flex items-center gap-3">
+                                <ArrowRightLeft className="text-amber-600" size={28}/> Asistente de Migración
+                            </h3>
+                            <p className="text-amber-700/60 text-xs font-bold uppercase tracking-widest leading-relaxed">
+                                ¿Vienes de <strong>Contamoney</strong> u otra app antigua? Pega aquí el contenido de tus tablas de Cuentas, Categorías o Exportaciones y la IA reconstruirá tu estructura financiera.
+                            </p>
+                        </div>
+                    </div>
+
+                    {!migrationPreview ? (
+                        <div className="space-y-4">
+                            <textarea 
+                                className="w-full h-40 p-5 bg-white border-2 border-amber-100 rounded-2xl font-mono text-[11px] text-slate-600 outline-none focus:border-amber-400 transition-all custom-scrollbar placeholder:text-amber-200"
+                                placeholder="Ejemplo: Copia la tabla de categorías de Contamoney y pégala aquí..."
+                                value={migrationText}
+                                onChange={e => setMigrationText(e.target.value)}
+                            />
+                            <div className="flex justify-end">
+                                <button 
+                                    onClick={handleMigrationProcess}
+                                    disabled={isMigrating || !migrationText}
+                                    className="px-8 py-4 bg-amber-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                >
+                                    {isMigrating ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16}/>}
+                                    {isMigrating ? 'Analizando estructura...' : 'Procesar Migración'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-white p-6 rounded-3xl border border-amber-100 space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                            <div className="flex items-center gap-3 border-b border-amber-50 pb-4">
+                                <CheckCircle2 className="text-emerald-500" />
+                                <h4 className="font-black text-slate-800 uppercase tracking-tight">Estructura Detectada</h4>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cuentas</span>
+                                    <p className="text-2xl font-black text-slate-900">{migrationPreview.accounts.length}</p>
+                                </div>
+                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Familias</span>
+                                    <p className="text-2xl font-black text-slate-900">{migrationPreview.families.length}</p>
+                                </div>
+                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categorías</span>
+                                    <p className="text-2xl font-black text-slate-900">{migrationPreview.categories.length}</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-3">
+                                <button onClick={confirmMigration} className="flex-1 py-4 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100">Aplicar Migración</button>
+                                <button onClick={() => { setMigrationPreview(null); setMigrationText(''); }} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all">Cancelar</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* SMART IMPORT BANCARIO (Existente) */}
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-50 pb-8">
                         <div className="space-y-2">

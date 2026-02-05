@@ -133,3 +133,55 @@ export const mapBankTransactions = async (
     return [];
   }
 };
+
+/**
+ * Interpreta datos de migración (texto pegado o CSV crudo) para extraer estructura de Cuentas, Familias y Categorías.
+ */
+export const parseMigrationData = async (rawData: string): Promise<{ accounts: any[], families: any[], categories: any[] }> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+    
+    // Limitamos la entrada para no exceder tokens si pegan algo gigante
+    const contentSample = rawData.substring(0, 30000);
+
+    const prompt = `
+      Actúa como un ingeniero de migración de datos. Tengo datos crudos exportados de una aplicación antigua de contabilidad (ej: Contamoney).
+      
+      DATOS CRUDOS:
+      ${contentSample}
+
+      TAREA:
+      Analiza el texto e intenta extraer estructuras de:
+      1. CUENTAS (Bancos, Efectivo, Tarjetas) -> Extrae nombre y saldo aproximado si existe.
+      2. FAMILIAS (Grupos de gastos/ingresos) -> Si no hay familias explícitas, infiérelas de las categorías (ej: "Supermercado" -> Familia "Alimentación").
+      3. CATEGORÍAS -> Asócialas a una Familia.
+
+      OUTPUT FORMAT (JSON):
+      {
+        "accounts": [{ "name": "...", "balance": 0, "currency": "EUR" }],
+        "families": [{ "name": "...", "type": "EXPENSE" | "INCOME" }],
+        "categories": [{ "name": "...", "familyName": "..." }]
+      }
+
+      REGLAS:
+      - Asigna iconos (emojis) apropiados a cada elemento si puedes deducirlos.
+      - Si encuentras movimientos pero no categorías claras, crea categorías genéricas basadas en los conceptos.
+      - Devuelve solo el JSON válido.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json'
+      }
+    });
+
+    const jsonStr = response.text || "{}";
+    return JSON.parse(jsonStr);
+
+  } catch (error) {
+    console.error("Migration parsing error:", error);
+    return { accounts: [], families: [], categories: [] };
+  }
+};
