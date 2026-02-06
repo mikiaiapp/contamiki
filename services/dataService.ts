@@ -1,8 +1,15 @@
 
-import { AppState, Account, Family, Category } from "../types";
+import { AppState, Account, Family, Category, AccountGroup } from "../types";
 import { getToken, getUsername } from "./authService";
 
 const DATA_KEY_PREFIX = 'contamiki_data_';
+
+const defaultAccountGroups: AccountGroup[] = [
+  { id: 'g1', name: 'Bancos', icon: '🏦' },
+  { id: 'g2', name: 'Efectivo', icon: '💶' },
+  { id: 'g3', name: 'Tarjetas', icon: '💳' },
+  { id: 'g4', name: 'Inversión', icon: '📈' },
+];
 
 const defaultFamilies: Family[] = [
   { id: 'f1', name: 'Vivienda', type: 'EXPENSE', icon: '🏠' },
@@ -24,11 +31,12 @@ const defaultCategories: Category[] = [
 ];
 
 const defaultAccounts: Account[] = [
-  { id: 'a1', name: 'Banco Principal', initialBalance: 1000, currency: 'EUR', icon: '🏦' },
-  { id: 'a2', name: 'Cartera / Efectivo', initialBalance: 150, currency: 'EUR', icon: '👛' },
+  { id: 'a1', groupId: 'g1', name: 'Banco Principal', initialBalance: 1000, currency: 'EUR', icon: '🏦' },
+  { id: 'a2', groupId: 'g2', name: 'Cartera / Efectivo', initialBalance: 150, currency: 'EUR', icon: '👛' },
 ];
 
 const defaultState: AppState = {
+    accountGroups: defaultAccountGroups,
     accounts: defaultAccounts,
     families: defaultFamilies,
     categories: defaultCategories,
@@ -54,6 +62,12 @@ export const loadData = async (): Promise<AppState> => {
           if (!data || Object.keys(data).length === 0 || !data.families) {
               return defaultState;
           }
+          // Asegurar que existan grupos de cuenta si vienen de una versión anterior
+          if (!data.accountGroups) {
+              data.accountGroups = defaultAccountGroups;
+              // Asignar grupo por defecto si no tienen
+              data.accounts = data.accounts.map((a: Account) => ({ ...a, groupId: a.groupId || 'g1' }));
+          }
           return data;
       }
       
@@ -62,7 +76,14 @@ export const loadData = async (): Promise<AppState> => {
   } catch (err) {
       // Carga desde localStorage si el servidor falla o no existe
       const localData = localStorage.getItem(DATA_KEY_PREFIX + username);
-      if (localData) return JSON.parse(localData);
+      if (localData) {
+          const parsed = JSON.parse(localData);
+          if (!parsed.accountGroups) {
+              parsed.accountGroups = defaultAccountGroups;
+              parsed.accounts = parsed.accounts.map((a: Account) => ({ ...a, groupId: a.groupId || 'g1' }));
+          }
+          return parsed;
+      }
       return defaultState;
   }
 };

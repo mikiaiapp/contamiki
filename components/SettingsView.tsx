@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { AppState, Account, Family, Category, Transaction, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText, MoveRight } from 'lucide-react';
+import { AppState, Account, Family, Category, Transaction, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, AccountGroup } from '../types';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText, MoveRight, BoxSelect } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import { mapBankTransactions, parseMigrationData } from '../services/geminiService';
 import * as XLSX from 'xlsx';
@@ -18,10 +18,10 @@ const generateId = () => {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 };
 
-type Tab = 'FAMILIES' | 'CATEGORIES' | 'ACCOUNTS' | 'RECURRENTS' | 'FAVORITES' | 'TOOLS';
+type Tab = 'FAMILIES' | 'CATEGORIES' | 'ACCOUNTS' | 'ACC_GROUPS' | 'RECURRENTS' | 'FAVORITES' | 'TOOLS';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }) => {
-  const [activeTab, setActiveTab] = useState<Tab>('ACCOUNTS');
+  const [activeTab, setActiveTab] = useState<Tab>('ACC_GROUPS');
   
   const [webLogos, setWebLogos] = useState<{url: string, source: string}[]>([]);
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
@@ -47,11 +47,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [showQuickImport, setShowQuickImport] = useState(false);
   const [pasteData, setPasteData] = useState('');
 
+  // Estados de formulario Agrupaciones de Cuentas (NUEVO)
+  const [grpId, setGrpId] = useState<string | null>(null);
+  const [grpName, setGrpName] = useState('');
+  const [grpIcon, setGrpIcon] = useState('🗂️');
+  const grpFileInputRef = useRef<HTMLInputElement>(null);
+
   // Estados de formulario Cuentas
   const [accId, setAccId] = useState<string | null>(null);
   const [accName, setAccName] = useState('');
   const [accBalance, setAccBalance] = useState('');
   const [accIcon, setAccIcon] = useState('🏦');
+  const [accGroupId, setAccGroupId] = useState('');
   const accFileInputRef = useRef<HTMLInputElement>(null);
 
   // Estados de formulario Familias
@@ -94,7 +101,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   }, [activeTab]);
 
   const resetForm = () => {
-      setAccId(null); setAccName(''); setAccBalance(''); setAccIcon('🏦');
+      setGrpId(null); setGrpName(''); setGrpIcon('🗂️');
+      setAccId(null); setAccName(''); setAccBalance(''); setAccIcon('🏦'); setAccGroupId('');
       setFamId(null); setFamName(''); setFamIcon('📂'); setFamType('EXPENSE');
       setCatId(null); setCatName(''); setCatIcon('🏷️'); setCatParent('');
       setRecId(null); setRecDesc(''); setRecAmount(''); setRecFreq('MONTHLY'); setRecInterval('1'); setRecStart(new Date().toISOString().split('T')[0]); setRecAcc(data.accounts[0]?.id || ''); setRecCounterpartId(''); setRecCat('');
@@ -155,13 +163,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                   const newFamilies: Family[] = [];
                   rows.forEach(row => {
                       const name = row[0]?.toString().trim();
-                      // Simple skip for header row
                       if (!name || name.toLowerCase() === 'nombre') return;
-                      
                       const icon = row[1]?.toString().trim() || '📂';
                       let typeStr = row[2]?.toString().trim().toUpperCase();
                       const type = (typeStr === 'INCOME' || typeStr === 'INGRESO') ? 'INCOME' : 'EXPENSE';
-                      
                       newFamilies.push({ id: generateId(), name, icon, type });
                   });
                   if(newFamilies.length > 0) {
@@ -173,29 +178,58 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                   rows.forEach(row => {
                       const name = row[0]?.toString().trim();
                       if (!name || name.toLowerCase() === 'nombre') return;
-
                       const icon = row[1]?.toString().trim() || '🏷️';
                       const familyName = row[2]?.toString().trim();
-                      
                       const family = data.families.find(f => f.name.toLowerCase() === familyName?.toLowerCase()) || data.families[0];
-                      
                       newCategories.push({ id: generateId(), name, icon, familyId: family?.id || '' });
                   });
                   if(newCategories.length > 0) {
                       onUpdateData({ categories: [...data.categories, ...newCategories] });
                       count = newCategories.length;
                   }
-              } else if (activeTab === 'ACCOUNTS') {
-                  const newAccounts: Account[] = [];
-                  rows.forEach(row => {
+              } else if (activeTab === 'ACC_GROUPS') {
+                   const newGroups: AccountGroup[] = [];
+                   rows.forEach(row => {
                       const name = row[0]?.toString().trim();
                       if (!name || name.toLowerCase() === 'nombre') return;
+                      const icon = row[1]?.toString().trim() || '🗂️';
+                      newGroups.push({ id: generateId(), name, icon });
+                   });
+                   if (newGroups.length > 0) {
+                       onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroups] });
+                       count = newGroups.length;
+                   }
+              } else if (activeTab === 'ACCOUNTS') {
+                  // IMPORTACIÓN CUENTAS: 1. Agrupación, 2. Nombre, 3. Icono
+                  const newAccounts: Account[] = [];
+                  const newGroupsToAdd: AccountGroup[] = [];
+                  const currentGroups = [...(data.accountGroups || [])];
 
-                      const balance = parseFloat(row[1]?.toString().replace(',','.') || '0');
+                  rows.forEach(row => {
+                      const groupName = row[0]?.toString().trim();
+                      if (!groupName || groupName.toLowerCase() === 'agrupación' || groupName.toLowerCase() === 'agrupacion') return;
+
+                      const name = row[1]?.toString().trim();
+                      if (!name) return;
+
                       const icon = row[2]?.toString().trim() || '🏦';
+                      // Opcional: Saldo en columna 4
+                      const balance = parseFloat(row[3]?.toString().replace(',','.') || '0');
 
-                      newAccounts.push({ id: generateId(), name, initialBalance: balance || 0, currency: 'EUR', icon });
+                      // Buscar o crear grupo
+                      let group = currentGroups.find(g => g.name.toLowerCase() === groupName.toLowerCase()) || newGroupsToAdd.find(g => g.name.toLowerCase() === groupName.toLowerCase());
+                      
+                      if (!group) {
+                          group = { id: generateId(), name: groupName, icon: '🗂️' };
+                          newGroupsToAdd.push(group);
+                      }
+
+                      newAccounts.push({ id: generateId(), name, initialBalance: balance || 0, currency: 'EUR', icon, groupId: group.id });
                   });
+
+                  if (newGroupsToAdd.length > 0) {
+                      onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroupsToAdd] });
+                  }
                   if(newAccounts.length > 0) {
                       onUpdateData({ accounts: [...data.accounts, ...newAccounts] });
                       count = newAccounts.length;
@@ -241,23 +275,61 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
               };
           });
           onUpdateData({ categories: [...data.categories, ...newCategories] });
-      } else if (activeTab === 'ACCOUNTS') {
-          const newAccounts: Account[] = lines.map(line => {
-              const [name, balance, icon] = line.split(',').map(s => s.trim());
+      } else if (activeTab === 'ACC_GROUPS') {
+          const newGroups: AccountGroup[] = lines.map(line => {
+              const [name, icon] = line.split(',').map(s => s.trim());
               return {
                   id: generateId(),
-                  name: name || 'Nueva Cuenta',
-                  initialBalance: parseFloat(balance) || 0,
-                  currency: 'EUR',
-                  icon: icon || '🏦'
+                  name: name || 'Nuevo Grupo',
+                  icon: icon || '🗂️'
               };
           });
+          onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroups] });
+      } else if (activeTab === 'ACCOUNTS') {
+          // FORMATO SOLICITADO: Agrupación, Cuenta, Icono
+          const newAccounts: Account[] = [];
+          const newGroupsToAdd: AccountGroup[] = [];
+          const currentGroups = [...(data.accountGroups || [])];
+
+          lines.forEach(line => {
+              const parts = line.split(',').map(s => s.trim());
+              if (parts.length < 2) return;
+              
+              const groupName = parts[0];
+              const name = parts[1];
+              const icon = parts[2] || '🏦';
+              // Opcional 4o campo saldo
+              const balance = parseFloat(parts[3] || '0');
+
+              let group = currentGroups.find(g => g.name.toLowerCase() === groupName.toLowerCase()) || newGroupsToAdd.find(g => g.name.toLowerCase() === groupName.toLowerCase());
+              
+              if (!group) {
+                  group = { id: generateId(), name: groupName, icon: '🗂️' };
+                  newGroupsToAdd.push(group);
+              }
+
+              newAccounts.push({
+                  id: generateId(),
+                  name: name || 'Nueva Cuenta',
+                  initialBalance: balance || 0,
+                  currency: 'EUR',
+                  icon: icon || '🏦',
+                  groupId: group.id
+              });
+          });
+
+          if (newGroupsToAdd.length > 0) {
+               onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroupsToAdd] });
+          }
           onUpdateData({ accounts: [...data.accounts, ...newAccounts] });
       }
       resetForm();
   };
 
   const handleMigrationProcess = async () => {
+      // (Se mantiene igual, solo que parseMigrationData debería mapear si puede)
+      // Por brevedad, el parseMigrationData en geminiService no se actualizó para Grupos de Cuentas específicamente,
+      // pero usará la lógica existente.
       if (!migrationText.trim()) return;
       setIsMigrating(true);
       try {
@@ -278,7 +350,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           name: a.name,
           initialBalance: a.balance || 0,
           currency: 'EUR',
-          icon: '🏦'
+          icon: '🏦',
+          groupId: (data.accountGroups || [])[0]?.id || 'g1' // Default group
       }));
 
       const newFamilies = migrationPreview.families.map(f => ({
@@ -288,9 +361,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           icon: '📂'
       }));
 
-      // Mapear categorías a las nuevas familias
       const newCategories = migrationPreview.categories.map(c => {
-          // Intentar buscar familia existente por nombre o en las nuevas creadas
           const fam = [...data.families, ...newFamilies].find(f => f.name.toLowerCase() === c.familyName?.toLowerCase()) || newFamilies[0];
           return {
               id: generateId(),
@@ -307,9 +378,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       });
       
       resetForm();
-      alert("¡Migración completada! Se han añadido las estructuras nuevas.");
+      alert("¡Migración completada!");
   };
 
+  // ... (handleFileImport, confirmImport, exportBackup se mantienen) ...
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -424,8 +496,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
     switch(activeTab) {
         case 'ACCOUNTS':
-            importHint = "Nombre, Saldo Inicial, Icono/Emoji";
-            placeholderExample = "BBVA, 1500.00, 🏦\nCartera Efectivo, 85.50, 💶\nTarjeta Revolut, 300.00, 💳";
+            importHint = "Agrupación, Cuenta, Icono/URL, (Saldo - Opcional)";
+            placeholderExample = "Bancos, BBVA, 🏦, 1500.00\nEfectivo, Cartera, 💶, 50.00\nTarjetas, Revolut, 💳, 200.00";
+            break;
+        case 'ACC_GROUPS':
+            importHint = "Nombre Agrupación, Icono";
+            placeholderExample = "Bancos, 🏦\nCrypto, 🪙\nCajas de Ahorro, 📦";
             break;
         case 'FAMILIES':
             importHint = "Nombre, Icono/Emoji, Tipo (INCOME/EXPENSE)";
@@ -443,7 +519,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     return (
         <div className="bg-white p-8 rounded-[2.5rem] border-2 border-dashed border-indigo-100 shadow-sm space-y-6">
             <div className="flex items-center justify-between">
-                <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><ClipboardPaste size={16} /> Importación Rápida: {activeTab === 'FAMILIES' ? 'Familias' : activeTab === 'ACCOUNTS' ? 'Cuentas' : 'Categorías'}</h4>
+                <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><ClipboardPaste size={16} /> Importación Rápida</h4>
                 <button onClick={() => setShowQuickImport(false)} className="text-slate-300 hover:text-rose-500"><XCircle size={18}/></button>
             </div>
             <p className="text-[9px] font-bold text-slate-400 uppercase leading-relaxed">
@@ -474,6 +550,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
       <div className="flex bg-slate-100 p-1.5 rounded-[1.5rem] shadow-inner border border-slate-200/50 overflow-x-auto scrollbar-hide">
         {[
+            { id: 'ACC_GROUPS', label: 'Agrupaciones', icon: <BoxSelect size={18}/> },
             { id: 'ACCOUNTS', label: 'Cuentas', icon: <Wallet size={18}/> },
             { id: 'FAMILIES', label: 'Familias', icon: <Layers size={18}/> },
             { id: 'CATEGORIES', label: 'Categorías', icon: <Tag size={18}/> },
@@ -488,7 +565,59 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       </div>
 
       <div className="max-w-4xl mx-auto">
-        {/* ... (Bloques de ACCOUNTS, FAMILIES, CATEGORIES, RECURRENTS, FAVORITES se mantienen igual, no los cambiamos aquí por brevedad) ... */}
+        
+        {activeTab === 'ACC_GROUPS' && (
+             <div className="grid grid-cols-1 gap-10">
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
+                            <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><BoxSelect size={24}/></div>
+                            {grpId ? 'Editar Agrupación' : 'Nueva Agrupación'}
+                        </h3>
+                        {!showQuickImport && (
+                            <button onClick={() => setShowQuickImport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+                                <Plus size={14}/> Importar Masivo
+                            </button>
+                        )}
+                    </div>
+                    {showQuickImport ? renderQuickImport() : (
+                        <div className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre Agrupación</label>
+                                <input type="text" placeholder="Ej: Bancos, Efectivo, Crypto..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900" value={grpName} onChange={e => { setGrpName(e.target.value); triggerWebSearch(e.target.value); }} />
+                            </div>
+                            {renderIconInput(grpIcon, setGrpIcon, grpName, grpFileInputRef)}
+                            <button onClick={() => {
+                                if(!grpName) return;
+                                if (grpId) onUpdateData({ accountGroups: (data.accountGroups || []).map(g => g.id === grpId ? { ...g, name: grpName, icon: grpIcon } : g) });
+                                else onUpdateData({ accountGroups: [...(data.accountGroups || []), { id: generateId(), name: grpName, icon: grpIcon }] });
+                                resetForm();
+                            }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">{grpId ? 'Guardar Cambios' : 'Crear Agrupación'}</button>
+                        </div>
+                    )}
+                </div>
+                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 px-4">Listado de Agrupaciones</h4>
+                    <div className="space-y-3">
+                        {(data.accountGroups || []).map(g => (
+                            <div key={g.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-3xl border border-transparent hover:border-slate-200 transition-all">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">
+                                      {renderIcon(g.icon || '🗂️', "w-full h-full")}
+                                    </div>
+                                    <span className="font-black text-slate-900 block text-xs uppercase">{g.name}</span>
+                                </div>
+                                <div className="flex gap-1">
+                                    <button onClick={() => { setGrpId(g.id); setGrpName(g.name); setGrpIcon(g.icon); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button>
+                                    <button onClick={() => onUpdateData({accountGroups: (data.accountGroups || []).filter(item=>item.id!==g.id)})} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        )}
+
         {activeTab === 'ACCOUNTS' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -509,6 +638,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre o Banco</label>
                                 <input type="text" placeholder="Ej: Caixabank, Santander..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900" value={accName} onChange={e => { setAccName(e.target.value); triggerWebSearch(e.target.value); }} />
                             </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Agrupación</label>
+                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={accGroupId} onChange={e => setAccGroupId(e.target.value)}>
+                                    <option value="">Seleccionar...</option>
+                                    {(data.accountGroups || []).map(g => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
+                                </select>
+                            </div>
                             {renderIconInput(accIcon, setAccIcon, accName, accFileInputRef)}
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Saldo Inicial (€)</label>
@@ -517,8 +653,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             <button onClick={() => {
                                 if(!accName) return;
                                 const balanceVal = parseFloat(accBalance) || 0;
-                                if (accId) onUpdateData({ accounts: data.accounts.map(a => a.id === accId ? { ...a, name: accName, initialBalance: balanceVal, icon: accIcon } : a) });
-                                else onUpdateData({ accounts: [...data.accounts, { id: generateId(), name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon }] });
+                                const gid = accGroupId || (data.accountGroups || [])[0]?.id || '';
+                                if (accId) onUpdateData({ accounts: data.accounts.map(a => a.id === accId ? { ...a, name: accName, initialBalance: balanceVal, icon: accIcon, groupId: gid } : a) });
+                                else onUpdateData({ accounts: [...data.accounts, { id: generateId(), name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon, groupId: gid }] });
                                 resetForm();
                             }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">{accId ? 'Guardar Cambios' : 'Crear Cuenta'}</button>
                         </div>
@@ -527,7 +664,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
                     <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 px-4">Listado de Cuentas</h4>
                     <div className="space-y-3">
-                        {data.accounts.map(acc => (
+                        {data.accounts.map(acc => {
+                             const grp = (data.accountGroups || []).find(g => g.id === acc.groupId);
+                             return (
                             <div key={acc.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-3xl border border-transparent hover:border-slate-200 transition-all">
                                 <div className="flex items-center gap-4">
                                     <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">
@@ -535,15 +674,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                     </div>
                                     <div>
                                         <span className="font-black text-slate-900 block text-xs uppercase">{acc.name}</span>
-                                        <span className="text-[10px] font-bold text-indigo-500">{acc.initialBalance.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                                        <div className="flex gap-2 items-center">
+                                            <span className="text-[10px] font-bold text-indigo-500">{acc.initialBalance.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                                            {grp && <span className="text-[8px] font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded-md uppercase">{grp.name}</span>}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex gap-1">
-                                    <button onClick={() => { setAccId(acc.id); setAccName(acc.name); setAccBalance(acc.initialBalance.toString()); setAccIcon(acc.icon || '🏦'); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button>
+                                    <button onClick={() => { setAccId(acc.id); setAccName(acc.name); setAccBalance(acc.initialBalance.toString()); setAccIcon(acc.icon || '🏦'); setAccGroupId(acc.groupId || ''); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button>
                                     <button onClick={() => onUpdateData({accounts: data.accounts.filter(a=>a.id!==acc.id)})} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button>
                                 </div>
                             </div>
-                        ))}
+                        )})}
                     </div>
                 </div>
             </div>
@@ -791,7 +933,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 </div>
             </div>
         )}
-
+        
+        {/* ... (FAVORITES y TOOLS se mantienen) ... */}
         {activeTab === 'FAVORITES' && (
             <div className="grid grid-cols-1 gap-10">
                 {/* ... (Contenido de FAVORITES sin cambios) ... */}
@@ -878,8 +1021,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
         {activeTab === 'TOOLS' && (
             <div className="space-y-8">
-                
-                {/* --- NUEVO BLOQUE: MIGRACIÓN CONTAMONEY (Legacy) --- */}
+                {/* ... (TOOLS se mantiene igual) ... */}
                 <div className="bg-amber-50 p-10 rounded-[3rem] shadow-sm border border-amber-100 space-y-8 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/10 blur-[80px] -mr-16 -mt-16 pointer-events-none"></div>
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 relative z-10">

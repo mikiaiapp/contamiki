@@ -2,12 +2,19 @@
 export type TransactionType = 'EXPENSE' | 'INCOME' | 'TRANSFER';
 export type RecurrenceFrequency = 'DAYS' | 'WEEKS' | 'MONTHLY' | 'YEARS';
 
+export interface AccountGroup {
+  id: string;
+  name: string;
+  icon: string;
+}
+
 export interface Account {
   id: string;
   name: string;
   initialBalance: number;
   currency: string;
   icon: string;
+  groupId: string; // Nuevo campo para vincular a una agrupación
 }
 
 export interface Family {
@@ -69,6 +76,7 @@ export interface FavoriteMovement {
 }
 
 export interface AppState {
+  accountGroups: AccountGroup[]; // Nueva colección
   accounts: Account[];
   families: Family[];
   categories: Category[];
