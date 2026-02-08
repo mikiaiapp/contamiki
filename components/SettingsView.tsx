@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, AccountGroup } from '../types';
 import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText, MoveRight, BoxSelect } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
-import { mapBankTransactions, parseMigrationData } from '../services/geminiService';
+import { parseMigrationData } from '../services/geminiService';
 import * as XLSX from 'xlsx';
 
 interface SettingsViewProps {
@@ -18,7 +18,7 @@ const generateId = () => {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 };
 
-type Tab = 'FAMILIES' | 'CATEGORIES' | 'ACCOUNTS' | 'ACC_GROUPS' | 'RECURRENTS' | 'FAVORITES' | 'TOOLS';
+type Tab = 'ACC_GROUPS' | 'ACCOUNTS' | 'FAMILIES' | 'CATEGORIES' | 'RECURRENTS' | 'FAVORITES' | 'TOOLS';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }) => {
   const [activeTab, setActiveTab] = useState<Tab>('ACC_GROUPS');
@@ -27,13 +27,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const searchTimeoutRef = useRef<number | null>(null);
-
-  // Estados de importación inteligente (Bancos)
-  const [isImporting, setIsImporting] = useState(false);
-  const [importStep, setImportStep] = useState<'IDLE' | 'PREVIEW' | 'MAPPING' | 'SUCCESS'>('IDLE');
-  const [importAccount, setImportAccount] = useState(data.accounts[0]?.id || '');
-  const [mappedTransactions, setMappedTransactions] = useState<any[]>([]);
-  const importFileRef = useRef<HTMLInputElement>(null);
 
   // Importador de Entidades (CSV/Excel para Cuentas/Familias/Categorias)
   const entityImportFileRef = useRef<HTMLInputElement>(null);
@@ -46,8 +39,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   // Importación rápida por texto/CSV
   const [showQuickImport, setShowQuickImport] = useState(false);
   const [pasteData, setPasteData] = useState('');
+  const [pasteMovements, setPasteMovements] = useState('');
 
-  // Estados de formulario Agrupaciones de Cuentas (NUEVO)
+  // Estados de formulario Agrupaciones de Cuentas
   const [grpId, setGrpId] = useState<string | null>(null);
   const [grpName, setGrpName] = useState('');
   const [grpIcon, setGrpIcon] = useState('🗂️');
@@ -108,7 +102,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       setRecId(null); setRecDesc(''); setRecAmount(''); setRecFreq('MONTHLY'); setRecInterval('1'); setRecStart(new Date().toISOString().split('T')[0]); setRecAcc(data.accounts[0]?.id || ''); setRecCounterpartId(''); setRecCat('');
       setFavId(null); setFavName(''); setFavAmount(''); setFavAcc(data.accounts[0]?.id || ''); setFavCounterpartId(''); setFavCat('');
       setWebLogos([]); setHasSearched(false);
-      setMappedTransactions([]); setImportStep('IDLE'); setShowQuickImport(false); setPasteData('');
+      setShowQuickImport(false); setPasteData(''); setPasteMovements('');
       setMigrationText(''); setMigrationPreview(null);
       if (entityImportFileRef.current) entityImportFileRef.current.value = '';
   };
@@ -145,7 +139,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const handleEntityFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-
       const reader = new FileReader();
       reader.onload = (evt) => {
           try {
@@ -154,11 +147,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
               const wsname = wb.SheetNames[0];
               const ws = wb.Sheets[wsname];
               const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-
               const rows = rawData.filter(row => row && row.length > 0);
-              
               let count = 0;
-
               if (activeTab === 'FAMILIES') {
                   const newFamilies: Family[] = [];
                   rows.forEach(row => {
@@ -169,10 +159,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                       const type = (typeStr === 'INCOME' || typeStr === 'INGRESO') ? 'INCOME' : 'EXPENSE';
                       newFamilies.push({ id: generateId(), name, icon, type });
                   });
-                  if(newFamilies.length > 0) {
-                      onUpdateData({ families: [...data.families, ...newFamilies] });
-                      count = newFamilies.length;
-                  }
+                  if(newFamilies.length > 0) { onUpdateData({ families: [...data.families, ...newFamilies] }); count = newFamilies.length; }
               } else if (activeTab === 'CATEGORIES') {
                   const newCategories: Category[] = [];
                   rows.forEach(row => {
@@ -183,10 +170,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                       const family = data.families.find(f => f.name.toLowerCase() === familyName?.toLowerCase()) || data.families[0];
                       newCategories.push({ id: generateId(), name, icon, familyId: family?.id || '' });
                   });
-                  if(newCategories.length > 0) {
-                      onUpdateData({ categories: [...data.categories, ...newCategories] });
-                      count = newCategories.length;
-                  }
+                  if(newCategories.length > 0) { onUpdateData({ categories: [...data.categories, ...newCategories] }); count = newCategories.length; }
               } else if (activeTab === 'ACC_GROUPS') {
                    const newGroups: AccountGroup[] = [];
                    rows.forEach(row => {
@@ -195,237 +179,162 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                       const icon = row[1]?.toString().trim() || '🗂️';
                       newGroups.push({ id: generateId(), name, icon });
                    });
-                   if (newGroups.length > 0) {
-                       onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroups] });
-                       count = newGroups.length;
-                   }
+                   if (newGroups.length > 0) { onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroups] }); count = newGroups.length; }
               } else if (activeTab === 'ACCOUNTS') {
-                  // IMPORTACIÓN CUENTAS: 1. Agrupación, 2. Nombre, 3. Icono
                   const newAccounts: Account[] = [];
                   const newGroupsToAdd: AccountGroup[] = [];
                   const currentGroups = [...(data.accountGroups || [])];
-
                   rows.forEach(row => {
                       const groupName = row[0]?.toString().trim();
                       if (!groupName || groupName.toLowerCase() === 'agrupación' || groupName.toLowerCase() === 'agrupacion') return;
-
                       const name = row[1]?.toString().trim();
                       if (!name) return;
-
                       const icon = row[2]?.toString().trim() || '🏦';
-                      // Opcional: Saldo en columna 4
                       const balance = parseFloat(row[3]?.toString().replace(',','.') || '0');
-
-                      // Buscar o crear grupo
                       let group = currentGroups.find(g => g.name.toLowerCase() === groupName.toLowerCase()) || newGroupsToAdd.find(g => g.name.toLowerCase() === groupName.toLowerCase());
-                      
-                      if (!group) {
-                          group = { id: generateId(), name: groupName, icon: '🗂️' };
-                          newGroupsToAdd.push(group);
-                      }
-
+                      if (!group) { group = { id: generateId(), name: groupName, icon: '🗂️' }; newGroupsToAdd.push(group); }
                       newAccounts.push({ id: generateId(), name, initialBalance: balance || 0, currency: 'EUR', icon, groupId: group.id });
                   });
-
-                  if (newGroupsToAdd.length > 0) {
-                      onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroupsToAdd] });
-                  }
-                  if(newAccounts.length > 0) {
-                      onUpdateData({ accounts: [...data.accounts, ...newAccounts] });
-                      count = newAccounts.length;
-                  }
+                  if (newGroupsToAdd.length > 0) onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroupsToAdd] });
+                  if(newAccounts.length > 0) { onUpdateData({ accounts: [...data.accounts, ...newAccounts] }); count = newAccounts.length; }
               }
-              
               if (count > 0) alert(`¡Importación exitosa! Se han añadido ${count} elementos.`);
-              else alert("No se encontraron datos válidos o el formato no es correcto.");
-              
+              else alert("No se encontraron datos válidos.");
               resetForm();
-          } catch (err) {
-              console.error("Error parsing entity file", err);
-              alert("Error al leer el archivo. Asegúrate de que sea un CSV o Excel válido.");
-          }
+          } catch (err) { alert("Error al leer el archivo."); }
       };
       reader.readAsBinaryString(file);
+  };
+
+  const handleManualMovementImport = () => {
+      if (!pasteMovements.trim()) return;
+      const lines = pasteMovements.trim().split('\n');
+      const newTransactions: Transaction[] = [];
+      let skipCount = 0;
+
+      lines.forEach(line => {
+          const parts = line.split(',').map(s => s.trim());
+          if (parts.length < 5) { skipCount++; return; }
+
+          const [fec, catName, accName] = parts;
+          let txType: TransactionType = 'EXPENSE';
+          let catId = '';
+          let familyId = '';
+          let accId = '';
+          let transferAccId = undefined;
+          let concept = '';
+          let amount = 0;
+
+          // Buscar cuenta origen
+          const account = data.accounts.find(a => a.name.toLowerCase() === accName.toLowerCase());
+          if (!account) { skipCount++; return; }
+          accId = account.id;
+
+          if (catName.toLowerCase() === 'traspaso entre cuentas') {
+              if (parts.length < 6) { skipCount++; return; }
+              txType = 'TRANSFER';
+              const destAccName = parts[3];
+              concept = parts[4];
+              amount = parseFloat(parts[5].replace(',','.'));
+              const destAcc = data.accounts.find(a => a.name.toLowerCase() === destAccName.toLowerCase());
+              if (!destAcc) { skipCount++; return; }
+              transferAccId = destAcc.id;
+          } else {
+              concept = parts[3];
+              amount = parseFloat(parts[4].replace(',','.'));
+              const category = data.categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
+              if (!category) { skipCount++; return; }
+              catId = category.id;
+              familyId = category.familyId;
+              txType = data.families.find(f => f.id === familyId)?.type || 'EXPENSE';
+          }
+
+          newTransactions.push({
+              id: generateId(),
+              date: fec,
+              description: concept,
+              amount: Math.abs(amount),
+              type: txType,
+              accountId: accId,
+              transferAccountId: transferAccId,
+              categoryId: catId,
+              familyId: familyId
+          });
+      });
+
+      if (newTransactions.length > 0) {
+          onUpdateData({ transactions: [...data.transactions, ...newTransactions] });
+          alert(`¡Importación finalizada! ${newTransactions.length} movimientos añadidos. ${skipCount > 0 ? `Saltados ${skipCount} por errores.` : ''}`);
+          resetForm();
+      } else {
+          alert("No se pudo importar ningún movimiento. Revisa el formato.");
+      }
   };
 
   const handleQuickImport = () => {
       if (!pasteData.trim()) return;
       const lines = pasteData.trim().split('\n');
-      
       if (activeTab === 'FAMILIES') {
           const newFamilies: Family[] = lines.map(line => {
               const [name, icon, type] = line.split(',').map(s => s.trim());
-              return {
-                  id: generateId(),
-                  name: name || 'Nueva Familia',
-                  icon: icon || '📂',
-                  type: (type === 'INCOME' ? 'INCOME' : 'EXPENSE') as 'INCOME' | 'EXPENSE'
-              };
+              return { id: generateId(), name: name || 'Nueva Familia', icon: icon || '📂', type: (type === 'INCOME' ? 'INCOME' : 'EXPENSE') as any };
           });
           onUpdateData({ families: [...data.families, ...newFamilies] });
       } else if (activeTab === 'CATEGORIES') {
           const newCategories: Category[] = lines.map(line => {
               const [name, icon, familyName] = line.split(',').map(s => s.trim());
               const family = data.families.find(f => f.name.toLowerCase() === familyName?.toLowerCase()) || data.families[0];
-              return {
-                  id: generateId(),
-                  name: name || 'Nueva Categoría',
-                  icon: icon || '🏷️',
-                  familyId: family?.id || ''
-              };
+              return { id: generateId(), name: name || 'Nueva Categoría', icon: icon || '🏷️', familyId: family?.id || '' };
           });
           onUpdateData({ categories: [...data.categories, ...newCategories] });
       } else if (activeTab === 'ACC_GROUPS') {
           const newGroups: AccountGroup[] = lines.map(line => {
               const [name, icon] = line.split(',').map(s => s.trim());
-              return {
-                  id: generateId(),
-                  name: name || 'Nuevo Grupo',
-                  icon: icon || '🗂️'
-              };
+              return { id: generateId(), name: name || 'Nuevo Grupo', icon: icon || '🗂️' };
           });
           onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroups] });
       } else if (activeTab === 'ACCOUNTS') {
-          // FORMATO SOLICITADO: Agrupación, Cuenta, Icono
           const newAccounts: Account[] = [];
           const newGroupsToAdd: AccountGroup[] = [];
           const currentGroups = [...(data.accountGroups || [])];
-
           lines.forEach(line => {
               const parts = line.split(',').map(s => s.trim());
               if (parts.length < 2) return;
-              
               const groupName = parts[0];
               const name = parts[1];
               const icon = parts[2] || '🏦';
-              // Opcional 4o campo saldo
               const balance = parseFloat(parts[3] || '0');
-
               let group = currentGroups.find(g => g.name.toLowerCase() === groupName.toLowerCase()) || newGroupsToAdd.find(g => g.name.toLowerCase() === groupName.toLowerCase());
-              
-              if (!group) {
-                  group = { id: generateId(), name: groupName, icon: '🗂️' };
-                  newGroupsToAdd.push(group);
-              }
-
-              newAccounts.push({
-                  id: generateId(),
-                  name: name || 'Nueva Cuenta',
-                  initialBalance: balance || 0,
-                  currency: 'EUR',
-                  icon: icon || '🏦',
-                  groupId: group.id
-              });
+              if (!group) { group = { id: generateId(), name: groupName, icon: '🗂️' }; newGroupsToAdd.push(group); }
+              newAccounts.push({ id: generateId(), name: name || 'Nueva Cuenta', initialBalance: balance || 0, currency: 'EUR', icon: icon || '🏦', groupId: group.id });
           });
-
-          if (newGroupsToAdd.length > 0) {
-               onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroupsToAdd] });
-          }
+          if (newGroupsToAdd.length > 0) onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroupsToAdd] });
           onUpdateData({ accounts: [...data.accounts, ...newAccounts] });
       }
       resetForm();
   };
 
   const handleMigrationProcess = async () => {
-      // (Se mantiene igual, solo que parseMigrationData debería mapear si puede)
-      // Por brevedad, el parseMigrationData en geminiService no se actualizó para Grupos de Cuentas específicamente,
-      // pero usará la lógica existente.
       if (!migrationText.trim()) return;
       setIsMigrating(true);
       try {
           const result = await parseMigrationData(migrationText);
           setMigrationPreview(result);
-      } catch (e) {
-          alert("Error al analizar los datos de migración.");
-      } finally {
-          setIsMigrating(false);
-      }
+      } catch (e) { alert("Error al analizar los datos."); }
+      finally { setIsMigrating(false); }
   };
 
   const confirmMigration = () => {
       if (!migrationPreview) return;
-      
-      const newAccounts = migrationPreview.accounts.map(a => ({
-          id: generateId(),
-          name: a.name,
-          initialBalance: a.balance || 0,
-          currency: 'EUR',
-          icon: '🏦',
-          groupId: (data.accountGroups || [])[0]?.id || 'g1' // Default group
-      }));
-
-      const newFamilies = migrationPreview.families.map(f => ({
-          id: generateId(),
-          name: f.name,
-          type: (f.type === 'INCOME' ? 'INCOME' : 'EXPENSE') as any,
-          icon: '📂'
-      }));
-
+      const newAccounts = migrationPreview.accounts.map(a => ({ id: generateId(), name: a.name, initialBalance: a.balance || 0, currency: 'EUR', icon: '🏦', groupId: (data.accountGroups || [])[0]?.id || 'g1' }));
+      const newFamilies = migrationPreview.families.map(f => ({ id: generateId(), name: f.name, type: (f.type === 'INCOME' ? 'INCOME' : 'EXPENSE') as any, icon: '📂' }));
       const newCategories = migrationPreview.categories.map(c => {
           const fam = [...data.families, ...newFamilies].find(f => f.name.toLowerCase() === c.familyName?.toLowerCase()) || newFamilies[0];
-          return {
-              id: generateId(),
-              name: c.name,
-              familyId: fam?.id || '',
-              icon: '🏷️'
-          };
+          return { id: generateId(), name: c.name, familyId: fam?.id || '', icon: '🏷️' };
       });
-
-      onUpdateData({
-          accounts: [...data.accounts, ...newAccounts],
-          families: [...data.families, ...newFamilies],
-          categories: [...data.categories, ...newCategories]
-      });
-      
+      onUpdateData({ accounts: [...data.accounts, ...newAccounts], families: [...data.families, ...newFamilies], categories: [...data.categories, ...newCategories] });
       resetForm();
       alert("¡Migración completada!");
-  };
-
-  // ... (handleFileImport, confirmImport, exportBackup se mantienen) ...
-  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      setIsImporting(true);
-      const reader = new FileReader();
-      reader.onload = async (evt) => {
-          try {
-              const bstr = evt.target?.result;
-              const wb = XLSX.read(bstr, { type: 'binary' });
-              const wsname = wb.SheetNames[0];
-              const ws = wb.Sheets[wsname];
-              const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 });
-              
-              const sample = rawData.slice(0, 50);
-              const mapped = await mapBankTransactions(sample, data.categories, data.families);
-              
-              setMappedTransactions(mapped);
-              setImportStep('PREVIEW');
-          } catch (err) {
-              console.error("Error parsing file", err);
-              alert("Error al leer el archivo.");
-          } finally {
-              setIsImporting(false);
-          }
-      };
-      reader.readAsBinaryString(file);
-  };
-
-  const confirmImport = () => {
-      const newTransactions: Transaction[] = mappedTransactions.map(item => ({
-          id: generateId(),
-          date: item.date,
-          amount: item.amount,
-          description: item.description,
-          accountId: importAccount,
-          type: item.type as TransactionType,
-          categoryId: item.categoryId,
-          familyId: item.familyId
-      }));
-
-      onUpdateData({ transactions: [...data.transactions, ...newTransactions] });
-      setImportStep('SUCCESS');
-      setTimeout(() => resetForm(), 3000);
   };
 
   const exportBackup = () => {
@@ -493,29 +402,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const renderQuickImport = () => {
     let importHint = "";
     let placeholderExample = "";
-
     switch(activeTab) {
-        case 'ACCOUNTS':
-            importHint = "Agrupación, Cuenta, Icono/URL, (Saldo - Opcional)";
-            placeholderExample = "Bancos, BBVA, 🏦, 1500.00\nEfectivo, Cartera, 💶, 50.00\nTarjetas, Revolut, 💳, 200.00";
-            break;
-        case 'ACC_GROUPS':
-            importHint = "Nombre Agrupación, Icono";
-            placeholderExample = "Bancos, 🏦\nCrypto, 🪙\nCajas de Ahorro, 📦";
-            break;
-        case 'FAMILIES':
-            importHint = "Nombre, Icono/Emoji, Tipo (INCOME/EXPENSE)";
-            placeholderExample = "Vivienda, 🏠, EXPENSE\nNómina, 💼, INCOME\nOcio y Viajes, ✈️, EXPENSE";
-            break;
-        case 'CATEGORIES':
-            importHint = "Nombre, Icono/Emoji, Nombre de Familia";
-            placeholderExample = "Alquiler, 🔑, Vivienda\nSupermercado, 🛒, Alimentación\nGasolina, ⛽, Vehículo";
-            break;
-        default:
-            importHint = "Formato genérico";
-            placeholderExample = "Dato1, Dato2, Dato3";
+        case 'ACCOUNTS': importHint = "Agrupación, Cuenta, Icono/URL, (Saldo - Opcional)"; placeholderExample = "Bancos, BBVA, 🏦, 1500.00\nEfectivo, Cartera, 💶, 50.00"; break;
+        case 'ACC_GROUPS': importHint = "Nombre Agrupación, Icono"; placeholderExample = "Bancos, 🏦\nCrypto, 🪙"; break;
+        case 'FAMILIES': importHint = "Nombre, Icono/Emoji, Tipo (INCOME/EXPENSE)"; placeholderExample = "Vivienda, 🏠, EXPENSE\nNómina, 💼, INCOME"; break;
+        case 'CATEGORIES': importHint = "Nombre, Icono/Emoji, Nombre de Familia"; placeholderExample = "Alquiler, 🔑, Vivienda\nSupermercado, 🛒, Alimentación"; break;
+        default: importHint = "Formato genérico"; placeholderExample = "Dato1, Dato2, Dato3";
     }
-
     return (
         <div className="bg-white p-8 rounded-[2.5rem] border-2 border-dashed border-indigo-100 shadow-sm space-y-6">
             <div className="flex items-center justify-between">
@@ -525,12 +418,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             <p className="text-[9px] font-bold text-slate-400 uppercase leading-relaxed">
                 Pega aquí tus datos. Formato esperado: <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg">{importHint}</span>. Una fila por elemento.
             </p>
-            <textarea 
-                className="w-full h-40 p-5 bg-slate-50 border border-slate-100 rounded-xl font-mono text-[11px] outline-none focus:border-indigo-500 transition-all custom-scrollbar placeholder:text-slate-300" 
-                placeholder={placeholderExample}
-                value={pasteData}
-                onChange={e => setPasteData(e.target.value)}
-            />
+            <textarea className="w-full h-40 p-5 bg-slate-50 border border-slate-100 rounded-xl font-mono text-[11px] outline-none focus:border-indigo-500 transition-all custom-scrollbar placeholder:text-slate-300" placeholder={placeholderExample} value={pasteData} onChange={e => setPasteData(e.target.value)} />
             <div className="flex flex-wrap gap-2">
                 <button onClick={handleQuickImport} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-slate-950 transition-all">Importar Texto</button>
                 <button onClick={() => entityImportFileRef.current?.click()} className="flex-1 py-4 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"><Upload size={14}/> Subir CSV/Excel</button>
@@ -565,34 +453,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       </div>
 
       <div className="max-w-4xl mx-auto">
-        
         {activeTab === 'ACC_GROUPS' && (
              <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex items-center justify-between">
-                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
-                            <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><BoxSelect size={24}/></div>
-                            {grpId ? 'Editar Agrupación' : 'Nueva Agrupación'}
-                        </h3>
-                        {!showQuickImport && (
-                            <button onClick={() => setShowQuickImport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                                <Plus size={14}/> Importar Masivo
-                            </button>
-                        )}
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4"><div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><BoxSelect size={24}/></div>{grpId ? 'Editar Agrupación' : 'Nueva Agrupación'}</h3>
+                        {!showQuickImport && <button onClick={() => setShowQuickImport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all"><Plus size={14}/> Importar Masivo</button>}
                     </div>
                     {showQuickImport ? renderQuickImport() : (
                         <div className="space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre Agrupación</label>
-                                <input type="text" placeholder="Ej: Bancos, Efectivo, Crypto..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900" value={grpName} onChange={e => { setGrpName(e.target.value); triggerWebSearch(e.target.value); }} />
-                            </div>
+                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre Agrupación</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900" value={grpName} onChange={e => { setGrpName(e.target.value); triggerWebSearch(e.target.value); }} /></div>
                             {renderIconInput(grpIcon, setGrpIcon, grpName, grpFileInputRef)}
-                            <button onClick={() => {
-                                if(!grpName) return;
-                                if (grpId) onUpdateData({ accountGroups: (data.accountGroups || []).map(g => g.id === grpId ? { ...g, name: grpName, icon: grpIcon } : g) });
-                                else onUpdateData({ accountGroups: [...(data.accountGroups || []), { id: generateId(), name: grpName, icon: grpIcon }] });
-                                resetForm();
-                            }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">{grpId ? 'Guardar Cambios' : 'Crear Agrupación'}</button>
+                            <button onClick={() => { if(!grpName) return; if (grpId) onUpdateData({ accountGroups: (data.accountGroups || []).map(g => g.id === grpId ? { ...g, name: grpName, icon: grpIcon } : g) }); else onUpdateData({ accountGroups: [...(data.accountGroups || []), { id: generateId(), name: grpName, icon: grpIcon }] }); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">{grpId ? 'Guardar Cambios' : 'Crear Agrupación'}</button>
                         </div>
                     )}
                 </div>
@@ -601,16 +473,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     <div className="space-y-3">
                         {(data.accountGroups || []).map(g => (
                             <div key={g.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-3xl border border-transparent hover:border-slate-200 transition-all">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">
-                                      {renderIcon(g.icon || '🗂️', "w-full h-full")}
-                                    </div>
-                                    <span className="font-black text-slate-900 block text-xs uppercase">{g.name}</span>
-                                </div>
-                                <div className="flex gap-1">
-                                    <button onClick={() => { setGrpId(g.id); setGrpName(g.name); setGrpIcon(g.icon); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button>
-                                    <button onClick={() => onUpdateData({accountGroups: (data.accountGroups || []).filter(item=>item.id!==g.id)})} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button>
-                                </div>
+                                <div className="flex items-center gap-4"><div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">{renderIcon(g.icon || '🗂️', "w-full h-full")}</div><span className="font-black text-slate-900 block text-xs uppercase">{g.name}</span></div>
+                                <div className="flex gap-1"><button onClick={() => { setGrpId(g.id); setGrpName(g.name); setGrpIcon(g.icon); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button><button onClick={() => onUpdateData({accountGroups: (data.accountGroups || []).filter(item=>item.id!==g.id)})} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button></div>
                             </div>
                         ))}
                     </div>
@@ -622,42 +486,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex items-center justify-between">
-                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
-                            <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Wallet size={24}/></div>
-                            {accId ? 'Editar Cuenta' : 'Nueva Cuenta'}
-                        </h3>
-                        {!showQuickImport && (
-                            <button onClick={() => setShowQuickImport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                                <Plus size={14}/> Importar Masivo
-                            </button>
-                        )}
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4"><div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Wallet size={24}/></div>{accId ? 'Editar Cuenta' : 'Nueva Cuenta'}</h3>
+                        {!showQuickImport && <button onClick={() => setShowQuickImport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all"><Plus size={14}/> Importar Masivo</button>}
                     </div>
                     {showQuickImport ? renderQuickImport() : (
                         <div className="space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre o Banco</label>
-                                <input type="text" placeholder="Ej: Caixabank, Santander..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900" value={accName} onChange={e => { setAccName(e.target.value); triggerWebSearch(e.target.value); }} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Agrupación</label>
-                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={accGroupId} onChange={e => setAccGroupId(e.target.value)}>
-                                    <option value="">Seleccionar...</option>
-                                    {(data.accountGroups || []).map(g => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
-                                </select>
-                            </div>
+                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre o Banco</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900" value={accName} onChange={e => { setAccName(e.target.value); triggerWebSearch(e.target.value); }} /></div>
+                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Agrupación</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={accGroupId} onChange={e => setAccGroupId(e.target.value)}><option value="">Seleccionar...</option>{(data.accountGroups || []).map(g => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}</select></div>
                             {renderIconInput(accIcon, setAccIcon, accName, accFileInputRef)}
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Saldo Inicial (€)</label>
-                                <input type="number" placeholder="0.00" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
-                            </div>
-                            <button onClick={() => {
-                                if(!accName) return;
-                                const balanceVal = parseFloat(accBalance) || 0;
-                                const gid = accGroupId || (data.accountGroups || [])[0]?.id || '';
-                                if (accId) onUpdateData({ accounts: data.accounts.map(a => a.id === accId ? { ...a, name: accName, initialBalance: balanceVal, icon: accIcon, groupId: gid } : a) });
-                                else onUpdateData({ accounts: [...data.accounts, { id: generateId(), name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon, groupId: gid }] });
-                                resetForm();
-                            }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">{accId ? 'Guardar Cambios' : 'Crear Cuenta'}</button>
+                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Saldo Inicial (€)</label><input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-slate-900" value={accBalance} onChange={e => setAccBalance(e.target.value)} /></div>
+                            <button onClick={() => { if(!accName) return; const balanceVal = parseFloat(accBalance) || 0; const gid = accGroupId || (data.accountGroups || [])[0]?.id || ''; if (accId) onUpdateData({ accounts: data.accounts.map(a => a.id === accId ? { ...a, name: accName, initialBalance: balanceVal, icon: accIcon, groupId: gid } : a) }); else onUpdateData({ accounts: [...data.accounts, { id: generateId(), name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon, groupId: gid }] }); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">{accId ? 'Guardar Cambios' : 'Crear Cuenta'}</button>
                         </div>
                     )}
                 </div>
@@ -668,22 +506,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                              const grp = (data.accountGroups || []).find(g => g.id === acc.groupId);
                              return (
                             <div key={acc.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-3xl border border-transparent hover:border-slate-200 transition-all">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">
-                                      {renderIcon(acc.icon || '🏦', "w-full h-full")}
-                                    </div>
-                                    <div>
-                                        <span className="font-black text-slate-900 block text-xs uppercase">{acc.name}</span>
-                                        <div className="flex gap-2 items-center">
-                                            <span className="text-[10px] font-bold text-indigo-500">{acc.initialBalance.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
-                                            {grp && <span className="text-[8px] font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded-md uppercase">{grp.name}</span>}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex gap-1">
-                                    <button onClick={() => { setAccId(acc.id); setAccName(acc.name); setAccBalance(acc.initialBalance.toString()); setAccIcon(acc.icon || '🏦'); setAccGroupId(acc.groupId || ''); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button>
-                                    <button onClick={() => onUpdateData({accounts: data.accounts.filter(a=>a.id!==acc.id)})} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button>
-                                </div>
+                                <div className="flex items-center gap-4"><div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">{renderIcon(acc.icon || '🏦', "w-full h-full")}</div><div><span className="font-black text-slate-900 block text-xs uppercase">{acc.name}</span><div className="flex gap-2 items-center"><span className="text-[10px] font-bold text-indigo-500">{acc.initialBalance.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>{grp && <span className="text-[8px] font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded-md uppercase">{grp.name}</span>}</div></div></div>
+                                <div className="flex gap-1"><button onClick={() => { setAccId(acc.id); setAccName(acc.name); setAccBalance(acc.initialBalance.toString()); setAccIcon(acc.icon || '🏦'); setAccGroupId(acc.groupId || ''); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button><button onClick={() => onUpdateData({accounts: data.accounts.filter(a=>a.id!==acc.id)})} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button></div>
                             </div>
                         )})}
                     </div>
@@ -691,6 +515,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             </div>
         )}
         
+        {/* ... (Las pestañas FAMILIES, CATEGORIES, RECURRENTS, FAVORITES se mantienen igual) ... */}
         {activeTab === 'FAMILIES' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -822,10 +647,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             </div>
         )}
 
-        {/* ... (RECURRENTS y FAVORITES se mantienen igual) ... */}
         {activeTab === 'RECURRENTS' && (
             <div className="grid grid-cols-1 gap-10">
-                {/* ... (Contenido de RECURRENTS sin cambios) ... */}
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
                         <div className="bg-amber-500 p-3 rounded-2xl text-white shadow-2xl"><Repeat size={24}/></div>
@@ -933,11 +756,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 </div>
             </div>
         )}
-        
-        {/* ... (FAVORITES y TOOLS se mantienen) ... */}
+
         {activeTab === 'FAVORITES' && (
             <div className="grid grid-cols-1 gap-10">
-                {/* ... (Contenido de FAVORITES sin cambios) ... */}
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
                         <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Star size={24}/></div>
@@ -1021,7 +842,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
         {activeTab === 'TOOLS' && (
             <div className="space-y-8">
-                {/* ... (TOOLS se mantiene igual) ... */}
+                
+                {/* IMPORTADOR DE MOVIMIENTOS POR TEXTO */}
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+                        <div className="space-y-2">
+                            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
+                                <ClipboardPaste className="text-indigo-600" size={28}/> Importador de Movimientos
+                            </h3>
+                            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest leading-relaxed">
+                                Formato: <strong>fecha, categoria, cuenta, [cuenta_destino], concepto, importe</strong>
+                            </p>
+                        </div>
+                    </div>
+                    <div className="space-y-4">
+                        <textarea 
+                            className="w-full h-40 p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-mono text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-all custom-scrollbar placeholder:text-slate-200"
+                            placeholder="2023-10-27, Alimentación, Mi Banco, Compra cena, 25.50&#10;2023-10-28, Traspaso entre cuentas, Mi Banco, Efectivo, Retirada, 50.00"
+                            value={pasteMovements}
+                            onChange={e => setPasteMovements(e.target.value)}
+                        />
+                        <div className="flex justify-end gap-3">
+                            <button onClick={handleManualMovementImport} className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-indigo-200">
+                                Procesar Movimientos
+                            </button>
+                            <button onClick={() => setPasteMovements('')} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase">Borrar</button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* MIGRACIÓN CONTAMONEY */}
                 <div className="bg-amber-50 p-10 rounded-[3rem] shadow-sm border border-amber-100 space-y-8 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/10 blur-[80px] -mr-16 -mt-16 pointer-events-none"></div>
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 relative z-10">
@@ -1030,136 +880,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                 <ArrowRightLeft className="text-amber-600" size={28}/> Asistente de Migración
                             </h3>
                             <p className="text-amber-700/60 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                                ¿Vienes de <strong>Contamoney</strong> u otra app antigua? Pega aquí el contenido de tus tablas de Cuentas, Categorías o Exportaciones y la IA reconstruirá tu estructura financiera.
+                                ¿Vienes de <strong>Contamoney</strong> u otra app antigua? Pega aquí el contenido de tus tablas y Gemini reconstruirá tu estructura.
                             </p>
                         </div>
                     </div>
 
                     {!migrationPreview ? (
                         <div className="space-y-4">
-                            <textarea 
-                                className="w-full h-40 p-5 bg-white border-2 border-amber-100 rounded-2xl font-mono text-[11px] text-slate-600 outline-none focus:border-amber-400 transition-all custom-scrollbar placeholder:text-amber-200"
-                                placeholder="Ejemplo: Copia la tabla de categorías de Contamoney y pégala aquí..."
-                                value={migrationText}
-                                onChange={e => setMigrationText(e.target.value)}
-                            />
-                            <div className="flex justify-end">
-                                <button 
-                                    onClick={handleMigrationProcess}
-                                    disabled={isMigrating || !migrationText}
-                                    className="px-8 py-4 bg-amber-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                >
-                                    {isMigrating ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16}/>}
-                                    {isMigrating ? 'Analizando estructura...' : 'Procesar Migración'}
-                                </button>
-                            </div>
+                            <textarea className="w-full h-40 p-5 bg-white border-2 border-amber-100 rounded-2xl font-mono text-[11px] text-slate-600 outline-none focus:border-amber-400 transition-all custom-scrollbar placeholder:text-amber-200" placeholder="Pega aquí tu tabla de categorías o cuentas..." value={migrationText} onChange={e => setMigrationText(e.target.value)} />
+                            <div className="flex justify-end"><button onClick={handleMigrationProcess} disabled={isMigrating || !migrationText} className="px-8 py-4 bg-amber-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-200 disabled:opacity-50 flex items-center gap-2">{isMigrating ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16}/>}{isMigrating ? 'Analizando...' : 'Procesar Migración'}</button></div>
                         </div>
                     ) : (
                         <div className="bg-white p-6 rounded-3xl border border-amber-100 space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                            <div className="flex items-center gap-3 border-b border-amber-50 pb-4">
-                                <CheckCircle2 className="text-emerald-500" />
-                                <h4 className="font-black text-slate-800 uppercase tracking-tight">Estructura Detectada</h4>
-                            </div>
+                            <div className="flex items-center gap-3 border-b border-amber-50 pb-4"><CheckCircle2 className="text-emerald-500" /><h4 className="font-black text-slate-800 uppercase tracking-tight">Estructura Detectada</h4></div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cuentas</span>
-                                    <p className="text-2xl font-black text-slate-900">{migrationPreview.accounts.length}</p>
-                                </div>
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Familias</span>
-                                    <p className="text-2xl font-black text-slate-900">{migrationPreview.families.length}</p>
-                                </div>
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categorías</span>
-                                    <p className="text-2xl font-black text-slate-900">{migrationPreview.categories.length}</p>
-                                </div>
+                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cuentas</span><p className="text-2xl font-black text-slate-900">{migrationPreview.accounts.length}</p></div>
+                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Familias</span><p className="text-2xl font-black text-slate-900">{migrationPreview.families.length}</p></div>
+                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categorías</span><p className="text-2xl font-black text-slate-900">{migrationPreview.categories.length}</p></div>
                             </div>
-                            <div className="flex gap-3">
-                                <button onClick={confirmMigration} className="flex-1 py-4 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100">Aplicar Migración</button>
-                                <button onClick={() => { setMigrationPreview(null); setMigrationText(''); }} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all">Cancelar</button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* SMART IMPORT BANCARIO (Existente) */}
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-50 pb-8">
-                        <div className="space-y-2">
-                            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3"><ShieldCheck className="text-indigo-600" size={28}/> Smart Bank Import</h3>
-                            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">IA impulsada por Gemini para volcado masivo</p>
-                        </div>
-                        <button onClick={() => importFileRef.current?.click()} className="flex items-center justify-center gap-3 px-8 py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-indigo-200">
-                           <FileSpreadsheet size={20} /> Seleccionar Extracto
-                        </button>
-                        <input type="file" ref={importFileRef} className="hidden" accept=".csv, .xlsx, .xls" onChange={handleFileImport} />
-                    </div>
-
-                    {isImporting ? (
-                        <div className="py-20 flex flex-col items-center justify-center gap-6 animate-pulse">
-                            <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                            <div className="text-center space-y-2">
-                                <p className="text-[10px] font-black text-slate-900 uppercase tracking-[0.4em]">Gemini está analizando tu extracto...</p>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Identificando columnas y categorizando movimientos</p>
-                            </div>
-                        </div>
-                    ) : importStep === 'IDLE' ? (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {[
-                                { icon: <Upload className="text-indigo-500" />, title: "Sube tu archivo", desc: "Descarga el Excel/CSV de cualquier banco y arrástralo aquí." },
-                                { icon: <Sparkles className="text-indigo-500" />, title: "IA de Mapeo", desc: "Nuestra IA identifica fechas, importes y sugiere categorías automáticamente." },
-                                { icon: <CheckCircle2 className="text-indigo-500" />, title: "Confirma y vuelca", desc: "Revisa los movimientos sugeridos y añádelos a tu cuenta en un clic." }
-                            ].map((step, i) => (
-                                <div key={i} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-3">
-                                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm border border-slate-100">{step.icon}</div>
-                                    <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-tight">{step.title}</h4>
-                                    <p className="text-[9px] font-bold text-slate-400 leading-relaxed uppercase">{step.desc}</p>
-                                </div>
-                            ))}
-                        </div>
-                    ) : importStep === 'PREVIEW' ? (
-                        <div className="space-y-8 animate-in fade-in zoom-in-95 duration-500">
-                            <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 flex flex-col md:flex-row items-center justify-between gap-6">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100"><Info size={24}/></div>
-                                    <div className="space-y-1">
-                                        <h4 className="text-[11px] font-black text-indigo-900 uppercase">Previsualización de Importación</h4>
-                                        <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Hemos identificado {mappedTransactions.length} movimientos potenciales.</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-4 w-full md:w-auto">
-                                    <select className="flex-1 md:w-48 px-4 py-4 bg-white border border-indigo-200 rounded-xl font-bold text-[10px] uppercase outline-none focus:border-indigo-600 transition-all" value={importAccount} onChange={e => setImportAccount(e.target.value)}>
-                                        {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                    </select>
-                                    <button onClick={confirmImport} className="px-8 py-4 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-100">Vuelcar ahora</button>
-                                </div>
-                            </div>
-                            
-                            <div className="max-h-[400px] overflow-y-auto pr-4 custom-scrollbar space-y-2">
-                                {mappedTransactions.map((tx, idx) => (
-                                    <div key={idx} className="p-4 bg-white rounded-2xl border border-slate-100 flex items-center justify-between gap-4 hover:border-indigo-200 transition-colors">
-                                        <div className="flex items-center gap-4 min-w-0">
-                                            <div className="bg-slate-50 px-3 py-2 rounded-lg text-[9px] font-black text-slate-400 shrink-0">{tx.date}</div>
-                                            <div className="min-w-0">
-                                                <p className="text-[10px] font-black text-slate-800 uppercase truncate">{tx.description}</p>
-                                                <p className="text-[8px] font-bold text-indigo-500 uppercase tracking-tighter">Categoría: {data.categories.find(c => c.id === tx.categoryId)?.name || 'Sin Categoría'}</p>
-                                            </div>
-                                        </div>
-                                        <span className={`text-xs font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'} shrink-0`}>
-                                            {tx.type === 'INCOME' ? '+' : '-'}{tx.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                            <button onClick={resetForm} className="w-full py-4 text-[10px] font-black uppercase text-slate-400 hover:text-rose-500 transition-colors">Cancelar Importación</button>
-                        </div>
-                    ) : (
-                        <div className="py-20 flex flex-col items-center justify-center gap-6 animate-in zoom-in-95 duration-500">
-                             <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-[2rem] flex items-center justify-center shadow-xl shadow-emerald-100"><ShieldCheck size={40}/></div>
-                             <div className="text-center space-y-2">
-                                <h4 className="text-xl font-black text-slate-900 uppercase">¡Importación Exitosa!</h4>
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em]">Tus finanzas han sido actualizadas correctamente</p>
-                             </div>
+                            <div className="flex gap-3"><button onClick={confirmMigration} className="flex-1 py-4 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100">Aplicar Migración</button><button onClick={() => { setMigrationPreview(null); setMigrationText(''); }} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all">Cancelar</button></div>
                         </div>
                     )}
                 </div>
