@@ -1,7 +1,7 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, AccountGroup } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText, MoveRight, BoxSelect, AlertOctagon } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText, MoveRight, BoxSelect, AlertOctagon, Eraser, AlertTriangle } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import { parseMigrationData } from '../services/geminiService';
 import * as XLSX from 'xlsx';
@@ -89,6 +89,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [favCounterpartId, setFavCounterpartId] = useState('');
   const [favCat, setFavCat] = useState('');
 
+  // Estados Borrado Masivo
+  const [massDeleteYear, setMassDeleteYear] = useState<string | null>(null);
+
   useEffect(() => { 
     setWebLogos([]); 
     setHasSearched(false);
@@ -104,7 +107,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       setFavId(null); setFavName(''); setFavAmount(''); setFavAcc(data.accounts[0]?.id || ''); setFavCounterpartId(''); setFavCat('');
       setWebLogos([]); setHasSearched(false);
       setShowQuickImport(false); setPasteData(''); setPasteMovements(''); setImportErrors([]);
-      setMigrationText(''); setMigrationPreview(null);
+      setMigrationText(''); setMigrationPreview(null); setMassDeleteYear(null);
       if (entityImportFileRef.current) entityImportFileRef.current.value = '';
   };
 
@@ -216,7 +219,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       lines.forEach((line, index) => {
           const parts = line.split(',').map(s => s.trim());
           if (parts.length < 5) { 
-              errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente (mínimo 5 campos)" });
+              errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente (mínimo 5 campos: fecha, categoria, cuenta, concepto, importe)" });
               return; 
           }
 
@@ -239,7 +242,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
           if (catName.toLowerCase() === 'traspaso entre cuentas') {
               if (parts.length < 6) { 
-                  errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente para traspaso (mínimo 6 campos)" });
+                  errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente para traspaso (fecha, categoria, cuenta, cuenta_destino, concepto, importe)" });
                   return; 
               }
               txType = 'TRANSFER';
@@ -270,12 +273,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
               return;
           }
 
+          // Lógica de signos solicitada:
+          // Negativo -> Gasto (EXPENSE)
+          // Positivo -> Ingreso o Devolución de Gasto (INCOME)
           if (txType !== 'TRANSFER') {
-              // Lógica de signo:
-              // Negativo -> Gasto (EXPENSE)
-              // Positivo -> Ingreso o Devolución (INCOME)
-              if (amountVal < 0) txType = 'EXPENSE';
-              else txType = 'INCOME';
+              txType = amountVal < 0 ? 'EXPENSE' : 'INCOME';
           }
 
           newTransactions.push({
@@ -297,6 +299,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
       if (errors.length > 0) {
           setImportErrors(errors);
+          if (newTransactions.length > 0) {
+              alert(`Importación parcial: ${newTransactions.length} movimientos añadidos, pero se detectaron ${errors.length} errores.`);
+          }
       } else {
           alert(`¡Importación finalizada con éxito! ${newTransactions.length} movimientos añadidos.`);
           resetForm();
@@ -307,8 +312,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       if (importErrors.length === 0) return;
       const ws = XLSX.utils.json_to_sheet(importErrors);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Errores de Importación");
+      XLSX.utils.book_append_sheet(wb, ws, "Errores");
       XLSX.writeFile(wb, `errores_importacion_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const transactionsPerYear = useMemo(() => {
+    const counts: Record<string, number> = {};
+    data.transactions.forEach(t => {
+        const year = t.date.split('-')[0];
+        if (year && year.length === 4) {
+            counts[year] = (counts[year] || 0) + 1;
+        }
+    });
+    return Object.entries(counts).sort((a,b) => b[0].localeCompare(a[0]));
+  }, [data.transactions]);
+
+  const handleMassDelete = (year: string) => {
+      const updatedTxs = data.transactions.filter(t => !t.date.startsWith(year));
+      onUpdateData({ transactions: updatedTxs });
+      setMassDeleteYear(null);
+      alert(`Se han eliminado todos los movimientos del año ${year}.`);
   };
 
   const handleQuickImport = () => {
@@ -882,6 +905,51 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         {activeTab === 'TOOLS' && (
             <div className="space-y-8">
                 
+                {/* BORRADO MASIVO POR AÑO */}
+                <div className="bg-rose-50 p-10 rounded-[3rem] shadow-sm border border-rose-100 space-y-8">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+                        <div className="space-y-2">
+                            <h3 className="text-2xl font-black text-rose-900 uppercase tracking-tighter flex items-center gap-3">
+                                <Eraser className="text-rose-600" size={28}/> Borrado Masivo por Año
+                            </h3>
+                            <p className="text-rose-700/60 text-xs font-bold uppercase tracking-widest leading-relaxed">
+                                Elimina permanentemente todos los movimientos de un año específico para limpiar datos migrados.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {transactionsPerYear.length > 0 ? transactionsPerYear.map(([year, count]) => (
+                            <div key={year} className="bg-white p-6 rounded-2xl border border-rose-100 flex flex-col justify-between gap-4 group hover:shadow-lg transition-all relative overflow-hidden">
+                                {massDeleteYear === year ? (
+                                    <div className="absolute inset-0 bg-rose-600 text-white p-4 flex flex-col justify-center items-center text-center animate-in fade-in zoom-in-95">
+                                        <AlertTriangle size={24} className="mb-2" />
+                                        <p className="text-[10px] font-black uppercase mb-3">¿Seguro de borrar {year}?</p>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => handleMassDelete(year)} className="px-3 py-1.5 bg-white text-rose-600 rounded-lg text-[9px] font-black uppercase">Borrar</button>
+                                            <button onClick={() => setMassDeleteYear(null)} className="px-3 py-1.5 bg-rose-800 text-white rounded-lg text-[9px] font-black uppercase">No</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <span className="text-2xl font-black text-slate-900 tracking-tighter">{year}</span>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{count} movimientos</p>
+                                        </div>
+                                        <button onClick={() => setMassDeleteYear(year)} className="w-full py-3 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl font-black text-[9px] uppercase hover:bg-rose-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2">
+                                            <Trash2 size={14} /> Eliminar Año
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        )) : (
+                            <div className="col-span-full py-10 text-center space-y-2">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No hay movimientos registrados para borrar.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 {/* IMPORTADOR DE MOVIMIENTOS POR TEXTO */}
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
@@ -911,7 +979,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
                     {importErrors.length > 0 && (
                         <div className="bg-rose-50 p-8 rounded-3xl border border-rose-100 space-y-6 animate-in fade-in slide-in-from-top-4">
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between border-b border-rose-100 pb-4">
                                 <div className="flex items-center gap-3 text-rose-600">
                                     <AlertOctagon size={24} />
                                     <h4 className="font-black uppercase text-sm tracking-tight">Detectados {importErrors.length} errores</h4>
@@ -921,15 +989,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                 </button>
                             </div>
                             <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-2 pr-2">
-                                {importErrors.slice(0, 10).map((err, i) => (
+                                {importErrors.slice(0, 15).map((err, i) => (
                                     <div key={i} className="bg-white/50 p-3 rounded-xl border border-rose-100 flex justify-between gap-4 text-[9px] font-bold">
                                         <span className="text-rose-600 shrink-0">Fila {err.fila}:</span>
                                         <span className="text-slate-600 flex-1 truncate">{err.dato}</span>
                                         <span className="text-rose-500 italic">{err.error}</span>
                                     </div>
                                 ))}
-                                {importErrors.length > 10 && (
-                                    <p className="text-[8px] text-slate-400 font-black uppercase text-center">... y {importErrors.length - 10} errores más</p>
+                                {importErrors.length > 15 && (
+                                    <p className="text-[8px] text-slate-400 font-black uppercase text-center">... y {importErrors.length - 15} errores más. Descarga el informe para verlos todos.</p>
                                 )}
                             </div>
                         </div>
