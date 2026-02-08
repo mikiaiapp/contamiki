@@ -36,11 +36,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationPreview, setMigrationPreview] = useState<{accounts: any[], families: any[], categories: any[]} | null>(null);
 
-  // Importación rápida por texto/CSV
-  const [showQuickImport, setShowQuickImport] = useState(false);
-  const [pasteData, setPasteData] = useState('');
+  // Importación rápida por texto/CSV de movimientos
   const [pasteMovements, setPasteMovements] = useState('');
   const [importErrors, setImportErrors] = useState<{fila: number, dato: string, error: string}[]>([]);
+
+  // Estados de formulario masivo general
+  const [showQuickImport, setShowQuickImport] = useState(false);
+  const [pasteData, setPasteData] = useState('');
 
   // Estados de formulario Agrupaciones de Cuentas
   const [grpId, setGrpId] = useState<string | null>(null);
@@ -219,7 +221,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       lines.forEach((line, index) => {
           const parts = line.split(',').map(s => s.trim());
           if (parts.length < 5) { 
-              errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente (mínimo 5 campos: fecha, categoria, cuenta, concepto, importe)" });
+              errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente (fecha, categoria, cuenta, concepto, importe)" });
               return; 
           }
 
@@ -235,14 +237,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           // Buscar cuenta origen
           const account = data.accounts.find(a => a.name.toLowerCase() === accName.toLowerCase());
           if (!account) { 
-              errors.push({ fila: index + 1, dato: line, error: `Cuenta no encontrada: ${accName}` });
+              errors.push({ fila: index + 1, dato: line, error: `Cuenta "${accName}" no encontrada en el sistema` });
               return; 
           }
           accId = account.id;
 
           if (catName.toLowerCase() === 'traspaso entre cuentas') {
               if (parts.length < 6) { 
-                  errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente para traspaso (fecha, categoria, cuenta, cuenta_destino, concepto, importe)" });
+                  errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente para traspaso (faltan campos)" });
                   return; 
               }
               txType = 'TRANSFER';
@@ -251,7 +253,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
               amountStr = parts[5];
               const destAcc = data.accounts.find(a => a.name.toLowerCase() === destAccName.toLowerCase());
               if (!destAcc) { 
-                  errors.push({ fila: index + 1, dato: line, error: `Cuenta destino no encontrada: ${destAccName}` });
+                  errors.push({ fila: index + 1, dato: line, error: `Cuenta destino "${destAccName}" no encontrada` });
                   return; 
               }
               transferAccId = destAcc.id;
@@ -260,7 +262,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
               amountStr = parts[4];
               const category = data.categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
               if (!category) { 
-                  errors.push({ fila: index + 1, dato: line, error: `Categoría no encontrada: ${catName}` });
+                  errors.push({ fila: index + 1, dato: line, error: `Categoría "${catName}" no existe` });
                   return; 
               }
               catId = category.id;
@@ -269,11 +271,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
           const amountVal = parseFloat(amountStr.replace(',','.'));
           if (isNaN(amountVal)) {
-              errors.push({ fila: index + 1, dato: line, error: `Importe no válido: ${amountStr}` });
+              errors.push({ fila: index + 1, dato: line, error: `Importe "${amountStr}" no numérico` });
               return;
           }
 
-          // Lógica de signos solicitada:
+          // Lógica de signos inteligente:
           // Negativo -> Gasto (EXPENSE)
           // Positivo -> Ingreso o Devolución de Gasto (INCOME)
           if (txType !== 'TRANSFER') {
@@ -300,10 +302,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       if (errors.length > 0) {
           setImportErrors(errors);
           if (newTransactions.length > 0) {
-              alert(`Importación parcial: ${newTransactions.length} movimientos añadidos, pero se detectaron ${errors.length} errores.`);
+              alert(`Importación completada con avisos: ${newTransactions.length} añadidos, ${errors.length} errores detectados. Revisa el reporte.`);
           }
       } else {
-          alert(`¡Importación finalizada con éxito! ${newTransactions.length} movimientos añadidos.`);
+          alert(`¡Éxito! ${newTransactions.length} movimientos importados correctamente.`);
           resetForm();
       }
   };
@@ -312,7 +314,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       if (importErrors.length === 0) return;
       const ws = XLSX.utils.json_to_sheet(importErrors);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Errores");
+      XLSX.utils.book_append_sheet(wb, ws, "Errores Importacion");
       XLSX.writeFile(wb, `errores_importacion_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
@@ -324,6 +326,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             counts[year] = (counts[year] || 0) + 1;
         }
     });
+    // Aseguramos que el listado pueda manejar años desde 2015 aunque no haya movimientos
+    // pero aquí mostramos solo los que TIENEN datos para que el usuario sepa qué puede borrar.
     return Object.entries(counts).sort((a,b) => b[0].localeCompare(a[0]));
   }, [data.transactions]);
 
@@ -331,7 +335,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       const updatedTxs = data.transactions.filter(t => !t.date.startsWith(year));
       onUpdateData({ transactions: updatedTxs });
       setMassDeleteYear(null);
-      alert(`Se han eliminado todos los movimientos del año ${year}.`);
+      alert(`Limpieza completada: Se han borrado todos los movimientos de ${year}.`);
   };
 
   const handleQuickImport = () => {
@@ -369,7 +373,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
               const balance = parseFloat(parts[3] || '0');
               let group = currentGroups.find(g => g.name.toLowerCase() === groupName.toLowerCase()) || newGroupsToAdd.find(g => g.name.toLowerCase() === groupName.toLowerCase());
               if (!group) { group = { id: generateId(), name: groupName, icon: '🗂️' }; newGroupsToAdd.push(group); }
-              newAccounts.push({ id: generateId(), name: name || 'Nueva Cuenta', initialBalance: balance || 0, currency: 'EUR', icon: icon || '🏦', groupId: group.id });
+              newAccounts.push({ id: generateId(), name, initialBalance: balance || 0, currency: 'EUR', icon: icon || '🏦', groupId: group.id });
           });
           if (newGroupsToAdd.length > 0) onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroupsToAdd] });
           onUpdateData({ accounts: [...data.accounts, ...newAccounts] });
@@ -383,7 +387,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       try {
           const result = await parseMigrationData(migrationText);
           setMigrationPreview(result);
-      } catch (e) { alert("Error al analizar los datos."); }
+      } catch (e) { alert("Error al analizar los datos con Gemini."); }
       finally { setIsMigrating(false); }
   };
 
@@ -397,7 +401,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       });
       onUpdateData({ accounts: [...data.accounts, ...newAccounts], families: [...data.families, ...newFamilies], categories: [...data.categories, ...newCategories] });
       resetForm();
-      alert("¡Migración completada!");
+      alert("¡Estructura migrada correctamente!");
   };
 
   const exportBackup = () => {
@@ -903,7 +907,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         )}
 
         {activeTab === 'TOOLS' && (
-            <div className="space-y-8">
+            <div className="space-y-8 pb-10">
                 
                 {/* BORRADO MASIVO POR AÑO */}
                 <div className="bg-rose-50 p-10 rounded-[3rem] shadow-sm border border-rose-100 space-y-8">
@@ -913,38 +917,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                 <Eraser className="text-rose-600" size={28}/> Borrado Masivo por Año
                             </h3>
                             <p className="text-rose-700/60 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                                Elimina permanentemente todos los movimientos de un año específico para limpiar datos migrados.
+                                Elimina permanentemente todos los movimientos de un año específico. <br/>
+                                <span className="text-rose-600">Punto de partida configurado para historiales desde 2015.</span>
                             </p>
                         </div>
                     </div>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         {transactionsPerYear.length > 0 ? transactionsPerYear.map(([year, count]) => (
-                            <div key={year} className="bg-white p-6 rounded-2xl border border-rose-100 flex flex-col justify-between gap-4 group hover:shadow-lg transition-all relative overflow-hidden">
+                            <div key={year} className="bg-white p-6 rounded-3xl border border-rose-100 flex flex-col justify-between gap-4 group hover:shadow-lg transition-all relative overflow-hidden">
                                 {massDeleteYear === year ? (
-                                    <div className="absolute inset-0 bg-rose-600 text-white p-4 flex flex-col justify-center items-center text-center animate-in fade-in zoom-in-95">
-                                        <AlertTriangle size={24} className="mb-2" />
-                                        <p className="text-[10px] font-black uppercase mb-3">¿Seguro de borrar {year}?</p>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => handleMassDelete(year)} className="px-3 py-1.5 bg-white text-rose-600 rounded-lg text-[9px] font-black uppercase">Borrar</button>
-                                            <button onClick={() => setMassDeleteYear(null)} className="px-3 py-1.5 bg-rose-800 text-white rounded-lg text-[9px] font-black uppercase">No</button>
+                                    <div className="absolute inset-0 bg-rose-600 text-white p-6 flex flex-col justify-center items-center text-center animate-in fade-in zoom-in-95">
+                                        <AlertTriangle size={32} className="mb-2" />
+                                        <p className="text-[11px] font-black uppercase mb-4">¿Borrar {year} permanentemente?</p>
+                                        <div className="flex gap-2 w-full">
+                                            <button onClick={() => handleMassDelete(year)} className="flex-1 py-3 bg-white text-rose-600 rounded-xl text-[10px] font-black uppercase shadow-lg">Confirmar</button>
+                                            <button onClick={() => setMassDeleteYear(null)} className="flex-1 py-3 bg-rose-800 text-white rounded-xl text-[10px] font-black uppercase">No</button>
                                         </div>
                                     </div>
                                 ) : (
                                     <>
                                         <div>
-                                            <span className="text-2xl font-black text-slate-900 tracking-tighter">{year}</span>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{count} movimientos</p>
+                                            <span className="text-3xl font-black text-slate-900 tracking-tighter">{year}</span>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{count} movimientos</p>
                                         </div>
-                                        <button onClick={() => setMassDeleteYear(year)} className="w-full py-3 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl font-black text-[9px] uppercase hover:bg-rose-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2">
-                                            <Trash2 size={14} /> Eliminar Año
+                                        <button onClick={() => setMassDeleteYear(year)} className="w-full py-4 bg-rose-50 text-rose-600 border border-rose-100 rounded-2xl font-black text-[10px] uppercase hover:bg-rose-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2 group-hover:scale-105 transition-transform">
+                                            <Trash2 size={16} /> Purgar Año
                                         </button>
                                     </>
                                 )}
                             </div>
                         )) : (
-                            <div className="col-span-full py-10 text-center space-y-2">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No hay movimientos registrados para borrar.</p>
+                            <div className="col-span-full py-20 text-center space-y-4 border-2 border-dashed border-rose-200 rounded-[2.5rem] bg-white">
+                                <Info size={40} className="mx-auto text-rose-200" />
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">No hay movimientos registrados para purgar.</p>
                             </div>
                         )}
                     </div>
@@ -957,92 +963,111 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
                                 <ClipboardPaste className="text-indigo-600" size={28}/> Importador de Movimientos
                             </h3>
-                            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                                Formato: <strong>fecha, categoria, cuenta, [cuenta_destino], concepto, importe</strong>
-                            </p>
+                            <div className="space-y-1">
+                                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest leading-relaxed">
+                                    Formato: <strong>fecha, categoria, cuenta, concepto, importe</strong>
+                                </p>
+                                <p className="text-indigo-500 text-[10px] font-black uppercase tracking-widest">
+                                    Si es Traspaso: <strong>fecha, Traspaso entre cuentas, cuenta_origen, cuenta_destino, concepto, importe</strong>
+                                </p>
+                            </div>
                         </div>
                     </div>
                     <div className="space-y-4">
                         <textarea 
-                            className="w-full h-40 p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-mono text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-all custom-scrollbar placeholder:text-slate-200"
-                            placeholder="2023-10-27, Alimentación, Mi Banco, Compra cena, -25.50&#10;2023-10-28, Traspaso entre cuentas, Mi Banco, Efectivo, Retirada, 50.00"
+                            className="w-full h-48 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-all custom-scrollbar placeholder:text-slate-200 shadow-inner"
+                            placeholder="2023-10-27, Alimentación, Mi Banco, Compra cena, -25.50&#10;2023-10-28, Traspaso entre cuentas, Mi Banco, Efectivo, Retirada de cajero, 50.00"
                             value={pasteMovements}
                             onChange={e => setPasteMovements(e.target.value)}
                         />
-                        <div className="flex justify-end gap-3">
-                            <button onClick={handleManualMovementImport} className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-indigo-200">
-                                Procesar Movimientos
-                            </button>
-                            <button onClick={() => { setPasteMovements(''); setImportErrors([]); }} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase">Borrar</button>
+                        <div className="flex justify-between items-center bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100">
+                             <div className="flex items-center gap-3 text-indigo-600">
+                                <Sparkles size={20} />
+                                <p className="text-[10px] font-black uppercase tracking-widest leading-none">El sistema detectará el signo: Negativos son Gastos, Positivos son Ingresos.</p>
+                             </div>
+                             <div className="flex gap-3">
+                                <button onClick={handleManualMovementImport} className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-indigo-200">
+                                    Importar Datos
+                                </button>
+                                <button onClick={() => { setPasteMovements(''); setImportErrors([]); }} className="px-6 py-4 bg-white text-slate-500 border border-slate-200 rounded-xl font-black text-[10px] uppercase">Limpiar</button>
+                             </div>
                         </div>
                     </div>
 
                     {importErrors.length > 0 && (
-                        <div className="bg-rose-50 p-8 rounded-3xl border border-rose-100 space-y-6 animate-in fade-in slide-in-from-top-4">
-                            <div className="flex items-center justify-between border-b border-rose-100 pb-4">
+                        <div className="bg-rose-50 p-8 rounded-[2.5rem] border border-rose-100 space-y-6 animate-in fade-in slide-in-from-top-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-rose-100 pb-4">
                                 <div className="flex items-center gap-3 text-rose-600">
-                                    <AlertOctagon size={24} />
-                                    <h4 className="font-black uppercase text-sm tracking-tight">Detectados {importErrors.length} errores</h4>
+                                    <AlertOctagon size={28} />
+                                    <div>
+                                        <h4 className="font-black uppercase text-base tracking-tight">Detectados {importErrors.length} errores</h4>
+                                        <p className="text-[10px] font-bold uppercase text-rose-400">Corrige los datos en el Excel y vuelve a pegarlos</p>
+                                    </div>
                                 </div>
-                                <button onClick={downloadErrorReport} className="flex items-center gap-2 px-4 py-2 bg-white text-rose-600 border border-rose-200 rounded-xl font-black text-[9px] uppercase hover:bg-rose-600 hover:text-white transition-all shadow-sm">
-                                    <FileSpreadsheet size={14} /> Descargar Informe (.xlsx)
+                                <button onClick={downloadErrorReport} className="flex items-center justify-center gap-3 px-6 py-4 bg-white text-rose-600 border-2 border-rose-200 rounded-2xl font-black text-[11px] uppercase hover:bg-rose-600 hover:text-white transition-all shadow-lg active:scale-95">
+                                    <FileSpreadsheet size={20} /> Descargar Reporte (.xlsx)
                                 </button>
                             </div>
-                            <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-2 pr-2">
-                                {importErrors.slice(0, 15).map((err, i) => (
-                                    <div key={i} className="bg-white/50 p-3 rounded-xl border border-rose-100 flex justify-between gap-4 text-[9px] font-bold">
-                                        <span className="text-rose-600 shrink-0">Fila {err.fila}:</span>
-                                        <span className="text-slate-600 flex-1 truncate">{err.dato}</span>
-                                        <span className="text-rose-500 italic">{err.error}</span>
+                            <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2 pr-4">
+                                {importErrors.map((err, i) => (
+                                    <div key={i} className="bg-white/80 p-4 rounded-xl border border-rose-100 flex flex-col sm:flex-row justify-between gap-4 text-[10px] font-bold shadow-sm">
+                                        <div className="flex gap-4 items-center">
+                                            <span className="text-rose-600 bg-rose-100 px-3 py-1 rounded-lg shrink-0">Fila {err.fila}</span>
+                                            <span className="text-slate-400 italic flex-1 break-all line-clamp-1">"{err.dato}"</span>
+                                        </div>
+                                        <span className="text-rose-700 font-black uppercase text-right shrink-0">{err.error}</span>
                                     </div>
                                 ))}
-                                {importErrors.length > 15 && (
-                                    <p className="text-[8px] text-slate-400 font-black uppercase text-center">... y {importErrors.length - 15} errores más. Descarga el informe para verlos todos.</p>
-                                )}
                             </div>
                         </div>
                     )}
                 </div>
 
-                {/* MIGRACIÓN CONTAMONEY */}
+                {/* MIGRACIÓN INTELIGENTE */}
                 <div className="bg-amber-50 p-10 rounded-[3rem] shadow-sm border border-amber-100 space-y-8 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/10 blur-[80px] -mr-16 -mt-16 pointer-events-none"></div>
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 relative z-10">
                         <div className="space-y-2 max-w-lg">
                             <h3 className="text-2xl font-black text-amber-900 uppercase tracking-tighter flex items-center gap-3">
-                                <ArrowRightLeft className="text-amber-600" size={28}/> Asistente de Migración
+                                <ArrowRightLeft className="text-amber-600" size={28}/> Asistente de Migración IA
                             </h3>
                             <p className="text-amber-700/60 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                                ¿Vienes de <strong>Contamoney</strong> u otra app antigua? Pega aquí el contenido de tus tablas y Gemini reconstruirá tu estructura.
+                                Pega aquí tablas crudas de **Contamoney** u otras apps. Gemini extraerá automáticamente cuentas y categorías con iconos apropiados.
                             </p>
                         </div>
                     </div>
 
                     {!migrationPreview ? (
                         <div className="space-y-4">
-                            <textarea className="w-full h-40 p-5 bg-white border-2 border-amber-100 rounded-2xl font-mono text-[11px] text-slate-600 outline-none focus:border-amber-400 transition-all custom-scrollbar placeholder:text-amber-200" placeholder="Pega aquí tu tabla de categorías o cuentas..." value={migrationText} onChange={e => setMigrationText(e.target.value)} />
-                            <div className="flex justify-end"><button onClick={handleMigrationProcess} disabled={isMigrating || !migrationText} className="px-8 py-4 bg-amber-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-200 disabled:opacity-50 flex items-center gap-2">{isMigrating ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16}/>}{isMigrating ? 'Analizando...' : 'Procesar Migración'}</button></div>
+                            <textarea className="w-full h-40 p-5 bg-white border-2 border-amber-100 rounded-[2rem] font-mono text-[11px] text-slate-600 outline-none focus:border-amber-400 transition-all custom-scrollbar placeholder:text-amber-200" placeholder="Pega aquí el contenido copiado de tus tablas antiguas..." value={migrationText} onChange={e => setMigrationText(e.target.value)} />
+                            <div className="flex justify-end"><button onClick={handleMigrationProcess} disabled={isMigrating || !migrationText} className="px-8 py-4 bg-amber-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-200 disabled:opacity-50 flex items-center gap-2">{isMigrating ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16}/>}{isMigrating ? 'Analizando con Gemini...' : 'Procesar Estructura'}</button></div>
                         </div>
                     ) : (
-                        <div className="bg-white p-6 rounded-3xl border border-amber-100 space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                            <div className="flex items-center gap-3 border-b border-amber-50 pb-4"><CheckCircle2 className="text-emerald-500" /><h4 className="font-black text-slate-800 uppercase tracking-tight">Estructura Detectada</h4></div>
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-amber-100 space-y-6 animate-in fade-in slide-in-from-bottom-4 shadow-xl">
+                            <div className="flex items-center gap-3 border-b border-amber-50 pb-4"><CheckCircle2 className="text-emerald-500" /><h4 className="font-black text-slate-800 uppercase tracking-tight">Estructura Detectada por la IA</h4></div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cuentas</span><p className="text-2xl font-black text-slate-900">{migrationPreview.accounts.length}</p></div>
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Familias</span><p className="text-2xl font-black text-slate-900">{migrationPreview.families.length}</p></div>
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categorías</span><p className="text-2xl font-black text-slate-900">{migrationPreview.categories.length}</p></div>
+                                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 text-center"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cuentas</span><p className="text-3xl font-black text-slate-900">{migrationPreview.accounts.length}</p></div>
+                                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 text-center"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Familias</span><p className="text-3xl font-black text-slate-900">{migrationPreview.families.length}</p></div>
+                                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 text-center"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categorías</span><p className="text-3xl font-black text-slate-900">{migrationPreview.categories.length}</p></div>
                             </div>
-                            <div className="flex gap-3"><button onClick={confirmMigration} className="flex-1 py-4 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100">Aplicar Migración</button><button onClick={() => { setMigrationPreview(null); setMigrationText(''); }} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all">Cancelar</button></div>
+                            <div className="flex gap-3"><button onClick={confirmMigration} className="flex-1 py-5 bg-emerald-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100">Aplicar Nueva Estructura</button><button onClick={() => { setMigrationPreview(null); setMigrationText(''); }} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-black text-[11px] uppercase hover:bg-slate-200 transition-all">Cancelar</button></div>
                         </div>
                     )}
                 </div>
 
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-10 text-center">
-                    <div className="mx-auto bg-indigo-100 text-indigo-600 w-20 h-20 rounded-3xl flex items-center justify-center shadow-xl shadow-indigo-500/10"><Upload size={36} /></div>
-                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Exportación de Datos</h3>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest leading-relaxed">Genera copias de seguridad de tus datos para máxima soberanía.</p>
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                        <button onClick={exportBackup} className="flex-1 flex items-center justify-center gap-3 p-6 bg-slate-950 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] hover:bg-indigo-600 transition-all shadow-xl active:scale-95"><FileJson size={20} /> Exportar JSON</button>
-                        <button onClick={() => window.print()} className="flex-1 flex items-center justify-center gap-3 p-6 bg-white text-slate-900 rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] border-2 border-slate-100 hover:bg-slate-50 transition-all active:scale-95"><Download size={20} /> Informe PDF</button>
+                {/* COPIAS DE SEGURIDAD */}
+                <div className="bg-slate-900 p-10 rounded-[3rem] shadow-2xl border border-white/5 space-y-10 text-center relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-full bg-indigo-600/5 mix-blend-overlay"></div>
+                    <div className="relative z-10 space-y-8">
+                        <div className="mx-auto bg-indigo-600 text-white w-20 h-20 rounded-3xl flex items-center justify-center shadow-2xl shadow-indigo-600/30 rotate-3"><DatabaseZap size={36} /></div>
+                        <div className="space-y-2">
+                            <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Soberanía de Datos</h3>
+                            <p className="text-slate-400 text-sm font-bold uppercase tracking-widest leading-relaxed max-w-md mx-auto text-balance">Tus finanzas son tuyas. Genera copias de seguridad completas en formato JSON o informes listos para imprimir.</p>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                            <button onClick={exportBackup} className="flex-1 flex items-center justify-center gap-3 p-6 bg-white text-slate-900 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-indigo-50 transition-all shadow-xl active:scale-95"><FileJson size={20} /> Exportar JSON</button>
+                            <button onClick={() => window.print()} className="flex-1 flex items-center justify-center gap-3 p-6 bg-slate-800 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] border border-white/10 hover:bg-slate-700 transition-all active:scale-95"><Download size={20} /> Generar PDF</button>
+                        </div>
                     </div>
                 </div>
             </div>
