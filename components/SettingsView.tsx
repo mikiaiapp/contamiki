@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, AccountGroup } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText, MoveRight, BoxSelect } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText, MoveRight, BoxSelect, AlertOctagon } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import { parseMigrationData } from '../services/geminiService';
 import * as XLSX from 'xlsx';
@@ -40,6 +40,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [showQuickImport, setShowQuickImport] = useState(false);
   const [pasteData, setPasteData] = useState('');
   const [pasteMovements, setPasteMovements] = useState('');
+  const [importErrors, setImportErrors] = useState<{fila: number, dato: string, error: string}[]>([]);
 
   // Estados de formulario Agrupaciones de Cuentas
   const [grpId, setGrpId] = useState<string | null>(null);
@@ -102,7 +103,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       setRecId(null); setRecDesc(''); setRecAmount(''); setRecFreq('MONTHLY'); setRecInterval('1'); setRecStart(new Date().toISOString().split('T')[0]); setRecAcc(data.accounts[0]?.id || ''); setRecCounterpartId(''); setRecCat('');
       setFavId(null); setFavName(''); setFavAmount(''); setFavAcc(data.accounts[0]?.id || ''); setFavCounterpartId(''); setFavCat('');
       setWebLogos([]); setHasSearched(false);
-      setShowQuickImport(false); setPasteData(''); setPasteMovements('');
+      setShowQuickImport(false); setPasteData(''); setPasteMovements(''); setImportErrors([]);
       setMigrationText(''); setMigrationPreview(null);
       if (entityImportFileRef.current) entityImportFileRef.current.value = '';
   };
@@ -210,11 +211,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       if (!pasteMovements.trim()) return;
       const lines = pasteMovements.trim().split('\n');
       const newTransactions: Transaction[] = [];
-      let skipCount = 0;
+      const errors: {fila: number, dato: string, error: string}[] = [];
 
-      lines.forEach(line => {
+      lines.forEach((line, index) => {
           const parts = line.split(',').map(s => s.trim());
-          if (parts.length < 5) { skipCount++; return; }
+          if (parts.length < 5) { 
+              errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente (mínimo 5 campos)" });
+              return; 
+          }
 
           const [fec, catName, accName] = parts;
           let txType: TransactionType = 'EXPENSE';
@@ -223,37 +227,62 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           let accId = '';
           let transferAccId = undefined;
           let concept = '';
-          let amount = 0;
+          let amountStr = '';
 
           // Buscar cuenta origen
           const account = data.accounts.find(a => a.name.toLowerCase() === accName.toLowerCase());
-          if (!account) { skipCount++; return; }
+          if (!account) { 
+              errors.push({ fila: index + 1, dato: line, error: `Cuenta no encontrada: ${accName}` });
+              return; 
+          }
           accId = account.id;
 
           if (catName.toLowerCase() === 'traspaso entre cuentas') {
-              if (parts.length < 6) { skipCount++; return; }
+              if (parts.length < 6) { 
+                  errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente para traspaso (mínimo 6 campos)" });
+                  return; 
+              }
               txType = 'TRANSFER';
               const destAccName = parts[3];
               concept = parts[4];
-              amount = parseFloat(parts[5].replace(',','.'));
+              amountStr = parts[5];
               const destAcc = data.accounts.find(a => a.name.toLowerCase() === destAccName.toLowerCase());
-              if (!destAcc) { skipCount++; return; }
+              if (!destAcc) { 
+                  errors.push({ fila: index + 1, dato: line, error: `Cuenta destino no encontrada: ${destAccName}` });
+                  return; 
+              }
               transferAccId = destAcc.id;
           } else {
               concept = parts[3];
-              amount = parseFloat(parts[4].replace(',','.'));
+              amountStr = parts[4];
               const category = data.categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
-              if (!category) { skipCount++; return; }
+              if (!category) { 
+                  errors.push({ fila: index + 1, dato: line, error: `Categoría no encontrada: ${catName}` });
+                  return; 
+              }
               catId = category.id;
               familyId = category.familyId;
-              txType = data.families.find(f => f.id === familyId)?.type || 'EXPENSE';
+          }
+
+          const amountVal = parseFloat(amountStr.replace(',','.'));
+          if (isNaN(amountVal)) {
+              errors.push({ fila: index + 1, dato: line, error: `Importe no válido: ${amountStr}` });
+              return;
+          }
+
+          if (txType !== 'TRANSFER') {
+              // Lógica de signo:
+              // Negativo -> Gasto (EXPENSE)
+              // Positivo -> Ingreso o Devolución (INCOME)
+              if (amountVal < 0) txType = 'EXPENSE';
+              else txType = 'INCOME';
           }
 
           newTransactions.push({
               id: generateId(),
               date: fec,
               description: concept,
-              amount: Math.abs(amount),
+              amount: Math.abs(amountVal),
               type: txType,
               accountId: accId,
               transferAccountId: transferAccId,
@@ -264,11 +293,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
       if (newTransactions.length > 0) {
           onUpdateData({ transactions: [...data.transactions, ...newTransactions] });
-          alert(`¡Importación finalizada! ${newTransactions.length} movimientos añadidos. ${skipCount > 0 ? `Saltados ${skipCount} por errores.` : ''}`);
-          resetForm();
-      } else {
-          alert("No se pudo importar ningún movimiento. Revisa el formato.");
       }
+
+      if (errors.length > 0) {
+          setImportErrors(errors);
+      } else {
+          alert(`¡Importación finalizada con éxito! ${newTransactions.length} movimientos añadidos.`);
+          resetForm();
+      }
+  };
+
+  const downloadErrorReport = () => {
+      if (importErrors.length === 0) return;
+      const ws = XLSX.utils.json_to_sheet(importErrors);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Errores de Importación");
+      XLSX.writeFile(wb, `errores_importacion_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleQuickImport = () => {
@@ -515,7 +555,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             </div>
         )}
         
-        {/* ... (Las pestañas FAMILIES, CATEGORIES, RECURRENTS, FAVORITES se mantienen igual) ... */}
         {activeTab === 'FAMILIES' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -858,7 +897,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     <div className="space-y-4">
                         <textarea 
                             className="w-full h-40 p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-mono text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-all custom-scrollbar placeholder:text-slate-200"
-                            placeholder="2023-10-27, Alimentación, Mi Banco, Compra cena, 25.50&#10;2023-10-28, Traspaso entre cuentas, Mi Banco, Efectivo, Retirada, 50.00"
+                            placeholder="2023-10-27, Alimentación, Mi Banco, Compra cena, -25.50&#10;2023-10-28, Traspaso entre cuentas, Mi Banco, Efectivo, Retirada, 50.00"
                             value={pasteMovements}
                             onChange={e => setPasteMovements(e.target.value)}
                         />
@@ -866,9 +905,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             <button onClick={handleManualMovementImport} className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-indigo-200">
                                 Procesar Movimientos
                             </button>
-                            <button onClick={() => setPasteMovements('')} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase">Borrar</button>
+                            <button onClick={() => { setPasteMovements(''); setImportErrors([]); }} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase">Borrar</button>
                         </div>
                     </div>
+
+                    {importErrors.length > 0 && (
+                        <div className="bg-rose-50 p-8 rounded-3xl border border-rose-100 space-y-6 animate-in fade-in slide-in-from-top-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3 text-rose-600">
+                                    <AlertOctagon size={24} />
+                                    <h4 className="font-black uppercase text-sm tracking-tight">Detectados {importErrors.length} errores</h4>
+                                </div>
+                                <button onClick={downloadErrorReport} className="flex items-center gap-2 px-4 py-2 bg-white text-rose-600 border border-rose-200 rounded-xl font-black text-[9px] uppercase hover:bg-rose-600 hover:text-white transition-all shadow-sm">
+                                    <FileSpreadsheet size={14} /> Descargar Informe (.xlsx)
+                                </button>
+                            </div>
+                            <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                                {importErrors.slice(0, 10).map((err, i) => (
+                                    <div key={i} className="bg-white/50 p-3 rounded-xl border border-rose-100 flex justify-between gap-4 text-[9px] font-bold">
+                                        <span className="text-rose-600 shrink-0">Fila {err.fila}:</span>
+                                        <span className="text-slate-600 flex-1 truncate">{err.dato}</span>
+                                        <span className="text-rose-500 italic">{err.error}</span>
+                                    </div>
+                                ))}
+                                {importErrors.length > 10 && (
+                                    <p className="text-[8px] text-slate-400 font-black uppercase text-center">... y {importErrors.length - 10} errores más</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* MIGRACIÓN CONTAMONEY */}

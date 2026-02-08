@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, Family, Category, Account, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Sparkles, Paperclip, Calendar, Filter, ChevronDown, MoreVertical, Repeat, Star, Edit3, AlertTriangle, Tag, ChevronUp, ChevronLeft, ChevronRight, Copy, Save, Clock, FileSpreadsheet, Upload, Info, ShieldCheck, CheckCircle2, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Sparkles, Paperclip, Calendar, Filter, ChevronDown, MoreVertical, Repeat, Star, Edit3, AlertTriangle, Tag, ChevronUp, ChevronLeft, ChevronRight, Copy, Save, Clock, FileSpreadsheet, Upload, Info, ShieldCheck, CheckCircle2, Loader2, Eraser } from 'lucide-react';
 import { mapBankTransactions } from './services/geminiService';
 import * as XLSX from 'xlsx';
 
@@ -35,6 +35,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [importAccount, setImportAccount] = useState(data.accounts[0]?.id || '');
   const [mappedTransactions, setMappedTransactions] = useState<any[]>([]);
   const importFileRef = useRef<HTMLInputElement>(null);
+
+  // Estados para Borrado Masivo
+  const [showMassDelete, setShowMassDelete] = useState(false);
+  const [massDeleteYear, setMassDeleteYear] = useState<string | null>(null);
 
   // Modales de conversión
   const [txToFavorite, setTxToFavorite] = useState<Transaction | null>(null);
@@ -150,7 +154,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       setTimeout(() => { setShowSmartImport(false); setImportStep('IDLE'); }, 3000);
   };
 
-  // Fixed: Moved dateBounds before filteredTransactions to resolve TDZ error.
   const dateBounds = useMemo(() => {
     if (filterTime === 'ALL') return null;
     const y = referenceDate.getFullYear();
@@ -204,6 +207,21 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     });
     return result;
   }, [data.transactions, searchTerm, filterTime, dateBounds, filterFamily, filterCategory, filterAccount, sortField, sortDirection]);
+
+  const transactionsPerYear = useMemo(() => {
+      const counts: Record<string, number> = {};
+      data.transactions.forEach(t => {
+          const year = t.date.split('-')[0];
+          counts[year] = (counts[year] || 0) + 1;
+      });
+      return Object.entries(counts).sort((a,b) => b[0].localeCompare(a[0]));
+  }, [data.transactions]);
+
+  const handleMassDelete = (year: string) => {
+      const updatedTxs = data.transactions.filter(t => !t.date.startsWith(year));
+      onUpdateData({ transactions: updatedTxs });
+      setMassDeleteYear(null);
+  };
 
   const navigatePeriod = (direction: 'prev' | 'next') => {
     const newDate = new Date(referenceDate);
@@ -299,6 +317,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter leading-none">Movimientos.</h2>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3 w-full xl:w-auto">
+            <button onClick={() => setShowMassDelete(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-rose-50 text-rose-600 border border-rose-100 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-100 transition-all active:scale-95 shadow-sm">
+                <Eraser size={16} /> Borrado Masivo
+            </button>
             <button onClick={() => setShowSmartImport(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-4 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all active:scale-95 shadow-sm">
                 <Sparkles size={16} /> Smart Import
             </button>
@@ -310,6 +331,56 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             </button>
         </div>
       </div>
+
+      {/* MODAL BORRADO MASIVO */}
+      {showMassDelete && (
+          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[300] p-6 animate-in fade-in duration-300">
+              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 sm:p-12 relative flex flex-col max-h-[90vh] overflow-hidden">
+                  <button onClick={() => { setShowMassDelete(false); setMassDeleteYear(null); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:bg-rose-50 hover:text-rose-600 transition-all"><X size={20}/></button>
+                  <div className="mb-8 space-y-2">
+                      <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3"><Eraser className="text-rose-600" size={28}/> Limpieza de Datos</h3>
+                      <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em]">Elimina movimientos por periodos anuales</p>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
+                      {massDeleteYear ? (
+                          <div className="bg-rose-50 p-8 rounded-3xl border border-rose-100 space-y-6 animate-in zoom-in-95">
+                              <div className="flex items-center gap-4 text-rose-600">
+                                  <AlertTriangle size={32} />
+                                  <h4 className="text-lg font-black uppercase">¡Atención!</h4>
+                              </div>
+                              <p className="text-sm font-bold text-rose-900/70 leading-relaxed uppercase">
+                                  Estás a punto de eliminar permanentemente todos los movimientos del año <span className="text-rose-600 font-black">{massDeleteYear}</span>. Esta acción no se puede deshacer.
+                              </p>
+                              <div className="flex gap-3">
+                                  <button onClick={() => handleMassDelete(massDeleteYear)} className="flex-1 py-4 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-rose-500/20 hover:bg-rose-700 transition-all">Sí, eliminar todo</button>
+                                  <button onClick={() => setMassDeleteYear(null)} className="flex-1 py-4 bg-white text-slate-500 rounded-xl border border-slate-200 font-black text-[10px] uppercase hover:bg-slate-50 transition-all">Cancelar</button>
+                              </div>
+                          </div>
+                      ) : (
+                          <div className="grid grid-cols-1 gap-3">
+                              {transactionsPerYear.length > 0 ? transactionsPerYear.map(([year, count]) => (
+                                  <div key={year} className="bg-slate-50 p-6 rounded-2xl flex items-center justify-between border border-slate-100 group hover:border-indigo-200 transition-all">
+                                      <div>
+                                          <span className="text-2xl font-black text-slate-900 tracking-tighter">{year}</span>
+                                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{count} movimientos detectados</p>
+                                      </div>
+                                      <button onClick={() => setMassDeleteYear(year)} className="flex items-center gap-2 px-5 py-3 bg-white text-rose-500 border border-rose-100 rounded-xl font-black text-[9px] uppercase hover:bg-rose-500 hover:text-white transition-all shadow-sm">
+                                          <Trash2 size={14} /> Eliminar Año
+                                      </button>
+                                  </div>
+                              )) : (
+                                  <div className="py-20 text-center space-y-4">
+                                      <div className="bg-slate-100 w-16 h-16 rounded-3xl mx-auto flex items-center justify-center text-slate-300"><Info size={32}/></div>
+                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">No hay movimientos registrados.</p>
+                                  </div>
+                              )}
+                          </div>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
 
       <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
           <div className="relative group w-full">
