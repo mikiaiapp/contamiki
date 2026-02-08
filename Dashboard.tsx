@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { AppState, Transaction, GlobalFilter } from './types';
-import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, Paperclip } from 'lucide-react';
+import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 
 interface DashboardProps {
   data: AppState;
@@ -25,7 +25,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
       const lastDay = new Date(y, m + 1, 0).getDate();
       endStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
     } else if (filter.timeRange === 'QUARTER') {
-      const quarter = Math.floor(m / 3); // 0, 1, 2, 3
+      const quarter = Math.floor(m / 3);
       const startMonth = quarter * 3 + 1;
       const endMonth = quarter * 3 + 3;
       startStr = `${y}-${String(startMonth).padStart(2, '0')}-01`;
@@ -49,7 +49,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
     let periodExpense = 0;
 
     transactions.forEach(t => {
-      // Balance Global (siempre se calcula sobre todas las transacciones)
       if (t.type === 'INCOME') accTotals[t.accountId] = (accTotals[t.accountId] || 0) + t.amount;
       else if (t.type === 'EXPENSE') accTotals[t.accountId] = (accTotals[t.accountId] || 0) - t.amount;
       else if (t.type === 'TRANSFER' && t.transferAccountId) {
@@ -57,7 +56,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
         accTotals[t.transferAccountId] = (accTotals[t.transferAccountId] || 0) + t.amount;
       }
 
-      // Totales del Periodo (filtrados por fecha)
       const inPeriod = filter.timeRange === 'ALL' || (t.date >= dateBounds.startStr && t.date <= dateBounds.endStr);
       if (inPeriod) {
         if (t.type === 'INCOME') periodIncome += t.amount;

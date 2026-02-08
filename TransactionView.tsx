@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Filter, Link2, Link2Off } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off } from 'lucide-react';
 
 interface TransactionViewProps {
   data: AppState;
@@ -125,7 +125,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       }
       
       if (filter.timeRange !== 'ALL' && (t.date < start || t.date > end)) return false;
-      
       if (filterAccount !== 'ALL' && t.accountId !== filterAccount && t.transferAccountId !== filterAccount) return false;
       if (filterCategory !== 'ALL' && t.categoryId !== filterCategory) return false;
       if (searchTerm && !t.description.toLowerCase().includes(searchTerm.toLowerCase())) return false;
@@ -153,8 +152,18 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     return <span className="text-xl">{iconStr || '📂'}</span>;
   }
 
+  const navigatePeriod = (direction: 'prev' | 'next') => {
+    const newDate = new Date(filter.referenceDate);
+    const step = direction === 'next' ? 1 : -1;
+    if (filter.timeRange === 'MONTH') newDate.setMonth(newDate.getMonth() + step);
+    else if (filter.timeRange === 'QUARTER') newDate.setMonth(newDate.getMonth() + (step * 3));
+    else if (filter.timeRange === 'YEAR') newDate.setFullYear(newDate.getFullYear() + step);
+    onUpdateFilter({ ...filter, referenceDate: newDate });
+  };
+
   return (
     <div className="space-y-6 md:space-y-10 pb-24">
+      {/* Cabecera Superior */}
       <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
         <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
         <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto w-full lg:w-auto">
@@ -169,24 +178,25 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         </button>
       </div>
 
+      {/* Cabecera de Filtros y Ordenación Integrada */}
       <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="relative">
-                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                <input type="text" placeholder="Concepto..." className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none transition-all" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <div className="flex flex-col lg:flex-row gap-4 items-center">
+              <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => navigatePeriod('prev')} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 active:scale-90 transition-all"><ChevronLeft size={18} /></button>
+                  <button onClick={() => navigatePeriod('next')} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 active:scale-90 transition-all"><ChevronRight size={18} /></button>
               </div>
-              <select className="px-5 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none cursor-pointer" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
-                <option value="ALL">CUENTA</option>
+              <div className="relative flex-1 w-full lg:w-auto">
+                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                <input type="text" placeholder="Concepto..." className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none transition-all shadow-inner" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              </div>
+              <select className="w-full lg:w-48 px-5 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none cursor-pointer shadow-inner" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
+                <option value="ALL">TODAS LAS CUENTAS</option>
                 {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
-              <select className="px-5 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none cursor-pointer" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-                <option value="ALL">CATEGORÍA</option>
+              <select className="w-full lg:w-48 px-5 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none cursor-pointer shadow-inner" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+                <option value="ALL">TODAS LAS CATEGORÍAS</option>
                 {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-              <div className="flex gap-2">
-                <input type="number" placeholder="Mín €" className="w-1/2 px-4 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none" value={minAmount} onChange={e => setMinAmount(e.target.value)} />
-                <input type="number" placeholder="Máx €" className="w-1/2 px-4 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none" value={maxAmount} onChange={e => setMaxAmount(e.target.value)} />
-              </div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-50">
               <div className="flex items-center gap-4">
@@ -199,17 +209,19 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                   ))}
                 </div>
               </div>
-              <div className="text-[10px] font-black text-indigo-500 uppercase">{filteredTransactions.length} registros</div>
+              <div className="flex gap-2">
+                  <input type="number" placeholder="Mín €" className="w-20 lg:w-28 px-4 py-2 bg-slate-50 rounded-xl border border-slate-200 text-[10px] font-bold outline-none" value={minAmount} onChange={e => setMinAmount(e.target.value)} />
+                  <input type="number" placeholder="Máx €" className="w-20 lg:w-28 px-4 py-2 bg-slate-50 rounded-xl border border-slate-200 text-[10px] font-bold outline-none" value={maxAmount} onChange={e => setMaxAmount(e.target.value)} />
+              </div>
           </div>
       </div>
 
       <div className="space-y-4">
-          {/* Cabecera de tabla solo para escritorio */}
-          <div className="hidden lg:grid grid-cols-[100px_160px_1fr_60px_160px_120px_100px] gap-4 px-10 py-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
+          <div className="hidden lg:grid grid-cols-[100px_180px_1fr_60px_180px_120px_100px] gap-4 px-10 py-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">
             <div>Fecha</div>
             <div>Entrada / Categoría</div>
             <div>Descripción</div>
-            <div className="text-center">Adjunto</div>
+            <div className="text-center">Clip</div>
             <div>Salida</div>
             <div className="text-right">Importe</div>
             <div className="text-center">Acciones</div>
@@ -219,11 +231,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
               const srcAcc = data.accounts.find(x=>x.id===t.accountId);
               const dstAcc = t.transferAccountId ? data.accounts.find(x=>x.id===t.transferAccountId) : null;
               const cat = data.categories.find(x=>x.id===t.categoryId);
-              
-              // Lógica de visualización:
-              // GASTO: Entrada=Categoría, Salida=Cuenta
-              // INGRESO: Entrada=Cuenta, Salida=Categoría (o vacío)
-              // TRASPASO: Entrada=Cuenta Destino, Salida=Cuenta Origen
               
               let entryNode: React.ReactNode;
               let exitNode: React.ReactNode;
@@ -241,20 +248,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
               return (
                   <div key={t.id} className="group bg-white p-5 lg:px-10 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-100 transition-all relative overflow-hidden">
-                      <div className="grid grid-cols-1 lg:grid-cols-[100px_160px_1fr_60px_160px_120px_100px] items-center gap-4 md:gap-6">
-                        {/* Fecha */}
+                      <div className="grid grid-cols-1 lg:grid-cols-[100px_180px_1fr_60px_180px_120px_100px] items-center gap-4 md:gap-6">
                         <div className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{t.date}</div>
-                        
-                        {/* Entrada / Categoría */}
-                        <div className="text-xs uppercase">{entryNode}</div>
-                        
-                        {/* Descripción */}
+                        <div className="text-[11px] uppercase truncate">{entryNode}</div>
                         <div className="text-sm font-black text-slate-800 truncate uppercase">{t.description}</div>
-                        
-                        {/* Clip Adjunto */}
                         <div className="flex justify-center">
                             {t.attachment ? (
-                                <div className="bg-indigo-600 text-white p-2 rounded-xl shadow-lg shadow-indigo-200">
+                                <div className="bg-indigo-600 text-white p-2 rounded-xl shadow-lg">
                                     <Link2 size={16} />
                                 </div>
                             ) : (
@@ -263,17 +263,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                                 </div>
                             )}
                         </div>
-
-                        {/* Salida */}
-                        <div className="text-xs uppercase">{exitNode}</div>
-
-                        {/* Importe */}
+                        <div className="text-[11px] uppercase truncate">{exitNode}</div>
                         <div className={`text-right text-lg font-black tracking-tighter ${t.type === 'EXPENSE' ? 'text-rose-600' : t.type === 'INCOME' ? 'text-emerald-600' : 'text-indigo-400'}`}>
                             {t.type === 'EXPENSE' ? '-' : t.type === 'INCOME' ? '+' : ''}
                             {t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
                         </div>
-
-                        {/* Acciones */}
                         <div className="flex justify-center gap-1">
                             <button onClick={() => openEditor(t)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"><Edit3 size={16}/></button>
                             <button onClick={() => setDeleteConfirmId(t.id)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all"><Trash2 size={16}/></button>
@@ -292,6 +286,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                   </div>
               );
           })}
+          {filteredTransactions.length === 0 && (
+            <div className="py-20 text-center space-y-4 bg-slate-50/50 rounded-[3rem] border-2 border-dashed border-slate-100">
+                <div className="mx-auto bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center text-slate-300"><Search size={32}/></div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No se encontraron movimientos para el filtro actual</p>
+            </div>
+          )}
       </div>
 
       {isModalOpen && (
