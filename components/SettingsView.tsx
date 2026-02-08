@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import * as XLSX from 'xlsx';
 
@@ -22,7 +22,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   
   const [webLogos, setWebLogos] = useState<{url: string, source: string}[]>([]);
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const iconUploadRef = useRef<HTMLInputElement>(null);
 
   // Form States
   const [grpId, setGrpId] = useState<string | null>(null);
@@ -46,8 +48,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [catIcon, setCatIcon] = useState('🏷️');
 
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
-    if (iconStr?.startsWith('http')) return <img src={iconStr} className={`${className} object-contain`} referrerPolicy="no-referrer" />;
-    return <span className="text-xl">{iconStr || '📂'}</span>;
+    if (!iconStr) return <span className="text-xl">📂</span>;
+    if (iconStr.startsWith('http') || iconStr.startsWith('data:image')) {
+        return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
+    }
+    return <span className="text-xl">{iconStr}</span>;
   }
 
   const resetForm = () => {
@@ -56,6 +61,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     setFamId(null); setFamName(''); setFamIcon('📂'); setFamType('EXPENSE');
     setCatId(null); setCatName(''); setCatIcon('🏷️'); setCatParent('');
     setImportReport(null); setStructureReport(null); setPasteData('');
+    setWebLogos([]);
   };
 
   const parseDate = (dateStr: string) => {
@@ -97,7 +103,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           }
           break;
         case 'ACCOUNTS':
-          // Nombre; Grupo; Saldo; Icono
           const accGrp = localGroups.find(g => g.name.toLowerCase() === parts[1]?.toLowerCase()) || localGroups[0];
           if (!localAccs.find(a => a.name.toLowerCase() === parts[0].toLowerCase())) {
             localAccs.push({ id: generateId(), name: parts[0], initialBalance: parseFloat(parts[2]) || 0, currency: 'EUR', icon: parts[3] || '🏦', groupId: accGrp?.id || 'g1' });
@@ -105,7 +110,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           }
           break;
         case 'FAMILIES':
-          // Nombre; Tipo(EXPENSE/INCOME); Icono
           const fType = parts[1]?.toUpperCase() === 'INCOME' ? 'INCOME' : 'EXPENSE';
           if (!localFamilies.find(f => f.name.toLowerCase() === parts[0].toLowerCase())) {
             localFamilies.push({ id: generateId(), name: parts[0], type: fType, icon: parts[2] || '📂' });
@@ -113,7 +117,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           }
           break;
         case 'CATEGORIES':
-          // Nombre; Familia; Icono
           const fParent = localFamilies.find(f => f.name.toLowerCase() === parts[1]?.toLowerCase()) || localFamilies[0];
           if (!localCategories.find(c => c.name.toLowerCase() === parts[0].toLowerCase())) {
             localCategories.push({ id: generateId(), name: parts[0], familyId: fParent?.id || 'f1', icon: parts[2] || '🏷️' });
@@ -121,7 +124,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           }
           break;
         case 'TRANSACTIONS':
-          // Fecha; Categoria; Cuenta; Concepto; Importe
           const fec = parseDate(parts[0]);
           const amountVal = parseFloat(parts[4].replace(',', '.'));
           if (isNaN(amountVal)) return;
@@ -144,7 +146,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           txReport.added++;
           break;
         case 'TRANSFER':
-          // Fecha; Origen; Destino; Concepto; Importe
           const tFec = parseDate(parts[0]);
           const tAmount = Math.abs(parseFloat(parts[4].replace(',', '.')));
           if (isNaN(tAmount)) return;
@@ -195,13 +196,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     
     if (window.confirm(msg)) {
       if (mode === 'ALL') {
+        // Usamos una actualización directa del estado
         onUpdateData({ transactions: [] });
-        alert("Historial de movimientos vaciado completamente.");
+        alert("Historial vaciado correctamente.");
       } else if (massDeleteYear) {
         const filtered = data.transactions.filter(t => !t.date.startsWith(massDeleteYear));
-        const deleted = data.transactions.length - filtered.length;
         onUpdateData({ transactions: filtered });
-        alert(`Se han borrado ${deleted} movimientos del año ${massDeleteYear}.`);
+        alert(`Se han borrado los movimientos del año ${massDeleteYear}.`);
       }
       setMassDeleteYear('');
     }
@@ -217,31 +218,59 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     link.click();
   };
 
+  const handleLocalIconUpload = (e: React.ChangeEvent<HTMLInputElement>, setIcon: (s: string) => void) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+              if (ev.target?.result) setIcon(ev.target.result as string);
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
   const renderIconInput = (icon: string, setIcon: (s: string) => void, currentName: string) => {
     return (
-      <div className="space-y-3 w-full">
-          <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center border-2 border-white rounded-2xl bg-white overflow-hidden shadow-sm">
-                    {renderIcon(icon, "w-10 h-10")}
+      <div className="space-y-4 w-full">
+          <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
+                <div className="w-20 h-20 flex-shrink-0 flex items-center justify-center border-4 border-white rounded-[1.5rem] bg-white overflow-hidden shadow-lg transition-transform hover:scale-105">
+                    {renderIcon(icon, "w-12 h-12")}
                 </div>
-                <div className="flex-1 space-y-2">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Avatar Visual</p>
-                    <button onClick={async () => {
-                         setIsSearchingWeb(true);
-                         const results = await searchInternetLogos(currentName);
-                         setWebLogos(results);
-                         setIsSearchingWeb(false);
-                    }} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[8px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all flex items-center gap-2">
-                        {isSearchingWeb ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12}/>} Buscar Logo IA
-                    </button>
+                <div className="flex-1 space-y-3 w-full">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center sm:text-left">Identidad Visual</p>
+                    <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                        <button onClick={async () => {
+                             if(!currentName) { alert("Escribe un nombre primero para buscar."); return; }
+                             setIsSearchingWeb(true);
+                             const results = await searchInternetLogos(currentName);
+                             setWebLogos(results);
+                             setIsSearchingWeb(false);
+                        }} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-950 transition-all flex items-center gap-2 shadow-lg shadow-indigo-100">
+                            {isSearchingWeb ? <Loader2 size={14} className="animate-spin"/> : <Sparkles size={14}/>} IA Smart Search
+                        </button>
+                        <button onClick={() => iconUploadRef.current?.click()} className="px-5 py-3 bg-white text-slate-900 border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm">
+                            <ImageIcon size={14}/> Subir Archivo
+                        </button>
+                        <input type="file" ref={iconUploadRef} className="hidden" accept="image/*" onChange={(e) => handleLocalIconUpload(e, setIcon)} />
+                        <input type="text" className="w-16 px-2 py-3 bg-white border border-slate-200 rounded-xl font-bold text-center text-sm shadow-sm" value={icon.length < 5 ? icon : '📂'} onChange={e => setIcon(e.target.value)} placeholder="Emoji" title="Pega un emoji o escribe"/>
+                    </div>
                 </div>
           </div>
           {webLogos.length > 0 && (
-            <div className="bg-white p-5 rounded-[2.5rem] border border-indigo-100 shadow-xl space-y-4 animate-in slide-in-from-top-4">
-                <div className="flex justify-between items-center"><span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Sugerencias IA</span><button onClick={() => setWebLogos([])} className="text-slate-300 hover:text-rose-500"><XCircle size={18}/></button></div>
-                <div className="grid grid-cols-5 gap-3 max-h-40 overflow-y-auto p-1 custom-scrollbar">
+            <div className="bg-white p-6 rounded-[2.5rem] border-2 border-indigo-100 shadow-2xl space-y-5 animate-in slide-in-from-top-4 z-10 relative">
+                <div className="flex justify-between items-center">
+                    <span className="text-[11px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
+                        <Sparkles size={14}/> Resultados Encontrados
+                    </span>
+                    <button onClick={() => setWebLogos([])} className="text-slate-300 hover:text-rose-500 transition-colors">
+                        <XCircle size={20}/>
+                    </button>
+                </div>
+                <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-3 max-h-64 overflow-y-auto p-2 custom-scrollbar">
                     {webLogos.map((l, i) => (
-                        <button key={i} onClick={() => { setIcon(l.url); setWebLogos([]); }} className="aspect-square bg-slate-50 rounded-xl border border-slate-100 hover:border-indigo-500 p-2 transition-all flex items-center justify-center overflow-hidden"><img src={l.url} className="w-full h-full object-contain" referrerPolicy="no-referrer" /></button>
+                        <button key={i} onClick={() => { setIcon(l.url); setWebLogos([]); }} className="aspect-square bg-slate-50 rounded-2xl border-2 border-transparent hover:border-indigo-500 p-2 transition-all flex items-center justify-center overflow-hidden shadow-sm hover:shadow-md group">
+                            <img src={l.url} className="w-full h-full object-contain group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
+                        </button>
                     ))}
                 </div>
             </div>
@@ -254,7 +283,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     <div className="space-y-12 max-w-full overflow-hidden pb-20">
       <div className="text-center md:text-left space-y-2">
         <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Ajustes.</h2>
-        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Configuración y Herramientas</p>
+        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Personalización y Control Maestro</p>
       </div>
 
       <nav className="flex bg-slate-100 p-1.5 rounded-2xl shadow-inner border border-slate-200/50 overflow-x-auto scrollbar-hide">
@@ -274,21 +303,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       <div className="max-w-4xl mx-auto">
         {activeTab === 'ACC_GROUPS' && (
             <div className="grid grid-cols-1 gap-10">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-6">
-                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><BoxSelect className="text-indigo-600"/> {grpId ? 'Editar Grupo' : 'Nuevo Grupo'}</h3>
-                    <div className="space-y-4">
-                        <input type="text" placeholder="Nombre del grupo (ej: Bancos)" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={grpName} onChange={e => setGrpName(e.target.value)} />
-                        <div className="flex items-center gap-4">
-                            <input type="text" placeholder="Icono" className="w-24 px-4 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-center" value={grpIcon} onChange={e => setGrpIcon(e.target.value)} />
-                            <button onClick={() => { if(!grpName) return; if(grpId) onUpdateData({accountGroups: data.accountGroups.map(g=>g.id===grpId?{...g,name:grpName,icon:grpIcon}:g)}); else onUpdateData({accountGroups: [...data.accountGroups, {id:generateId(),name:grpName,icon:grpIcon}]}); resetForm(); }} className="flex-1 py-5 bg-slate-950 text-white rounded-2xl font-black uppercase text-[10px] hover:bg-indigo-600 transition-all">Guardar Grupo</button>
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><BoxSelect className="text-indigo-600"/> {grpId ? 'Editar Grupo' : 'Nuevo Grupo de Cuentas'}</h3>
+                    <div className="space-y-6">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre Descriptivo</label>
+                            <input type="text" placeholder="Ej: Bancos, Efectivo..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={grpName} onChange={e => setGrpName(e.target.value)} />
                         </div>
+                        {renderIconInput(grpIcon, setGrpIcon, grpName)}
+                        <button onClick={() => { if(!grpName) return; if(grpId) onUpdateData({accountGroups: data.accountGroups.map(g=>g.id===grpId?{...g,name:grpName,icon:grpIcon}:g)}); else onUpdateData({accountGroups: [...data.accountGroups, {id:generateId(),name:grpName,icon:grpIcon}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all shadow-xl">Guardar Grupo</button>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {data.accountGroups.map(g => (
-                        <div key={g.id} className="p-6 bg-white rounded-3xl border border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-200 transition-all">
-                            <div className="flex items-center gap-4"><span className="text-2xl">{g.icon}</span><span className="font-black text-slate-900 uppercase text-xs">{g.name}</span></div>
-                            <div className="flex gap-2"><button onClick={() => { setGrpId(g.id); setGrpName(g.name); setGrpIcon(g.icon); }} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => onUpdateData({accountGroups: data.accountGroups.filter(x=>x.id!==g.id)})} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 size={16}/></button></div>
+                        <div key={g.id} className="p-6 bg-white rounded-3xl border border-slate-100 flex items-center justify-between shadow-sm hover:border-indigo-200 transition-all group">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 flex items-center justify-center bg-slate-50 rounded-xl overflow-hidden">{renderIcon(g.icon, "w-8 h-8")}</div>
+                                <span className="font-black text-slate-900 uppercase text-xs">{g.name}</span>
+                            </div>
+                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { setGrpId(g.id); setGrpName(g.name); setGrpIcon(g.icon); }} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => onUpdateData({accountGroups: data.accountGroups.filter(x=>x.id!==g.id)})} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 size={16}/></button></div>
                         </div>
                     ))}
                 </div>
@@ -298,15 +331,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         {activeTab === 'ACCOUNTS' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Wallet className="text-indigo-600"/> {accId ? 'Editar Cuenta' : 'Nueva Cuenta'}</h3>
+                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Wallet className="text-indigo-600"/> {accId ? 'Editar Cuenta' : 'Nueva Cuenta Bancaria'}</h3>
                     <div className="space-y-6">
-                        <input type="text" placeholder="Nombre de la cuenta" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accName} onChange={e => setAccName(e.target.value)} />
-                        <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={accGroupId} onChange={e => setAccGroupId(e.target.value)}>
-                            <option value="">Vincular a un Grupo...</option>
-                            {data.accountGroups.map(g => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
-                        </select>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre de la Cuenta</label>
+                                <input type="text" placeholder="Ej: Cuenta Corriente..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accName} onChange={e => setAccName(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Grupo de Cuentas</label>
+                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={accGroupId} onChange={e => setAccGroupId(e.target.value)}>
+                                    <option value="">Seleccionar Grupo...</option>
+                                    {data.accountGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
                         {renderIconInput(accIcon, setAccIcon, accName)}
-                        <input type="number" placeholder="Saldo Inicial €" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Saldo de Apertura (€)</label>
+                            <input type="number" step="0.01" placeholder="0.00" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
+                        </div>
                         <button onClick={() => { if(!accName) return; const balanceVal = parseFloat(accBalance) || 0; if (accId) onUpdateData({ accounts: data.accounts.map(a => a.id === accId ? { ...a, name: accName, initialBalance: balanceVal, icon: accIcon, groupId: accGroupId } : a) }); else onUpdateData({ accounts: [...data.accounts, { id: generateId(), name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon, groupId: accGroupId || (data.accountGroups[0]?.id || 'g1') }] }); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all shadow-xl">Confirmar Cuenta</button>
                     </div>
                 </div>
@@ -314,16 +358,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     {data.accounts.map(acc => {
                         const grp = data.accountGroups.find(g => g.id === acc.groupId);
                         return (
-                            <div key={acc.id} className="flex justify-between items-center p-6 bg-white rounded-3xl border border-slate-100 shadow-sm hover:border-indigo-100 transition-all">
+                            <div key={acc.id} className="flex justify-between items-center p-6 bg-white rounded-3xl border border-slate-100 shadow-sm hover:border-indigo-100 transition-all group">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100">{renderIcon(acc.icon, "w-8 h-8")}</div>
+                                    <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 overflow-hidden">{renderIcon(acc.icon, "w-10 h-10")}</div>
                                     <div>
                                         <span className="font-black text-slate-900 block text-xs uppercase">{acc.name}</span>
                                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{grp?.name || 'Sin grupo'}</span>
-                                        <span className="text-[10px] font-black text-indigo-500 block">{acc.initialBalance.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                                        <span className="text-[10px] font-black text-indigo-500 block mt-0.5">{acc.initialBalance.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
                                     </div>
                                 </div>
-                                <div className="flex gap-2"><button onClick={() => { setAccId(acc.id); setAccName(acc.name); setAccBalance(acc.initialBalance.toString()); setAccIcon(acc.icon); setAccGroupId(acc.groupId); }} className="p-3 text-indigo-400 hover:bg-indigo-50 rounded-xl"><Edit2 size={18}/></button><button onClick={() => onUpdateData({accounts: data.accounts.filter(a=>a.id!==acc.id)})} className="p-3 text-rose-400 hover:bg-rose-50 rounded-xl"><Trash2 size={18}/></button></div>
+                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { setAccId(acc.id); setAccName(acc.name); setAccBalance(acc.initialBalance.toString()); setAccIcon(acc.icon); setAccGroupId(acc.groupId); }} className="p-3 text-indigo-400 hover:bg-indigo-50 rounded-xl"><Edit2 size={18}/></button><button onClick={() => onUpdateData({accounts: data.accounts.filter(a=>a.id!==acc.id)})} className="p-3 text-rose-400 hover:bg-rose-50 rounded-xl"><Trash2 size={18}/></button></div>
                             </div>
                         );
                     })}
@@ -333,23 +377,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
         {activeTab === 'FAMILIES' && (
             <div className="grid grid-cols-1 gap-10">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-6">
-                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Layers className="text-indigo-600"/> {famId ? 'Editar Familia' : 'Nueva Familia'}</h3>
-                    <div className="space-y-4">
-                        <input type="text" placeholder="Nombre de familia" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={famName} onChange={e => setFamName(e.target.value)} />
-                        <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1.5">
-                            <button onClick={() => setFamType('EXPENSE')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${famType === 'EXPENSE' ? 'bg-white text-rose-500 shadow-sm' : 'text-slate-400'}`}>Gasto</button>
-                            <button onClick={() => setFamType('INCOME')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${famType === 'INCOME' ? 'bg-white text-emerald-500 shadow-sm' : 'text-slate-400'}`}>Ingreso</button>
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Layers className="text-indigo-600"/> {famId ? 'Editar Familia' : 'Nueva Familia Presupuestaria'}</h3>
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre de la Familia</label>
+                                <input type="text" placeholder="Ej: Vivienda, Ocio..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={famName} onChange={e => setFamName(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Naturaleza</label>
+                                <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1.5">
+                                    <button onClick={() => setFamType('EXPENSE')} className={`flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${famType === 'EXPENSE' ? 'bg-white text-rose-500 shadow-sm' : 'text-slate-400'}`}>Gasto</button>
+                                    <button onClick={() => setFamType('INCOME')} className={`flex-1 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${famType === 'INCOME' ? 'bg-white text-emerald-500 shadow-sm' : 'text-slate-400'}`}>Ingreso</button>
+                                </div>
+                            </div>
                         </div>
                         {renderIconInput(famIcon, setFamIcon, famName)}
-                        <button onClick={() => { if(!famName) return; if(famId) onUpdateData({families: data.families.map(f=>f.id===famId?{...f,name:famName,type:famType,icon:famIcon}:f)}); else onUpdateData({families: [...data.families, {id:generateId(),name:famName,type:famType,icon:famIcon}]}); resetForm(); }} className="w-full py-5 bg-slate-950 text-white rounded-2xl font-black uppercase text-[10px] hover:bg-indigo-600 transition-all">Guardar Familia</button>
+                        <button onClick={() => { if(!famName) return; if(famId) onUpdateData({families: data.families.map(f=>f.id===famId?{...f,name:famName,type:famType,icon:famIcon}:f)}); else onUpdateData({families: [...data.families, {id:generateId(),name:famName,type:famType,icon:famIcon}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all">Guardar Familia</button>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {data.families.map(f => (
-                        <div key={f.id} className="p-6 bg-white rounded-3xl border border-slate-100 flex items-center justify-between shadow-sm">
-                            <div className="flex items-center gap-4">{renderIcon(f.icon, "w-8 h-8")}<div><span className="font-black text-slate-900 uppercase text-xs block">{f.name}</span><span className={`text-[8px] font-black uppercase tracking-widest ${f.type === 'EXPENSE' ? 'text-rose-400' : 'text-emerald-400'}`}>{f.type === 'EXPENSE' ? 'Gasto' : 'Ingreso'}</span></div></div>
-                            <div className="flex gap-2"><button onClick={() => { setFamId(f.id); setFamName(f.name); setFamType(f.type); setFamIcon(f.icon); }} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => onUpdateData({families: data.families.filter(x=>x.id!==f.id)})} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 size={16}/></button></div>
+                        <div key={f.id} className="p-6 bg-white rounded-3xl border border-slate-100 flex items-center justify-between shadow-sm group">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 flex items-center justify-center bg-slate-50 rounded-xl overflow-hidden">{renderIcon(f.icon, "w-8 h-8")}</div>
+                                <div><span className="font-black text-slate-900 uppercase text-xs block">{f.name}</span><span className={`text-[8px] font-black uppercase tracking-widest ${f.type === 'EXPENSE' ? 'text-rose-400' : 'text-emerald-400'}`}>{f.type === 'EXPENSE' ? 'Gasto' : 'Ingreso'}</span></div>
+                            </div>
+                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { setFamId(f.id); setFamName(f.name); setFamType(f.type); setFamIcon(f.icon); }} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => onUpdateData({families: data.families.filter(x=>x.id!==f.id)})} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 size={16}/></button></div>
                         </div>
                     ))}
                 </div>
@@ -358,25 +413,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
         {activeTab === 'CATEGORIES' && (
             <div className="grid grid-cols-1 gap-10">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-6">
-                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Tag className="text-indigo-600"/> {catId ? 'Editar Categoría' : 'Nueva Categoría'}</h3>
-                    <div className="space-y-4">
-                        <input type="text" placeholder="Nombre de categoría" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={catName} onChange={e => setCatName(e.target.value)} />
-                        <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={catParent} onChange={e => setCatParent(e.target.value)}>
-                            <option value="">Vincular a una Familia...</option>
-                            {data.families.map(f => <option key={f.id} value={f.id}>{f.icon} {f.name} ({f.type === 'EXPENSE' ? 'Gasto' : 'Ingreso'})</option>)}
-                        </select>
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Tag className="text-indigo-600"/> {catId ? 'Editar Categoría' : 'Nueva Categoría de Gasto'}</h3>
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre de la Categoría</label>
+                                <input type="text" placeholder="Ej: Supermercado, Alquiler..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={catName} onChange={e => setCatName(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Familia Superior</label>
+                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={catParent} onChange={e => setCatParent(e.target.value)}>
+                                    <option value="">Vincular a Familia...</option>
+                                    {data.families.map(f => <option key={f.id} value={f.id}>{f.name} ({f.type === 'EXPENSE' ? 'Gasto' : 'Ingreso'})</option>)}
+                                </select>
+                            </div>
+                        </div>
                         {renderIconInput(catIcon, setCatIcon, catName)}
-                        <button onClick={() => { if(!catName || !catParent) return; if(catId) onUpdateData({categories: data.categories.map(c=>c.id===catId?{...c,name:catName,familyId:catParent,icon:catIcon}:c)}); else onUpdateData({categories: [...data.categories, {id:generateId(),name:catName,familyId:catParent,icon:catIcon}]}); resetForm(); }} className="w-full py-5 bg-slate-950 text-white rounded-2xl font-black uppercase text-[10px] hover:bg-indigo-600 transition-all">Guardar Categoría</button>
+                        <button onClick={() => { if(!catName || !catParent) return; if(catId) onUpdateData({categories: data.categories.map(c=>c.id===catId?{...c,name:catName,familyId:catParent,icon:catIcon}:c)}); else onUpdateData({categories: [...data.categories, {id:generateId(),name:catName,familyId:catParent,icon:catIcon}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all shadow-xl">Guardar Categoría</button>
                     </div>
                 </div>
                 <div className="space-y-3">
                     {data.categories.map(c => {
                         const fam = data.families.find(f => f.id === c.familyId);
                         return (
-                            <div key={c.id} className="p-6 bg-white rounded-3xl border border-slate-100 flex items-center justify-between shadow-sm">
-                                <div className="flex items-center gap-4">{renderIcon(c.icon, "w-8 h-8")}<div><span className="font-black text-slate-900 uppercase text-xs block">{c.name}</span><span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Familia: {fam?.name || '---'}</span></div></div>
-                                <div className="flex gap-2"><button onClick={() => { setCatId(c.id); setCatName(c.name); setCatParent(c.familyId); setCatIcon(c.icon); }} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => onUpdateData({categories: data.categories.filter(x=>x.id!==c.id)})} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 size={16}/></button></div>
+                            <div key={c.id} className="p-6 bg-white rounded-3xl border border-slate-100 flex items-center justify-between shadow-sm group">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 flex items-center justify-center bg-slate-50 rounded-xl overflow-hidden">{renderIcon(c.icon, "w-8 h-8")}</div>
+                                    <div><span className="font-black text-slate-900 uppercase text-xs block">{c.name}</span><span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Familia: {fam?.name || '---'}</span></div>
+                                </div>
+                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { setCatId(c.id); setCatName(c.name); setCatParent(c.familyId); setCatIcon(c.icon); }} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => onUpdateData({categories: data.categories.filter(x=>x.id!==c.id)})} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 size={16}/></button></div>
                             </div>
                         );
                     })}
