@@ -1,9 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { AppState, Transaction, TransactionType, Family, Category, Account, GlobalFilter, TimeRange } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Sparkles, Paperclip, Filter, ChevronDown, MoreVertical, Repeat, Star, Edit3, AlertTriangle, Tag, ChevronLeft, ChevronRight, Copy, Save, Clock, FileSpreadsheet, Upload, Info, ShieldCheck, CheckCircle2, Eraser, ArrowUpDown } from 'lucide-react';
-import { mapBankTransactions } from './services/geminiService';
-import * as XLSX from 'xlsx';
+import { AppState, Transaction, TransactionType, GlobalFilter } from './types';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Filter } from 'lucide-react';
 
 interface TransactionViewProps {
   data: AppState;
@@ -17,13 +15,13 @@ interface TransactionViewProps {
   clearSpecificFilters?: () => void;
 }
 
-type SortField = 'DATE' | 'DESCRIPTION' | 'AMOUNT';
+type SortField = 'DATE' | 'DESCRIPTION' | 'AMOUNT' | 'ACCOUNT' | 'CATEGORY';
 type SortDirection = 'ASC' | 'DESC';
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
-export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTransaction, onDeleteTransaction, onUpdateTransaction, onUpdateData, filter, onUpdateFilter, initialSpecificFilters, clearSpecificFilters }) => {
-  // Estados del Formulario (Editor)
+export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTransaction, onDeleteTransaction, onUpdateTransaction, filter, onUpdateFilter, initialSpecificFilters, clearSpecificFilters }) => {
+  // Editor State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [fType, setFType] = useState<TransactionType>('EXPENSE');
@@ -36,7 +34,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [fAttachment, setFAttachment] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Estados de Filtros de la Vista
+  // View Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAccount, setFilterAccount] = useState('ALL');
   const [filterCategory, setFilterCategory] = useState('ALL');
@@ -44,11 +42,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [maxAmount, setMaxAmount] = useState('');
   const [sortField, setSortField] = useState<SortField>('DATE');
   const [sortDirection, setSortDirection] = useState<SortDirection>('DESC');
-
-  // Menús de acción y otros
-  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [showSmartImport, setShowSmartImport] = useState(false);
 
   useEffect(() => {
     if (initialSpecificFilters) {
@@ -57,7 +51,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     }
   }, [initialSpecificFilters]);
 
-  // RESET FORM
   const resetForm = () => {
     setEditingTx(null);
     setFType('EXPENSE');
@@ -70,14 +63,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setFAttachment(undefined);
   };
 
-  // OPEN EDITOR
   const openEditor = (t?: Transaction) => {
     if (t) {
       setEditingTx(t);
       setFType(t.type);
       setFAmount(t.amount.toString());
       setFDesc(t.description);
-      setFDate(t.date);
+      setFDate(t.date); // ISO string YYYY-MM-DD
       setFAcc(t.accountId);
       setFCat(t.categoryId);
       setFTransferDest(t.transferAccountId || '');
@@ -86,19 +78,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       resetForm();
     }
     setIsModalOpen(true);
-    setActionMenuId(null);
   };
 
   const handleSave = () => {
     if (!fAmount || !fDesc || !fAcc || (fType !== 'TRANSFER' && !fCat)) {
-      alert("Por favor completa los campos obligatorios.");
-      return;
+      alert("Faltan datos obligatorios."); return;
     }
-
     const finalTx: Transaction = {
       id: editingTx ? editingTx.id : generateId(),
       date: fDate,
-      amount: parseFloat(fAmount),
+      amount: Math.abs(parseFloat(fAmount)),
       description: fDesc,
       accountId: fAcc,
       type: fType,
@@ -107,17 +96,15 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       attachment: fAttachment,
       transferAccountId: fType === 'TRANSFER' ? fTransferDest : undefined
     };
-
     if (editingTx) onUpdateTransaction(finalTx);
     else onAddTransaction(finalTx);
     setIsModalOpen(false);
     resetForm();
   };
 
-  // FILTRADO Y ORDENACIÓN OPTIMIZADOS
   const filteredTransactions = useMemo(() => {
-    let result = data.transactions.filter(t => {
-      // Filtro Temporal
+    let res = data.transactions.filter(t => {
+      // Time sync
       const y = filter.referenceDate.getFullYear();
       const m = filter.referenceDate.getMonth();
       let start = ''; let end = '';
@@ -133,50 +120,40 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       } else if (filter.timeRange === 'CUSTOM') {
         start = filter.customStart; end = filter.customEnd;
       }
-      
       if (filter.timeRange !== 'ALL' && (t.date < start || t.date > end)) return false;
-
-      // Filtros específicos
+      
       if (filterAccount !== 'ALL' && t.accountId !== filterAccount && t.transferAccountId !== filterAccount) return false;
       if (filterCategory !== 'ALL' && t.categoryId !== filterCategory) return false;
       if (searchTerm && !t.description.toLowerCase().includes(searchTerm.toLowerCase())) return false;
       if (minAmount && t.amount < parseFloat(minAmount)) return false;
       if (maxAmount && t.amount > parseFloat(maxAmount)) return false;
-
       return true;
     });
 
-    // Ordenación
-    return result.sort((a, b) => {
-      let valA: any; let valB: any;
-      if (sortField === 'DATE') { valA = a.date; valB = b.date; }
-      else if (sortField === 'DESCRIPTION') { valA = a.description.toLowerCase(); valB = b.description.toLowerCase(); }
-      else { valA = a.amount; valB = b.amount; }
-
-      if (valA < valB) return sortDirection === 'ASC' ? -1 : 1;
-      if (valA > valB) return sortDirection === 'ASC' ? 1 : -1;
+    return res.sort((a, b) => {
+      let vA: any, vB: any;
+      if (sortField === 'DATE') { vA = a.date; vB = b.date; }
+      else if (sortField === 'DESCRIPTION') { vA = a.description.toLowerCase(); vB = b.description.toLowerCase(); }
+      else if (sortField === 'AMOUNT') { vA = a.amount; vB = b.amount; }
+      else if (sortField === 'ACCOUNT') { vA = data.accounts.find(x=>x.id===a.accountId)?.name || ''; vB = data.accounts.find(x=>x.id===b.accountId)?.name || ''; }
+      else if (sortField === 'CATEGORY') { vA = data.categories.find(x=>x.id===a.categoryId)?.name || ''; vB = data.categories.find(x=>x.id===b.categoryId)?.name || ''; }
+      
+      if (vA < vB) return sortDirection === 'ASC' ? -1 : 1;
+      if (vA > vB) return sortDirection === 'ASC' ? 1 : -1;
       return 0;
     });
-  }, [data.transactions, filter, filterAccount, filterCategory, searchTerm, minAmount, maxAmount, sortField, sortDirection]);
+  }, [data.transactions, filter, filterAccount, filterCategory, searchTerm, minAmount, maxAmount, sortField, sortDirection, data.accounts, data.categories]);
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) setSortDirection(sortDirection === 'ASC' ? 'DESC' : 'ASC');
-    else { setSortField(field); setSortDirection('DESC'); }
-  };
-
-  const getEntities = (t: Transaction) => {
-    const acc = data.accounts.find(a => a.id === t.accountId);
-    const cat = data.categories.find(c => c.id === t.categoryId);
-    const dst = t.transferAccountId ? data.accounts.find(a => a.id === t.transferAccountId) : null;
-    return { acc, cat, dst };
-  };
+  const renderIcon = (iconStr: string, className = "w-10 h-10") => {
+    if (iconStr.startsWith('http')) return <img src={iconStr} className={`${className} object-contain`} />;
+    return <span className="text-xl">{iconStr}</span>;
+  }
 
   return (
     <div className="space-y-6 md:space-y-10 pb-24">
-      {/* Cabecera y Filtro Temporal Sincronizado */}
       <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
         <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
-        <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto w-full lg:w-auto">
+        <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto w-full lg:w-auto">
           {['ALL', 'MONTH', 'QUARTER', 'YEAR', 'CUSTOM'].map(r => (
             <button key={r} onClick={() => onUpdateFilter({...filter, timeRange: r as any})} className={`flex-1 lg:flex-none px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === r ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
               {r === 'ALL' ? 'Todo' : r === 'MONTH' ? 'Mes' : r === 'QUARTER' ? 'Trim' : r === 'YEAR' ? 'Año' : 'Pers'}
@@ -188,82 +165,80 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         </button>
       </div>
 
-      {/* Panel de Filtros Dinámicos */}
       <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="relative group">
-                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500" size={18} />
+              <div className="relative">
+                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                 <input type="text" placeholder="Concepto..." className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none transition-all" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
               </div>
               <select className="px-5 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none cursor-pointer" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
-                <option value="ALL">CUALQUIER CUENTA</option>
-                {data.accounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+                <option value="ALL">CUENTA</option>
+                {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
               <select className="px-5 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none cursor-pointer" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-                <option value="ALL">CUALQUIER CATEGORÍA</option>
-                {data.categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                <option value="ALL">CATEGORÍA</option>
+                {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
               <div className="flex gap-2">
-                <input type="number" placeholder="Min €" className="w-1/2 px-4 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none" value={minAmount} onChange={e => setMinAmount(e.target.value)} />
-                <input type="number" placeholder="Max €" className="w-1/2 px-4 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none" value={maxAmount} onChange={e => setMaxAmount(e.target.value)} />
+                <input type="number" placeholder="Mín €" className="w-1/2 px-4 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none" value={minAmount} onChange={e => setMinAmount(e.target.value)} />
+                <input type="number" placeholder="Máx €" className="w-1/2 px-4 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none" value={maxAmount} onChange={e => setMaxAmount(e.target.value)} />
               </div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-50">
-              <div className="flex items-center gap-6">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ArrowUpDown size={14}/> Ordenar por:</span>
-                <div className="flex gap-3">
-                  {['DATE', 'DESCRIPTION', 'AMOUNT'].map(f => (
-                    <button key={f} onClick={() => handleSort(f as SortField)} className={`text-[10px] font-black uppercase tracking-tighter px-4 py-2 rounded-lg transition-all ${sortField === f ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:bg-slate-100'}`}>
-                      {f === 'DATE' ? 'Fecha' : f === 'DESCRIPTION' ? 'Concepto' : 'Importe'} {sortField === f && (sortDirection === 'ASC' ? '↑' : '↓')}
+              <div className="flex items-center gap-4">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ArrowUpDown size={14}/> Ordenar:</span>
+                <div className="flex flex-wrap gap-2">
+                  {['DATE', 'DESCRIPTION', 'AMOUNT', 'ACCOUNT', 'CATEGORY'].map(f => (
+                    <button key={f} onClick={() => { if(sortField === f) setSortDirection(sortDirection === 'ASC' ? 'DESC' : 'ASC'); else { setSortField(f as SortField); setSortDirection('DESC'); }}} className={`text-[9px] font-black uppercase tracking-tighter px-4 py-2 rounded-lg transition-all ${sortField === f ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-100'}`}>
+                      {f === 'DATE' ? 'Fecha' : f === 'DESCRIPTION' ? 'Concepto' : f === 'AMOUNT' ? 'Importe' : f === 'ACCOUNT' ? 'Cuenta' : 'Cat'} {sortField === f && (sortDirection === 'ASC' ? '↑' : '↓')}
                     </button>
                   ))}
                 </div>
               </div>
-              <div className="text-[10px] font-black text-indigo-500 uppercase">Mostrando {filteredTransactions.length} movimientos</div>
+              <div className="text-[10px] font-black text-indigo-500 uppercase">{filteredTransactions.length} registros</div>
           </div>
       </div>
 
-      {/* Listado de Movimientos (Adaptado a móviles) */}
       <div className="space-y-4">
           {filteredTransactions.map(t => {
-              const { acc, cat, dst } = getEntities(t);
-              const isExpense = t.type === 'EXPENSE';
-              const isIncome = t.type === 'INCOME';
+              const acc = data.accounts.find(x=>x.id===t.accountId);
+              const cat = data.categories.find(x=>x.id===t.categoryId);
+              const isEx = t.type === 'EXPENSE';
+              const isTr = t.type === 'TRANSFER';
               return (
-                  <div key={t.id} className="group bg-white p-4 md:p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-100 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 relative">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100 shadow-sm text-2xl shrink-0">
-                          {isExpense ? cat?.icon : acc?.icon}
+                  <div key={t.id} className="group bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-100 transition-all flex flex-col md:flex-row md:items-center justify-between gap-5 relative">
+                      <div className="flex items-center gap-5">
+                        <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100 shadow-sm shrink-0">
+                          {renderIcon(isEx ? (cat?.icon || '🏷️') : (acc?.icon || '🏦'), "w-9 h-9")}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.date}</p>
-                          <h4 className="text-sm font-black text-slate-900 truncate uppercase">{t.description}</h4>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[9px] font-bold px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md uppercase tracking-tight">{acc?.name}</span>
-                            {t.type === 'TRANSFER' && <><ArrowRightLeft size={10} className="text-slate-300"/><span className="text-[9px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md uppercase tracking-tight">{dst?.name}</span></>}
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{t.date}</p>
+                          <h4 className="text-sm font-black text-slate-900 truncate uppercase leading-tight">{t.description}</h4>
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            <span className="text-[9px] font-black px-2 py-1 bg-slate-100 text-slate-500 rounded-lg uppercase tracking-tight">{acc?.name}</span>
+                            {isTr && <><ArrowRightLeft size={10} className="text-slate-300"/><span className="text-[9px] font-black px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg uppercase tracking-tight">{data.accounts.find(x=>x.id===t.transferAccountId)?.name}</span></>}
+                            {cat && <span className="text-[9px] font-black px-2 py-1 bg-slate-100 text-indigo-400 rounded-lg uppercase tracking-tight">#{cat.name}</span>}
                           </div>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-none pt-3 md:pt-0">
+                      <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-none pt-4 md:pt-0">
                           <div className="text-right">
-                            <p className={`text-xl font-black tracking-tighter ${isExpense ? 'text-rose-600' : isIncome ? 'text-emerald-600' : 'text-slate-400'}`}>
-                              {isExpense ? '-' : isIncome ? '+' : ''}{t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                            <p className={`text-2xl font-black tracking-tighter ${isEx ? 'text-rose-600' : t.type === 'INCOME' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                              {isEx ? '-' : t.type === 'INCOME' ? '+' : ''}{t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
                             </p>
-                            {t.attachment && <span className="text-[8px] font-black text-indigo-500 uppercase flex items-center justify-end gap-1 mt-1"><Paperclip size={10}/> Con adjunto</span>}
+                            {t.attachment && <span className="text-[9px] font-black text-indigo-500 uppercase flex items-center justify-end gap-1 mt-1"><Paperclip size={12}/> Adjunto</span>}
                           </div>
-                          <div className="flex gap-1">
-                            <button onClick={() => openEditor(t)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"><Edit3 size={18}/></button>
-                            <button onClick={() => { setDeleteConfirmId(t.id); }} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all"><Trash2 size={18}/></button>
+                          <div className="flex gap-1.5">
+                            <button onClick={() => openEditor(t)} className="p-3.5 bg-slate-50 text-slate-400 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"><Edit3 size={20}/></button>
+                            <button onClick={() => setDeleteConfirmId(t.id)} className="p-3.5 bg-slate-50 text-slate-400 rounded-2xl hover:bg-rose-50 hover:text-rose-600 transition-all"><Trash2 size={20}/></button>
                           </div>
                       </div>
-
                       {deleteConfirmId === t.id && (
                         <div className="absolute inset-0 bg-white/95 rounded-[2rem] z-10 flex items-center justify-center gap-4 animate-in fade-in">
-                          <p className="text-[10px] font-black text-slate-900 uppercase">¿Confirmas borrado?</p>
-                          <div className="flex gap-2">
-                            <button onClick={() => { onDeleteTransaction(t.id); setDeleteConfirmId(null); }} className="bg-rose-600 text-white px-5 py-2 rounded-xl font-black text-[10px] uppercase shadow-lg shadow-rose-200">Borrar</button>
-                            <button onClick={() => setDeleteConfirmId(null)} className="bg-slate-100 text-slate-500 px-5 py-2 rounded-xl font-black text-[10px] uppercase">No</button>
+                          <p className="text-xs font-black text-slate-900 uppercase">¿Borrar movimiento?</p>
+                          <div className="flex gap-3">
+                            <button onClick={() => { onDeleteTransaction(t.id); setDeleteConfirmId(null); }} className="bg-rose-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase shadow-lg shadow-rose-200">Borrar</button>
+                            <button onClick={() => setDeleteConfirmId(null)} className="bg-slate-100 text-slate-500 px-6 py-3 rounded-xl font-black text-[10px] uppercase">No</button>
                           </div>
                         </div>
                       )}
@@ -272,59 +247,39 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
           })}
       </div>
 
-      {/* MODAL EDITOR DE MOVIMIENTO */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar">
-                <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:text-rose-600 transition-all"><X size={20}/></button>
-                <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase mb-8">{editingTx ? 'Actualizar Movimiento' : 'Nuevo Movimiento'}</h3>
-                
+                <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 transition-all"><X size={20}/></button>
+                <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase mb-8">{editingTx ? 'Editar Movimiento' : 'Nuevo Movimiento'}</h3>
                 <div className="space-y-6">
                     <div className="bg-slate-100 p-1.5 rounded-2xl flex gap-1.5 shadow-inner">
                         {['EXPENSE', 'INCOME', 'TRANSFER'].map(m => (
-                          <button key={m} type="button" onClick={() => setFType(m as any)} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all ${fType === m ? 'bg-white text-indigo-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
-                            {m === 'EXPENSE' ? 'Gasto' : m === 'INCOME' ? 'Ingreso' : 'Traspaso'}
-                          </button>
+                          <button key={m} type="button" onClick={() => setFType(m as any)} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${fType === m ? 'bg-white text-indigo-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>{m === 'EXPENSE' ? 'Gasto' : m === 'INCOME' ? 'Ingreso' : 'Traspaso'}</button>
                         ))}
                     </div>
-
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe (€)</label><input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-xl font-black outline-none focus:border-indigo-500 transition-all" value={fAmount} onChange={e => setFAmount(e.target.value)} /></div>
-                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDate} onChange={e => setFDate(e.target.value)} /></div>
+                        <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe</label><input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-2xl font-black outline-none focus:border-indigo-500 transition-all" value={fAmount} onChange={e => setFAmount(e.target.value)} /></div>
+                        <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDate} onChange={e => setFDate(e.target.value)} /></div>
                     </div>
-
-                    <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Descripción / Concepto</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDesc} onChange={e => setFDesc(e.target.value)} /></div>
-
+                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Descripción / Concepto</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDesc} onChange={e => setFDesc(e.target.value)} /></div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{fType === 'TRANSFER' ? 'Cuenta Origen' : 'Cuenta'}</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fAcc} onChange={e => setFAcc(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}</select></div>
+                        <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{fType === 'TRANSFER' ? 'Origen' : 'Cuenta'}</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fAcc} onChange={e => setFAcc(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
                         {fType === 'TRANSFER' ? (
-                          <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cuenta Destino</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fTransferDest} onChange={e => setFTransferDest(e.target.value)}><option value="">Seleccionar...</option>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}</select></div>
+                          <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Destino</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fTransferDest} onChange={e => setFTransferDest(e.target.value)}><option value="">Seleccionar...</option>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
                         ) : (
-                          <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fCat} onChange={e => setFCat(e.target.value)}><option value="">Seleccionar...</option>{data.categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select></div>
+                          <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fCat} onChange={e => setFCat(e.target.value)}><option value="">Seleccionar...</option>{data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                         )}
                     </div>
-
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Paperclip size={14} /> Comprobante (Imagen)</label>
-                        <div className="flex gap-2">
-                          <button type="button" onClick={() => fileInputRef.current?.click()} className={`flex-1 px-6 py-4 border-2 border-dashed rounded-2xl font-black text-[10px] uppercase transition-all ${fAttachment ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-indigo-200'}`}>
-                            {fAttachment ? 'Imagen Seleccionada' : 'Añadir Archivo'}
-                          </button>
-                          {fAttachment && <button type="button" onClick={() => setFAttachment(undefined)} className="p-4 bg-rose-50 text-rose-500 rounded-2xl border border-rose-100"><X size={18}/></button>}
+                        <div className="flex gap-3">
+                          <button type="button" onClick={() => fileInputRef.current?.click()} className={`flex-1 px-6 py-4 border-2 border-dashed rounded-2xl font-black text-[10px] uppercase transition-all ${fAttachment ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-indigo-200'}`}>{fAttachment ? 'Archivo Añadido' : 'Subir Imagen'}</button>
+                          {fAttachment && <button type="button" onClick={() => setFAttachment(undefined)} className="p-4 bg-rose-50 text-rose-500 rounded-2xl border border-rose-100 shadow-sm"><X size={20}/></button>}
                         </div>
-                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={e => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onload = ev => setFAttachment(ev.target?.result as string);
-                            reader.readAsDataURL(file);
-                          }
-                        }} />
+                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = ev => setFAttachment(ev.target?.result as string); reader.readAsDataURL(file); }}} />
                     </div>
-
-                    <button onClick={handleSave} className="w-full py-6 bg-slate-950 text-white rounded-[2rem] font-black uppercase text-[11px] shadow-2xl hover:bg-indigo-600 transition-all active:scale-95 mt-4">
-                      {editingTx ? 'Guardar Cambios' : 'Confirmar Movimiento'}
-                    </button>
+                    <button onClick={handleSave} className="w-full py-6 bg-slate-950 text-white rounded-[2rem] font-black uppercase text-[11px] shadow-2xl hover:bg-indigo-600 transition-all active:scale-95 mt-6">{editingTx ? 'Guardar Cambios' : 'Confirmar Registro'}</button>
                 </div>
             </div>
         </div>

@@ -85,6 +85,13 @@ export interface AppState {
   favorites?: FavoriteMovement[];
 }
 
+export interface ImportReport {
+  added: number;
+  newAccounts: string[];
+  newCategories: string[];
+  errors: { fila: number; error: string }[];
+}
+
 export type View = 'RESUMEN' | 'TRANSACTIONS' | 'SETTINGS' | 'AI_INSIGHTS';
 
 export type TimeRange = 'ALL' | 'MONTH' | 'QUARTER' | 'YEAR' | 'CUSTOM';
