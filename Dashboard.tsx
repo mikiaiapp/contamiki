@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useRef } from 'react';
 import { AppState, Family, Category, Transaction, RecurrentMovement } from './types';
 import { TrendingUp, TrendingDown, Banknote, ChevronDown, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, Calendar, X, Plus, List, Info, ArrowRightLeft, Paperclip, FileText, Image as ImageIcon, Trash2, Bell, CheckCircle2, MoreHorizontal, Edit2, Repeat } from 'lucide-react';
@@ -20,11 +19,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
-  // Estados para modales de interacción
   const [quickAddCat, setQuickAddCat] = useState<Category | null>(null);
   const clickTimerRef = useRef<number | null>(null);
 
-  // Estados del formulario rápido/edición
   const [quickAmount, setQuickAmount] = useState('');
   const [quickDesc, setQuickDesc] = useState('');
   const [quickDate, setQuickDate] = useState(new Date().toISOString().split('T')[0]);
@@ -33,7 +30,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const quickFileRef = useRef<HTMLInputElement>(null);
   const [editingRecAsTx, setEditingRecAsTx] = useState<RecurrentMovement | null>(null);
 
-  // Filtro de fecha basado en strings para evitar desfases de zona horaria
   const dateBounds = useMemo(() => {
     const y = referenceDate.getFullYear();
     const m = referenceDate.getMonth();
@@ -229,7 +225,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       setQuickAddCat(null);
   };
 
-  // PUNTO DE PARTIDA 2015
+  // RANGO 2015
   const startYear = 2015;
   const currentYear = new Date().getFullYear();
   const years = Array.from({length: currentYear - startYear + 3}, (_, i) => startYear + i);
@@ -392,7 +388,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
       {quickAddCat && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[100] p-6 animate-in fade-in duration-300">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-8 relative animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-8 relative animate-in zoom-in-95 max-h-[90vh] overflow-y-auto custom-scrollbar">
                   <button onClick={() => { setQuickAddCat(null); setEditingRecAsTx(null); }} className="absolute top-6 right-6 p-2 bg-slate-50 rounded-full text-slate-400 hover:text-rose-500 transition-colors"><X size={20}/></button>
                   <div className="flex items-center gap-4 mb-8">
                       <div className="w-14 h-14 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center shrink-0 shadow-sm">{renderIcon(quickAddCat?.icon || '', "w-10 h-10", "text-2xl")}</div>

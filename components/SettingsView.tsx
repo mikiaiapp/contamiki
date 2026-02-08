@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, AccountGroup } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText, MoveRight, BoxSelect, AlertOctagon, Eraser, AlertTriangle, RefreshCcw } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText, MoveRight, BoxSelect, AlertOctagon, Eraser, AlertTriangle, RefreshCcw, ArrowLeftRight } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import { parseMigrationData } from '../services/geminiService';
 import * as XLSX from 'xlsx';
@@ -19,38 +19,41 @@ const generateId = () => {
 };
 
 type Tab = 'ACC_GROUPS' | 'ACCOUNTS' | 'FAMILIES' | 'CATEGORIES' | 'RECURRENTS' | 'FAVORITES' | 'TOOLS';
+type ImportMode = 'NORMAL' | 'TRANSFER';
+
+interface ImportReport {
+  added: number;
+  newAccounts: string[];
+  newCategories: string[];
+  errors: { fila: number; error: string }[];
+}
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }) => {
   const [activeTab, setActiveTab] = useState<Tab>('ACC_GROUPS');
+  const [importMode, setImportMode] = useState<ImportMode>('NORMAL');
   
   const [webLogos, setWebLogos] = useState<{url: string, source: string}[]>([]);
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const searchTimeoutRef = useRef<number | null>(null);
 
-  // Importador de Entidades (CSV/Excel para Cuentas/Familias/Categorias)
   const entityImportFileRef = useRef<HTMLInputElement>(null);
 
-  // Estado Migración Legacy (Contamoney)
   const [migrationText, setMigrationText] = useState('');
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationPreview, setMigrationPreview] = useState<{accounts: any[], families: any[], categories: any[]} | null>(null);
 
-  // Importación rápida por texto/CSV de movimientos
   const [pasteMovements, setPasteMovements] = useState('');
-  const [importErrors, setImportErrors] = useState<{fila: number, dato: string, error: string}[]>([]);
+  const [importReport, setImportReport] = useState<ImportReport | null>(null);
 
-  // Estados de formulario masivo general
   const [showQuickImport, setShowQuickImport] = useState(false);
   const [pasteData, setPasteData] = useState('');
 
-  // Estados de formulario Agrupaciones de Cuentas
   const [grpId, setGrpId] = useState<string | null>(null);
   const [grpName, setGrpName] = useState('');
   const [grpIcon, setGrpIcon] = useState('🗂️');
   const grpFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Estados de formulario Cuentas
   const [accId, setAccId] = useState<string | null>(null);
   const [accName, setAccName] = useState('');
   const [accBalance, setAccBalance] = useState('');
@@ -58,21 +61,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [accGroupId, setAccGroupId] = useState('');
   const accFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Estados de formulario Familias
   const [famId, setFamId] = useState<string | null>(null);
   const [famName, setFamName] = useState('');
   const [famType, setFamType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [famIcon, setFamIcon] = useState('📂');
   const famFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Estados de formulario Categorías
   const [catId, setCatId] = useState<string | null>(null);
   const [catName, setCatName] = useState('');
   const [catParent, setCatParent] = useState('');
   const [catIcon, setCatIcon] = useState('🏷️');
   const catFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Estados de formulario Recurrentes
   const [recId, setRecId] = useState<string | null>(null);
   const [recDesc, setRecDesc] = useState('');
   const [recAmount, setRecAmount] = useState('');
@@ -83,7 +83,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [recCounterpartId, setRecCounterpartId] = useState('');
   const [recCat, setRecCat] = useState('');
 
-  // Estados de formulario Favoritos
   const [favId, setFavId] = useState<string | null>(null);
   const [favName, setFavName] = useState('');
   const [favAmount, setFavAmount] = useState('');
@@ -91,7 +90,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [favCounterpartId, setFavCounterpartId] = useState('');
   const [favCat, setFavCat] = useState('');
 
-  // Estados Borrado Masivo y Reset
   const [massDeleteYear, setMassDeleteYear] = useState<string | null>(null);
   const [showFullResetConfirm, setShowFullResetConfirm] = useState(false);
 
@@ -109,9 +107,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       setRecId(null); setRecDesc(''); setRecAmount(''); setRecFreq('MONTHLY'); setRecInterval('1'); setRecStart(new Date().toISOString().split('T')[0]); setRecAcc(data.accounts[0]?.id || ''); setRecCounterpartId(''); setRecCat('');
       setFavId(null); setFavName(''); setFavAmount(''); setFavAcc(data.accounts[0]?.id || ''); setFavCounterpartId(''); setFavCat('');
       setWebLogos([]); setHasSearched(false);
-      setShowQuickImport(false); setPasteData(''); setPasteMovements(''); setImportErrors([]);
+      setShowQuickImport(false); setPasteData(''); setPasteMovements(''); setImportReport(null);
       setMigrationText(''); setMigrationPreview(null); setMassDeleteYear(null); setShowFullResetConfirm(false);
       if (entityImportFileRef.current) entityImportFileRef.current.value = '';
+  };
+
+  // Fix: Adding missing exportBackup function to handle data export to JSON
+  const exportBackup = () => {
+    const dataStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const exportFileDefaultName = `contamiki_backup_${new Date().toISOString().split('T')[0]}.json`;
+
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', url);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+    URL.revokeObjectURL(url);
   };
 
   const triggerWebSearch = (text: string) => {
@@ -217,105 +229,113 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       if (!pasteMovements.trim()) return;
       const lines = pasteMovements.trim().split('\n');
       const newTransactions: Transaction[] = [];
-      const errors: {fila: number, dato: string, error: string}[] = [];
+      
+      // Colecciones mutables para esta ejecución
+      const localAccounts = [...data.accounts];
+      const localCategories = [...data.categories];
+      const localAccountGroups = [...(data.accountGroups || [])];
+      const localFamilies = [...data.families];
+
+      const report: ImportReport = { added: 0, newAccounts: [], newCategories: [], errors: [] };
 
       lines.forEach((line, index) => {
-          // SEPARADOR ESTANDARIZADO A PUNTO Y COMA (;)
           const parts = line.split(';').map(s => s.trim());
-          if (parts.length < 5) { 
-              errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente (fecha; categoria; cuenta; concepto; importe)" });
-              return; 
-          }
+          
+          if (importMode === 'NORMAL') {
+            if (parts.length < 5) { 
+                report.errors.push({ fila: index + 1, error: "Formato insuficiente (fecha; categoria; cuenta; concepto; importe)" });
+                return; 
+            }
+            const [fec, catName, accName, concept, amountStr] = parts;
+            
+            // Buscar o crear cuenta
+            let account = localAccounts.find(a => a.name.toLowerCase() === accName.toLowerCase());
+            if (!account) {
+                const group = localAccountGroups[0] || { id: 'g1', name: 'Otros', icon: '🗂️' };
+                account = { id: generateId(), name: accName, initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: group.id };
+                localAccounts.push(account);
+                report.newAccounts.push(accName);
+            }
 
-          const [fec, catName, accName] = parts;
-          let txType: TransactionType = 'EXPENSE';
-          let catId = '';
-          let familyId = '';
-          let accId = '';
-          let transferAccId = undefined;
-          let concept = '';
-          let amountStr = '';
+            // Buscar o crear categoría
+            let category = localCategories.find(c => c.name.toLowerCase() === catName.toLowerCase());
+            if (!category) {
+                const family = localFamilies[0] || { id: 'f1', name: 'Varios', type: 'EXPENSE', icon: '🏷️' };
+                category = { id: generateId(), name: catName, familyId: family.id, icon: '🏷️' };
+                localCategories.push(category);
+                report.newCategories.push(catName);
+            }
 
-          const account = data.accounts.find(a => a.name.toLowerCase() === accName.toLowerCase());
-          if (!account) { 
-              errors.push({ fila: index + 1, dato: line, error: `Cuenta "${accName}" no encontrada en el sistema` });
-              return; 
-          }
-          accId = account.id;
+            const amountVal = parseFloat(amountStr.replace(',', '.'));
+            if (isNaN(amountVal)) { report.errors.push({ fila: index + 1, error: `Importe "${amountStr}" no numérico` }); return; }
 
-          if (catName.toLowerCase() === 'traspaso entre cuentas') {
-              if (parts.length < 6) { 
-                  errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente para traspaso (faltan campos)" });
-                  return; 
-              }
-              txType = 'TRANSFER';
-              const destAccName = parts[3];
-              concept = parts[4];
-              amountStr = parts[5];
-              const destAcc = data.accounts.find(a => a.name.toLowerCase() === destAccName.toLowerCase());
-              if (!destAcc) { 
-                  errors.push({ fila: index + 1, dato: line, error: `Cuenta destino "${destAccName}" no encontrada` });
-                  return; 
-              }
-              transferAccId = destAcc.id;
+            const txType: TransactionType = amountVal < 0 ? 'EXPENSE' : 'INCOME';
+
+            newTransactions.push({
+                id: generateId(),
+                date: fec,
+                description: concept,
+                amount: Math.abs(amountVal),
+                type: txType,
+                accountId: account.id,
+                categoryId: category.id,
+                familyId: category.familyId
+            });
+
           } else {
-              concept = parts[3];
-              amountStr = parts[4];
-              const category = data.categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
-              if (!category) { 
-                  errors.push({ fila: index + 1, dato: line, error: `Categoría "${catName}" no existe` });
-                  return; 
-              }
-              catId = category.id;
-              familyId = category.familyId;
-          }
+            // MODO TRASPASO: fecha; origen; destino; concepto; importe
+            if (parts.length < 5) { 
+                report.errors.push({ fila: index + 1, error: "Formato insuficiente para Traspaso (fecha; origen; destino; concepto; importe)" });
+                return; 
+            }
+            const [fec, srcAccName, dstAccName, concept, amountStr] = parts;
 
-          // Lógica mejorada para manejar comas como decimales y signos negativos
-          const amountVal = parseFloat(amountStr.replace(',', '.'));
-          if (isNaN(amountVal)) {
-              errors.push({ fila: index + 1, dato: line, error: `Importe "${amountStr}" no numérico` });
-              return;
-          }
+            // Buscar o crear cuenta origen
+            let srcAcc = localAccounts.find(a => a.name.toLowerCase() === srcAccName.toLowerCase());
+            if (!srcAcc) {
+                const group = localAccountGroups[0] || { id: 'g1', name: 'Otros', icon: '🗂️' };
+                srcAcc = { id: generateId(), name: srcAccName, initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: group.id };
+                localAccounts.push(srcAcc);
+                report.newAccounts.push(srcAccName);
+            }
 
-          // DETECCIÓN DE SIGNOS: Si es negativo es GASTO, si es positivo es INGRESO
-          if (txType !== 'TRANSFER') {
-              txType = amountVal < 0 ? 'EXPENSE' : 'INCOME';
-          }
+            // Buscar o crear cuenta destino
+            let dstAcc = localAccounts.find(a => a.name.toLowerCase() === dstAccName.toLowerCase());
+            if (!dstAcc) {
+                const group = localAccountGroups[0] || { id: 'g1', name: 'Otros', icon: '🗂️' };
+                dstAcc = { id: generateId(), name: dstAccName, initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: group.id };
+                localAccounts.push(dstAcc);
+                report.newAccounts.push(dstAccName);
+            }
 
-          newTransactions.push({
-              id: generateId(),
-              date: fec,
-              description: concept,
-              amount: Math.abs(amountVal), // Guardamos el valor absoluto
-              type: txType,
-              accountId: accId,
-              transferAccountId: transferAccId,
-              categoryId: catId,
-              familyId: familyId
-          });
+            const amountVal = parseFloat(amountStr.replace(',', '.'));
+            if (isNaN(amountVal)) { report.errors.push({ fila: index + 1, error: `Importe "${amountStr}" no numérico` }); return; }
+
+            newTransactions.push({
+                id: generateId(),
+                date: fec,
+                description: concept,
+                amount: Math.abs(amountVal),
+                type: 'TRANSFER',
+                accountId: srcAcc.id,
+                transferAccountId: dstAcc.id,
+                familyId: '',
+                categoryId: ''
+            });
+          }
       });
 
-      if (newTransactions.length > 0) {
-          onUpdateData({ transactions: [...data.transactions, ...newTransactions] });
-      }
+      report.added = newTransactions.length;
+      
+      // Consolidar cambios en el estado global
+      onUpdateData({ 
+        transactions: [...data.transactions, ...newTransactions],
+        accounts: localAccounts,
+        categories: localCategories
+      });
 
-      if (errors.length > 0) {
-          setImportErrors(errors);
-          if (newTransactions.length > 0) {
-              alert(`Importación completada con avisos: ${newTransactions.length} añadidos, ${errors.length} errores detectados. Revisa el reporte.`);
-          }
-      } else {
-          alert(`¡Éxito! ${newTransactions.length} movimientos importados correctamente.`);
-          resetForm();
-      }
-  };
-
-  const downloadErrorReport = () => {
-      if (importErrors.length === 0) return;
-      const ws = XLSX.utils.json_to_sheet(importErrors);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Errores Importacion");
-      XLSX.writeFile(wb, `errores_importacion_${new Date().toISOString().split('T')[0]}.xlsx`);
+      setImportReport(report);
+      setPasteMovements('');
   };
 
   const transactionsPerYear = useMemo(() => {
@@ -385,42 +405,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       resetForm();
   };
 
-  const handleMigrationProcess = async () => {
-      if (!migrationText.trim()) return;
-      setIsMigrating(true);
-      try {
-          const result = await parseMigrationData(migrationText);
-          setMigrationPreview(result);
-      } catch (e) { alert("Error al analizar los datos con Gemini."); }
-      finally { setIsMigrating(false); }
-  };
-
-  const confirmMigration = () => {
-      if (!migrationPreview) return;
-      const newAccounts = migrationPreview.accounts.map(a => ({ id: generateId(), name: a.name, initialBalance: a.balance || 0, currency: 'EUR', icon: '🏦', groupId: (data.accountGroups || [])[0]?.id || 'g1' }));
-      const newFamilies = migrationPreview.families.map(f => ({ id: generateId(), name: f.name, type: (f.type === 'INCOME' ? 'INCOME' : 'EXPENSE') as any, icon: '📂' }));
-      const newCategories = migrationPreview.categories.map(c => {
-          const fam = [...data.families, ...newFamilies].find(f => f.name.toLowerCase() === c.familyName?.toLowerCase()) || newFamilies[0];
-          return { id: generateId(), name: c.name, familyId: fam?.id || '', icon: '🏷️' };
-      });
-      onUpdateData({ accounts: [...data.accounts, ...newAccounts], families: [...data.families, ...newFamilies], categories: [...data.categories, ...newCategories] });
-      resetForm();
-      alert("¡Estructura migrada correctamente!");
-  };
-
-  const exportBackup = () => {
-      const dataStr = JSON.stringify(data, null, 2);
-      const blob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `contamiki_backup_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-  };
-
   const renderIconInput = (icon: string, setIcon: (s: string) => void, currentName: string, fileRef: React.RefObject<HTMLInputElement>) => {
     const isImage = icon.startsWith('data:image') || icon.startsWith('http');
     const showBox = isSearchingWeb || webLogos.length > 0 || (hasSearched && !isSearchingWeb);
@@ -474,10 +458,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     let importHint = "";
     let placeholderExample = "";
     switch(activeTab) {
-        case 'ACCOUNTS': importHint = "Agrupación; Cuenta; Icono/URL; (Saldo - Opcional)"; placeholderExample = "Bancos; BBVA; 🏦; 1500.00\nEfectivo; Cartera; 💶; 50.00"; break;
+        case 'ACCOUNTS': importHint = "Agrupación; Cuenta; Icono; (Saldo)"; placeholderExample = "Bancos; BBVA; 🏦; 1500.00\nEfectivo; Cartera; 💶; 50.00"; break;
         case 'ACC_GROUPS': importHint = "Nombre Agrupación; Icono"; placeholderExample = "Bancos; 🏦\nCrypto; 🪙"; break;
-        case 'FAMILIES': importHint = "Nombre; Icono/Emoji; Tipo (INCOME/EXPENSE)"; placeholderExample = "Vivienda; 🏠; EXPENSE\nNómina; 💼; INCOME"; break;
-        case 'CATEGORIES': importHint = "Nombre; Icono/Emoji; Nombre de Familia"; placeholderExample = "Alquiler; 🔑; Vivienda\nSupermercado; 🛒; Alimentación"; break;
+        case 'FAMILIES': importHint = "Nombre; Icono; Tipo (INCOME/EXPENSE)"; placeholderExample = "Vivienda; 🏠; EXPENSE\nNómina; 💼; INCOME"; break;
+        case 'CATEGORIES': importHint = "Nombre; Icono; Nombre de Familia"; placeholderExample = "Alquiler; 🔑; Vivienda\nSupermercado; 🛒; Alimentación"; break;
         default: importHint = "Formato genérico"; placeholderExample = "Dato1; Dato2; Dato3";
     }
     return (
@@ -486,14 +470,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><ClipboardPaste size={16} /> Importación Rápida</h4>
                 <button onClick={() => setShowQuickImport(false)} className="text-slate-300 hover:text-rose-500"><XCircle size={18}/></button>
             </div>
-            <p className="text-[9px] font-bold text-slate-400 uppercase leading-relaxed">
-                Pega aquí tus datos. Formato esperado: <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg">{importHint}</span>. Una fila por elemento.
-            </p>
             <textarea className="w-full h-40 p-5 bg-slate-50 border border-slate-100 rounded-xl font-mono text-[11px] outline-none focus:border-indigo-500 transition-all custom-scrollbar placeholder:text-slate-300" placeholder={placeholderExample} value={pasteData} onChange={e => setPasteData(e.target.value)} />
             <div className="flex flex-wrap gap-2">
-                <button onClick={handleQuickImport} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-slate-950 transition-all">Importar Texto</button>
-                <button onClick={() => entityImportFileRef.current?.click()} className="flex-1 py-4 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"><Upload size={14}/> Subir CSV/Excel</button>
-                <input type="file" ref={entityImportFileRef} className="hidden" accept=".csv, .xlsx, .xls" onChange={handleEntityFileImport} />
+                <button onClick={handleQuickImport} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-slate-950 transition-all">Importar</button>
                 <button onClick={() => resetForm()} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase">Cancelar</button>
             </div>
         </div>
@@ -501,7 +480,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   };
 
   return (
-    <div className="space-y-12 max-w-full overflow-hidden">
+    <div className="space-y-12 max-w-full overflow-hidden pb-10">
       <div className="text-center md:text-left space-y-2">
         <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter leading-none">Ajustes.</h2>
         <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Gestión y mantenimiento del sistema</p>
@@ -524,6 +503,167 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       </div>
 
       <div className="max-w-4xl mx-auto">
+        {activeTab === 'TOOLS' && (
+            <div className="space-y-12 pb-10">
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+                        <div className="space-y-2">
+                            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
+                                <ClipboardPaste className="text-indigo-600" size={28}/> Mega Importador de Movimientos
+                            </h3>
+                            <div className="flex bg-slate-100 p-1.5 rounded-2xl mt-4 border border-slate-200 w-fit">
+                                <button onClick={() => setImportMode('NORMAL')} className={`px-5 py-2.5 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all ${importMode === 'NORMAL' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-800'}`}>Fase 1: Ingresos/Gastos</button>
+                                <button onClick={() => setImportMode('TRANSFER')} className={`px-5 py-2.5 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all ${importMode === 'TRANSFER' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-800'}`}>Fase 2: Traspasos</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                        <div className="bg-indigo-50/50 p-6 rounded-3xl border border-indigo-100 space-y-2">
+                            <p className="text-indigo-900 text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><Info size={14}/> Formato Sugerido:</p>
+                            <p className="text-indigo-600 font-mono text-[11px] font-bold">
+                                {importMode === 'NORMAL' 
+                                    ? "fecha; categoría; cuenta; concepto; importe (ej: -25.50 para gastos)" 
+                                    : "fecha; cuenta origen; cuenta destino; concepto; importe"}
+                            </p>
+                            <p className="text-indigo-400 text-[9px] uppercase font-bold italic mt-2">Detección automática: si la cuenta o categoría no existen, ContaMiki las creará por ti.</p>
+                        </div>
+
+                        <textarea 
+                            className="w-full h-56 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-all custom-scrollbar placeholder:text-slate-300 shadow-inner"
+                            placeholder={importMode === 'NORMAL' 
+                                ? "2023-10-27; Alimentación; Mi Banco; Compra cena; -25.50\n2023-10-28; Nómina; Mi Banco; Sueldo; 1500.00"
+                                : "2023-10-27; Mi Banco; Efectivo; Retirada cajero; 50.00"}
+                            value={pasteMovements}
+                            onChange={e => setPasteMovements(e.target.value)}
+                        />
+                        
+                        <div className="flex gap-3">
+                            <button onClick={handleManualMovementImport} className="flex-1 py-5 bg-indigo-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-indigo-200 flex items-center justify-center gap-2">
+                                <Upload size={18} /> Procesar Lote
+                            </button>
+                            <button onClick={resetForm} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-black text-[11px] uppercase">Limpiar</button>
+                        </div>
+                    </div>
+
+                    {importReport && (
+                        <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white space-y-6 animate-in zoom-in-95">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                                <h4 className="text-lg font-black uppercase tracking-tight flex items-center gap-3"><CheckCircle2 className="text-emerald-400" /> Resultado de Importación</h4>
+                                <button onClick={() => setImportReport(null)}><XCircle size={20} className="text-slate-500" /></button>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-center"><span className="text-[9px] font-black text-slate-400 uppercase">Añadidos</span><p className="text-2xl font-black text-emerald-400">{importReport.added}</p></div>
+                                <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-center"><span className="text-[9px] font-black text-slate-400 uppercase">Nuevas Cuentas</span><p className="text-2xl font-black text-indigo-400">{importReport.newAccounts.length}</p></div>
+                                <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-center"><span className="text-[9px] font-black text-slate-400 uppercase">Nuevas Categorías</span><p className="text-2xl font-black text-amber-400">{importReport.newCategories.length}</p></div>
+                            </div>
+                            
+                            {(importReport.newAccounts.length > 0 || importReport.newCategories.length > 0) && (
+                                <div className="space-y-3">
+                                    <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Entidades Autocreadas:</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {importReport.newAccounts.map(a => <span key={a} className="px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-[8px] font-black uppercase">Cuenta: {a}</span>)}
+                                        {importReport.newCategories.map(c => <span key={c} className="px-3 py-1 bg-amber-500/20 text-amber-300 rounded-full text-[8px] font-black uppercase">Cat: {c}</span>)}
+                                    </div>
+                                </div>
+                            )}
+
+                            {importReport.errors.length > 0 && (
+                                <div className="space-y-2">
+                                    <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest flex items-center gap-2"><AlertOctagon size={12}/> Errores en filas:</p>
+                                    <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
+                                        {importReport.errors.map((e, i) => (
+                                            <p key={i} className="text-[10px] text-rose-300/70 font-bold">Fila {e.fila}: {e.error}</p>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="bg-rose-50 p-10 rounded-[3rem] shadow-sm border border-rose-100 space-y-8">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+                        <div className="space-y-2">
+                            <h3 className="text-2xl font-black text-rose-900 uppercase tracking-tighter flex items-center gap-3">
+                                <Eraser className="text-rose-600" size={28}/> Limpieza de Movimientos
+                            </h3>
+                            <p className="text-rose-700/60 text-xs font-bold uppercase tracking-widest leading-relaxed">
+                                Elimina movimientos de forma selectiva por año. <br/>
+                                <span className="text-rose-600 font-black">Historial habilitado desde 2015.</span>
+                            </p>
+                        </div>
+                        <button onClick={() => setShowFullResetConfirm(true)} className="flex items-center gap-2 px-6 py-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 shadow-xl shadow-rose-200 transition-all">
+                            <RefreshCcw size={16} /> Reset Completo
+                        </button>
+                    </div>
+
+                    {showFullResetConfirm && (
+                        <div className="bg-rose-600 p-8 rounded-3xl text-white space-y-6 animate-in zoom-in-95 shadow-2xl">
+                            <div className="flex items-center gap-4">
+                                <AlertTriangle size={32} className="animate-bounce" />
+                                <h4 className="text-lg font-black uppercase">¡OPERACIÓN CRÍTICA!</h4>
+                            </div>
+                            <p className="text-sm font-bold leading-relaxed uppercase opacity-90 text-pretty">
+                                Estás a punto de eliminar **TODOS** los movimientos registrados. Esta acción es irreversible.
+                            </p>
+                            <div className="flex gap-3">
+                                <button onClick={handleFullReset} className="flex-1 py-4 bg-white text-rose-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-slate-50 transition-all">BORRAR TODO EL HISTORIAL</button>
+                                <button onClick={() => setShowFullResetConfirm(false)} className="flex-1 py-4 bg-rose-800 text-white rounded-xl border border-rose-400 font-black text-[10px] uppercase hover:bg-rose-900 transition-all">CANCELAR</button>
+                            </div>
+                        </div>
+                    )}
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-rose-100">
+                        {transactionsPerYear.length > 0 ? transactionsPerYear.map(([year, count]) => (
+                            <div key={year} className="bg-white p-6 rounded-3xl border border-rose-100 flex flex-col justify-between gap-4 group hover:shadow-lg transition-all relative overflow-hidden">
+                                {massDeleteYear === year ? (
+                                    <div className="absolute inset-0 bg-rose-600 text-white p-6 flex flex-col justify-center items-center text-center animate-in fade-in zoom-in-95">
+                                        <AlertTriangle size={32} className="mb-2" />
+                                        <p className="text-[11px] font-black uppercase mb-4">¿Borrar {year}?</p>
+                                        <div className="flex gap-2 w-full">
+                                            <button onClick={() => handleMassDelete(year)} className="flex-1 py-3 bg-white text-rose-600 rounded-xl text-[10px] font-black uppercase shadow-lg">Sí</button>
+                                            <button onClick={() => setMassDeleteYear(null)} className="flex-1 py-3 bg-rose-800 text-white rounded-xl text-[10px] font-black uppercase">No</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <span className="text-3xl font-black text-slate-900 tracking-tighter">{year}</span>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{count} movimientos</p>
+                                        </div>
+                                        <button onClick={() => setMassDeleteYear(year)} className="w-full py-4 bg-rose-50 text-rose-600 border border-rose-100 rounded-2xl font-black text-[10px] uppercase hover:bg-rose-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2 group-hover:scale-105 transition-transform">
+                                            <Trash2 size={16} /> Purgar Año
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        )) : !showFullResetConfirm && (
+                            <div className="col-span-full py-10 text-center space-y-4">
+                                <Info size={40} className="mx-auto text-rose-200" />
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">No hay movimientos registrados para purgar.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="bg-slate-900 p-10 rounded-[3rem] shadow-2xl border border-white/5 space-y-10 text-center relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-full bg-indigo-600/5 mix-blend-overlay"></div>
+                    <div className="relative z-10 space-y-8">
+                        <div className="mx-auto bg-indigo-600 text-white w-20 h-20 rounded-3xl flex items-center justify-center shadow-2xl shadow-indigo-600/30 rotate-3"><DatabaseZap size={36} /></div>
+                        <div className="space-y-2">
+                            <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Soberanía de Datos</h3>
+                            <p className="text-slate-400 text-sm font-bold uppercase tracking-widest leading-relaxed max-w-md mx-auto text-balance">Tus finanzas son tuyas. Genera copias de seguridad completas en formato JSON o informes listos para imprimir.</p>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                            <button onClick={exportBackup} className="flex-1 flex items-center justify-center gap-3 p-6 bg-white text-slate-900 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-indigo-50 transition-all shadow-xl active:scale-95"><FileJson size={20} /> Exportar JSON</button>
+                            <button onClick={() => window.print()} className="flex-1 flex items-center justify-center gap-3 p-6 bg-slate-800 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] border border-white/10 hover:bg-slate-700 transition-all active:scale-95"><Download size={20} /> Generar PDF</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+        
         {activeTab === 'ACC_GROUPS' && (
              <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -585,64 +725,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 </div>
             </div>
         )}
-        
+
         {activeTab === 'FAMILIES' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex items-center justify-between">
-                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
-                            <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Layers size={24}/></div>
-                            {famId ? 'Editar Familia' : 'Nueva Familia'}
-                        </h3>
-                        {!showQuickImport && (
-                            <button onClick={() => setShowQuickImport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                                <Plus size={14}/> Importar Masivo
-                            </button>
-                        )}
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4"><div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Layers size={24}/></div>{famId ? 'Editar Familia' : 'Nueva Familia'}</h3>
+                        {!showQuickImport && <button onClick={() => setShowQuickImport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all"><Plus size={14}/> Importar Masivo</button>}
                     </div>
                     {showQuickImport ? renderQuickImport() : (
                         <div className="space-y-6">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre</label>
-                                    <input type="text" placeholder="Ej: Vivienda; Ocio..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={famName} onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo</label>
-                                    <div className="flex bg-slate-50 p-1 rounded-2xl border-2 border-slate-100 h-[64px]">
-                                        <button onClick={() => setFamType('EXPENSE')} className={`flex-1 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${famType === 'EXPENSE' ? 'bg-white text-rose-500 shadow-md' : 'text-slate-400'}`}>Gasto</button>
-                                        <button onClick={() => setFamType('INCOME')} className={`flex-1 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${famType === 'INCOME' ? 'bg-white text-emerald-500 shadow-md' : 'text-slate-400'}`}>Ingreso</button>
-                                    </div>
-                                </div>
+                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre</label><input type="text" placeholder="Ej: Vivienda, Alimentación..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={famName} onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} /></div>
+                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo</label><div className="flex bg-slate-50 p-1 rounded-2xl border-2 border-slate-100 h-[64px]"><button onClick={() => setFamType('EXPENSE')} className={`flex-1 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${famType === 'EXPENSE' ? 'bg-white text-rose-500 shadow-md' : 'text-slate-400'}`}>Gasto</button><button onClick={() => setFamType('INCOME')} className={`flex-1 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${famType === 'INCOME' ? 'bg-white text-emerald-500 shadow-md' : 'text-slate-400'}`}>Ingreso</button></div></div>
                             </div>
                             {renderIconInput(famIcon, setFamIcon, famName, famFileInputRef)}
-                            <button onClick={() => {
-                                if(!famName) return;
-                                if (famId) onUpdateData({ families: data.families.map(f => f.id === famId ? { ...f, name: famName, type: famType, icon: famIcon } : f) });
-                                else onUpdateData({ families: [...data.families, { id: generateId(), name: famName, type: famType, icon: famIcon }] });
-                                resetForm();
-                            }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">Guardar Familia</button>
+                            <button onClick={() => { if(!famName) return; if (famId) onUpdateData({ families: data.families.map(f => f.id === famId ? { ...f, name: famName, type: famType, icon: famIcon } : f) }); else onUpdateData({ families: [...data.families, { id: generateId(), name: famName, type: famType, icon: famIcon }] }); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">Guardar Familia</button>
                         </div>
                     )}
                 </div>
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 px-4">Mantenimiento de Familias</h4>
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 px-4">Listado de Familias</h4>
                     <div className="space-y-3">
                         {data.families.map(fam => (
                             <div key={fam.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-3xl border border-transparent hover:border-slate-200 transition-all">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">
-                                      {renderIcon(fam.icon || '📂', "w-full h-full")}
-                                    </div>
-                                    <div>
-                                        <span className="font-black text-slate-900 block text-xs uppercase">{fam.name}</span>
-                                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${fam.type === 'INCOME' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>{fam.type === 'INCOME' ? 'Ingreso' : 'Gasto'}</span>
-                                    </div>
-                                </div>
-                                <div className="flex gap-1">
-                                    <button onClick={() => { setFamId(fam.id); setFamName(fam.name); setFamType(fam.type); setFamIcon(fam.icon || '📂'); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button>
-                                    <button onClick={() => onUpdateData({families: data.families.filter(f=>f.id!==fam.id)})} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button>
-                                </div>
+                                <div className="flex items-center gap-4"><div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">{renderIcon(fam.icon || '📂', "w-full h-full")}</div><div><span className="font-black text-slate-900 block text-xs uppercase">{fam.name}</span><span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${fam.type === 'INCOME' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>{fam.type === 'INCOME' ? 'Ingreso' : 'Gasto'}</span></div></div>
+                                <div className="flex gap-1"><button onClick={() => { setFamId(fam.id); setFamName(fam.name); setFamType(fam.type); setFamIcon(fam.icon || '📂'); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button><button onClick={() => onUpdateData({families: data.families.filter(f=>f.id!==fam.id)})} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button></div>
                             </div>
                         ))}
                     </div>
@@ -654,438 +762,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex items-center justify-between">
-                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
-                            <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Tag size={24}/></div>
-                            {catId ? 'Editar Categoría' : 'Nueva Categoría'}
-                        </h3>
-                        {!showQuickImport && (
-                            <button onClick={() => setShowQuickImport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                                <Plus size={14}/> Importar Masivo
-                            </button>
-                        )}
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4"><div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Tag size={24}/></div>{catId ? 'Editar Categoría' : 'Nueva Categoría'}</h3>
+                        {!showQuickImport && <button onClick={() => setShowQuickImport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[9px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all"><Plus size={14}/> Importar Masivo</button>}
                     </div>
                     {showQuickImport ? renderQuickImport() : (
                         <div className="space-y-6">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre</label>
-                                    <input type="text" placeholder="Ej: Supermercado; Cine..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={catName} onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Familia Superior</label>
-                                    <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={catParent} onChange={e => setCatParent(e.target.value)}>
-                                        <option value="">Seleccionar...</option>
-                                        {data.families.map(f => <option key={f.id} value={f.id}>{f.icon} {f.name}</option>)}
-                                    </select>
-                                </div>
+                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre</label><input type="text" placeholder="Ej: Supermercado, Alquiler..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={catName} onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} /></div>
+                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Familia Superior</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={catParent} onChange={e => setCatParent(e.target.value)}><option value="">Seleccionar...</option>{data.families.map(f => <option key={f.id} value={f.id}>{f.icon} {f.name}</option>)}</select></div>
                             </div>
                             {renderIconInput(catIcon, setCatIcon, catName, catFileInputRef)}
-                            <button onClick={() => {
-                                if(!catName || !catParent) return;
-                                if (catId) onUpdateData({ categories: data.categories.map(c => c.id === catId ? { ...c, name: catName, familyId: catParent, icon: catIcon } : c) });
-                                else onUpdateData({ categories: [...data.categories, { id: generateId(), name: catName, familyId: catParent, icon: catIcon }] });
-                                resetForm();
-                            }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">Guardar Categoría</button>
+                            <button onClick={() => { if(!catName || !catParent) return; if (catId) onUpdateData({ categories: data.categories.map(c => c.id === catId ? { ...c, name: catName, familyId: catParent, icon: catIcon } : c) }); else onUpdateData({ categories: [...data.categories, { id: generateId(), name: catName, familyId: catParent, icon: catIcon }] }); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-indigo-600 transition-all">Guardar Categoría</button>
                         </div>
                     )}
                 </div>
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 px-4">Mantenimiento de Categorías</h4>
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 px-4">Listado de Categorías</h4>
                     <div className="space-y-3">
                         {data.categories.map(cat => {
                             const family = data.families.find(f => f.id === cat.familyId);
                             return (
                                 <div key={cat.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-3xl border border-transparent hover:border-slate-200 transition-all">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">
-                                          {renderIcon(cat.icon || '🏷️', "w-full h-full")}
-                                        </div>
-                                        <div>
-                                            <span className="font-black text-slate-900 block text-xs uppercase">{cat.name}</span>
-                                            <span className="text-[8px] font-bold text-slate-400 uppercase">{family?.name || 'Sin Familia'}</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-1">
-                                        <button onClick={() => { setCatId(cat.id); setCatName(cat.name); setCatParent(cat.familyId); setCatIcon(cat.icon || '🏷️'); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button>
-                                        <button onClick={() => onUpdateData({categories: data.categories.filter(c=>c.id!==cat.id)})} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button>
-                                    </div>
+                                    <div className="flex items-center gap-4"><div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center border border-slate-100 p-2 shadow-sm shrink-0">{renderIcon(cat.icon || '🏷️', "w-full h-full")}</div><div><span className="font-black text-slate-900 block text-xs uppercase">{cat.name}</span><span className="text-[8px] font-bold text-slate-400 uppercase">{family?.name || 'Sin Familia'}</span></div></div>
+                                    <div className="flex gap-1"><button onClick={() => { setCatId(cat.id); setCatName(cat.name); setCatParent(cat.familyId); setCatIcon(cat.icon || '🏷️'); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button><button onClick={() => onUpdateData({categories: data.categories.filter(c=>c.id!==cat.id)})} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button></div>
                                 </div>
                             );
                         })}
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'RECURRENTS' && (
-            <div className="grid grid-cols-1 gap-10">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
-                        <div className="bg-amber-500 p-3 rounded-2xl text-white shadow-2xl"><Repeat size={24}/></div>
-                        {recId ? 'Editar Recurrente' : 'Nueva Recurrencia'}
-                    </h3>
-                    <div className="space-y-6">
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Descripción del Movimiento</label>
-                            <input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={recDesc} onChange={e => setRecDesc(e.target.value)} />
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cuenta Principal</label>
-                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold" value={recAcc} onChange={e => setRecAcc(e.target.value)}>
-                                    {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cuenta Contrapartida (Opcional)</label>
-                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold" value={recCounterpartId} onChange={e => setRecCounterpartId(e.target.value)}>
-                                    <option value="">Ninguna</option>
-                                    {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe Fijo</label>
-                                <input type="number" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cada (X)</label>
-                                <input type="number" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recInterval} onChange={e => setRecInterval(e.target.value)} min="1" />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Periodicidad</label>
-                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold" value={recFreq} onChange={e => setRecFreq(e.target.value as any)}>
-                                    <option value="DAYS">Días</option>
-                                    <option value="WEEKS">Semanas</option>
-                                    <option value="MONTHLY">Meses</option>
-                                    <option value="YEARS">Años</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha Inicio / Prox</label>
-                                <input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold" value={recStart} onChange={e => setRecStart(e.target.value)} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoría</label>
-                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold" value={recCat} onChange={e => setRecCat(e.target.value)}>
-                                    <option value="">Seleccionar...</option>
-                                    {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                        <button onClick={() => {
-                            if(!recDesc || !recAmount || !recCat) return;
-                            const cat = data.categories.find(c => c.id === recCat);
-                            const newRec: RecurrentMovement = {
-                                id: recId || generateId(),
-                                description: recDesc,
-                                amount: parseFloat(recAmount),
-                                frequency: recFreq,
-                                interval: parseInt(recInterval) || 1,
-                                nextDueDate: recStart,
-                                startDate: recStart,
-                                accountId: recAcc,
-                                transferAccountId: recCounterpartId || undefined,
-                                categoryId: recCat,
-                                familyId: cat?.familyId || '',
-                                type: data.families.find(f => f.id === cat?.familyId)?.type || 'EXPENSE',
-                                active: true
-                            };
-                            onUpdateData({ recurrents: recId ? (data.recurrents || []).map(x => x.id === recId ? newRec : x) : [...(data.recurrents || []), newRec] });
-                            resetForm();
-                        }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-2xl hover:bg-amber-500 transition-all">{recId ? 'Actualizar' : 'Crear Recurrente'}</button>
-                    </div>
-                </div>
-                
-                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 px-4">Mantenimiento de Recurrentes</h4>
-                    <div className="space-y-4">
-                        {(data.recurrents || []).map(r => (
-                            <div key={r.id} className={`flex justify-between items-center p-5 rounded-3xl border transition-all ${r.active ? 'bg-slate-50 border-slate-100' : 'bg-slate-100/50 border-slate-200 opacity-60'}`}>
-                                <div className="flex items-center gap-5">
-                                    <div className={`p-3 rounded-2xl shadow-sm ${r.active ? 'bg-amber-100 text-amber-600' : 'bg-slate-200 text-slate-400'}`}><Repeat size={20}/></div>
-                                    <div>
-                                        <span className="font-black text-slate-900 block text-[11px] uppercase tracking-tight">{r.description}</span>
-                                        <div className="flex gap-2">
-                                            <span className="text-[8px] font-black uppercase text-indigo-500">Cada {r.interval} {r.frequency === 'DAYS' ? 'Días' : r.frequency === 'WEEKS' ? 'Sem' : r.frequency === 'MONTHLY' ? 'Mes' : 'Años'}</span>
-                                            {r.transferAccountId && <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter flex items-center gap-1"><ArrowRightLeft size={8}/> {data.accounts.find(a => a.id === r.transferAccountId)?.name}</span>}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => onUpdateData({ recurrents: (data.recurrents || []).map(x => x.id === r.id ? { ...x, active: !x.active } : x) })} className={`p-3 rounded-xl transition-colors ${r.active ? 'text-amber-500 hover:bg-amber-50' : 'text-slate-400 hover:bg-slate-100'}`}><Power size={18}/></button>
-                                    <button onClick={() => { setRecId(r.id); setRecDesc(r.description); setRecAmount(r.amount.toString()); setRecFreq(r.frequency); setRecInterval(r.interval.toString()); setRecStart(r.nextDueDate); setRecAcc(r.accountId); setRecCounterpartId(r.transferAccountId || ''); setRecCat(r.categoryId); }} className="p-3 text-slate-300 hover:text-indigo-600"><Edit2 size={18}/></button>
-                                    <button onClick={() => onUpdateData({ recurrents: (data.recurrents || []).filter(x => x.id !== r.id) })} className="p-3 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'FAVORITES' && (
-            <div className="grid grid-cols-1 gap-10">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-4">
-                        <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-2xl"><Star size={24}/></div>
-                        {favId ? 'Editar Favorito' : 'Nuevo Favorito'}
-                    </h3>
-                    <div className="space-y-6">
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre Atajo</label>
-                            <input type="text" placeholder="Ej: Café Diario; Compra Semanal..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favName} onChange={e => setFavName(e.target.value)} />
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cuenta Principal</label>
-                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold" value={favAcc} onChange={e => setFavAcc(e.target.value)}>
-                                    {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cuenta Contrapartida (Opcional)</label>
-                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold" value={favCounterpartId} onChange={e => setFavCounterpartId(e.target.value)}>
-                                    <option value="">Ninguna</option>
-                                    {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe sugerido</label>
-                                <input type="number" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold" value={favAmount} onChange={e => setFavAmount(e.target.value)} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoría</label>
-                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold" value={favCat} onChange={e => setFavCat(e.target.value)}>
-                                    <option value="">Seleccionar...</option>
-                                    {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                        <button onClick={() => {
-                            if(!favName || !favAmount || !favCat) return;
-                            const cat = data.categories.find(c => c.id === favCat);
-                            const newFav: FavoriteMovement = {
-                                id: favId || generateId(),
-                                name: favName,
-                                description: favName,
-                                amount: parseFloat(favAmount),
-                                accountId: favAcc,
-                                transferAccountId: favCounterpartId || undefined,
-                                categoryId: favCat,
-                                familyId: cat?.familyId || '',
-                                type: data.families.find(f => f.id === cat?.familyId)?.type || 'EXPENSE'
-                            };
-                            onUpdateData({ favorites: favId ? (data.favorites || []).map(x => x.id === favId ? newFav : x) : [...(data.favorites || []), newFav] });
-                            resetForm();
-                        }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] hover:bg-indigo-600 transition-all">Guardar Favorito</button>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {(data.favorites || []).map(fav => (
-                        <div key={fav.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 flex items-center justify-between hover:shadow-lg transition-all">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl"><Star size={20}/></div>
-                                <div>
-                                    <span className="font-black text-slate-900 block text-[11px] uppercase">{fav.name}</span>
-                                    <div className="flex gap-2">
-                                        <span className="text-[9px] font-bold text-slate-400">{fav.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
-                                        {fav.transferAccountId && <span className="text-[9px] font-black text-indigo-400 uppercase tracking-tighter flex items-center gap-1"><ArrowRightLeft size={8}/> {data.accounts.find(a => a.id === fav.transferAccountId)?.name}</span>}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex gap-1">
-                                <button onClick={() => { setFavId(fav.id); setFavName(fav.name); setFavAmount(fav.amount.toString()); setFavAcc(fav.accountId); setFavCounterpartId(fav.transferAccountId || ''); setFavCat(fav.categoryId); }} className="p-2 text-slate-300 hover:text-indigo-600"><Edit2 size={16}/></button>
-                                <button onClick={() => onUpdateData({ favorites: (data.favorites || []).filter(x => x.id !== fav.id) })} className="p-2 text-slate-300 hover:text-rose-600"><Trash2 size={16}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'TOOLS' && (
-            <div className="space-y-8 pb-10">
-                <div className="bg-rose-50 p-10 rounded-[3rem] shadow-sm border border-rose-100 space-y-8">
-                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-                        <div className="space-y-2">
-                            <h3 className="text-2xl font-black text-rose-900 uppercase tracking-tighter flex items-center gap-3">
-                                <Eraser className="text-rose-600" size={28}/> Limpieza de Movimientos
-                            </h3>
-                            <p className="text-rose-700/60 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                                Elimina movimientos de forma selectiva por año o realiza un vaciado completo de la tabla. <br/>
-                                <span className="text-rose-600 font-black">Historial habilitado desde 2015.</span>
-                            </p>
-                        </div>
-                        <button onClick={() => setShowFullResetConfirm(true)} className="flex items-center gap-2 px-6 py-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 shadow-xl shadow-rose-200 active:scale-95 transition-all">
-                            <RefreshCcw size={16} /> Reset Completo
-                        </button>
-                    </div>
-
-                    {showFullResetConfirm && (
-                        <div className="bg-rose-600 p-8 rounded-3xl text-white space-y-6 animate-in zoom-in-95 shadow-2xl">
-                            <div className="flex items-center gap-4">
-                                <AlertTriangle size={32} className="animate-bounce" />
-                                <h4 className="text-lg font-black uppercase">¡OPERACIÓN CRÍTICA!</h4>
-                            </div>
-                            <p className="text-sm font-bold leading-relaxed uppercase opacity-90">
-                                Estás a punto de eliminar **TODOS** los movimientos registrados en la aplicación. Esta acción es irreversible y borrará el historial completo de todas tus cuentas.
-                            </p>
-                            <div className="flex gap-3">
-                                <button onClick={handleFullReset} className="flex-1 py-4 bg-white text-rose-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-slate-50 transition-all">BORRAR TODO EL HISTORIAL</button>
-                                <button onClick={() => setShowFullResetConfirm(false)} className="flex-1 py-4 bg-rose-800 text-white rounded-xl border border-rose-400 font-black text-[10px] uppercase hover:bg-rose-900 transition-all">CANCELAR</button>
-                            </div>
-                        </div>
-                    )}
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-rose-100">
-                        {transactionsPerYear.length > 0 ? transactionsPerYear.map(([year, count]) => (
-                            <div key={year} className="bg-white p-6 rounded-3xl border border-rose-100 flex flex-col justify-between gap-4 group hover:shadow-lg transition-all relative overflow-hidden">
-                                {massDeleteYear === year ? (
-                                    <div className="absolute inset-0 bg-rose-600 text-white p-6 flex flex-col justify-center items-center text-center animate-in fade-in zoom-in-95">
-                                        <AlertTriangle size={32} className="mb-2" />
-                                        <p className="text-[11px] font-black uppercase mb-4">¿Borrar {year}?</p>
-                                        <div className="flex gap-2 w-full">
-                                            <button onClick={() => handleMassDelete(year)} className="flex-1 py-3 bg-white text-rose-600 rounded-xl text-[10px] font-black uppercase shadow-lg">Sí</button>
-                                            <button onClick={() => setMassDeleteYear(null)} className="flex-1 py-3 bg-rose-800 text-white rounded-xl text-[10px] font-black uppercase">No</button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <div>
-                                            <span className="text-3xl font-black text-slate-900 tracking-tighter">{year}</span>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{count} movimientos detectados</p>
-                                        </div>
-                                        <button onClick={() => setMassDeleteYear(year)} className="w-full py-4 bg-rose-50 text-rose-600 border border-rose-100 rounded-2xl font-black text-[10px] uppercase hover:bg-rose-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2 group-hover:scale-105 transition-transform">
-                                            <Trash2 size={16} /> Purgar Año
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-                        )) : !showFullResetConfirm && (
-                            <div className="col-span-full py-10 text-center space-y-4">
-                                <Info size={40} className="mx-auto text-rose-200" />
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">No hay movimientos registrados para purgar.</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-                        <div className="space-y-2">
-                            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
-                                <ClipboardPaste className="text-indigo-600" size={28}/> Importador de Movimientos
-                            </h3>
-                            <div className="space-y-1">
-                                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                                    Formato: <strong>fecha; categoria; cuenta; concepto; importe</strong>
-                                </p>
-                                <p className="text-indigo-500 text-[10px] font-black uppercase tracking-widest">
-                                    Si es Traspaso: <strong>fecha; Traspaso entre cuentas; cuenta_origen; cuenta_destino; concepto; importe</strong>
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="space-y-4">
-                        <textarea 
-                            className="w-full h-48 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-all custom-scrollbar placeholder:text-slate-200 shadow-inner"
-                            placeholder="2023-10-27; Alimentación; Mi Banco; Compra cena; -25.50&#10;2023-10-28; Traspaso entre cuentas; Mi Banco; Efectivo; Retirada de cajero; 50.00"
-                            value={pasteMovements}
-                            onChange={e => setPasteMovements(e.target.value)}
-                        />
-                        <div className="flex flex-col sm:flex-row justify-between items-center bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 gap-4">
-                             <div className="flex items-center gap-3 text-indigo-600">
-                                <Sparkles size={20} />
-                                <p className="text-[10px] font-black uppercase tracking-widest leading-tight">Separador: <strong>Punto y coma (;)</strong>. Importes negativos se registran como GASTOS.</p>
-                             </div>
-                             <div className="flex gap-3 w-full sm:w-auto">
-                                <button onClick={handleManualMovementImport} className="flex-1 sm:flex-none px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-indigo-200">
-                                    Importar Datos
-                                </button>
-                                <button onClick={() => { setPasteMovements(''); setImportErrors([]); }} className="px-6 py-4 bg-white text-slate-500 border border-slate-200 rounded-xl font-black text-[10px] uppercase">Limpiar</button>
-                             </div>
-                        </div>
-                    </div>
-
-                    {importErrors.length > 0 && (
-                        <div className="bg-rose-50 p-8 rounded-[2.5rem] border border-rose-100 space-y-6 animate-in fade-in slide-in-from-top-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-rose-100 pb-4">
-                                <div className="flex items-center gap-3 text-rose-600">
-                                    <AlertOctagon size={28} />
-                                    <div>
-                                        <h4 className="font-black uppercase text-base tracking-tight">Detectados {importErrors.length} errores</h4>
-                                        <p className="text-[10px] font-bold uppercase text-rose-400">Corrige los datos en el Excel y vuelve a pegarlos</p>
-                                    </div>
-                                </div>
-                                <button onClick={downloadErrorReport} className="flex items-center justify-center gap-3 px-6 py-4 bg-white text-rose-600 border-2 border-rose-200 rounded-2xl font-black text-[11px] uppercase hover:bg-rose-600 hover:text-white transition-all shadow-lg active:scale-95">
-                                    <FileSpreadsheet size={20} /> Descargar Reporte (.xlsx)
-                                </button>
-                            </div>
-                            <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2 pr-4">
-                                {importErrors.map((err, i) => (
-                                    <div key={i} className="bg-white/80 p-4 rounded-xl border border-rose-100 flex flex-col sm:flex-row justify-between gap-4 text-[10px] font-bold shadow-sm">
-                                        <div className="flex gap-4 items-center">
-                                            <span className="text-rose-600 bg-rose-100 px-3 py-1 rounded-lg shrink-0">Fila {err.fila}</span>
-                                            <span className="text-slate-400 italic flex-1 break-all line-clamp-1">"{err.dato}"</span>
-                                        </div>
-                                        <span className="text-rose-700 font-black uppercase text-right shrink-0">{err.error}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="bg-amber-50 p-10 rounded-[3rem] shadow-sm border border-amber-100 space-y-8 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/10 blur-[80px] -mr-16 -mt-16 pointer-events-none"></div>
-                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 relative z-10">
-                        <div className="space-y-2 max-w-lg">
-                            <h3 className="text-2xl font-black text-amber-900 uppercase tracking-tighter flex items-center gap-3">
-                                <ArrowRightLeft className="text-amber-600" size={28}/> Asistente de Migración IA
-                            </h3>
-                            <p className="text-amber-700/60 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                                Pega aquí tablas crudas de **Contamoney** u otras apps. Gemini extraerá automáticamente cuentas y categorías con iconos apropiados.
-                            </p>
-                        </div>
-                    </div>
-
-                    {!migrationPreview ? (
-                        <div className="space-y-4">
-                            <textarea className="w-full h-40 p-5 bg-white border-2 border-amber-100 rounded-[2rem] font-mono text-[11px] text-slate-600 outline-none focus:border-amber-400 transition-all custom-scrollbar placeholder:text-amber-200" placeholder="Pega aquí el contenido copiado de tus tablas antiguas..." value={migrationText} onChange={e => setMigrationText(e.target.value)} />
-                            <div className="flex justify-end"><button onClick={handleMigrationProcess} disabled={isMigrating || !migrationText} className="px-8 py-4 bg-amber-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-200 disabled:opacity-50 flex items-center gap-2">{isMigrating ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16}/>}{isMigrating ? 'Analizando con Gemini...' : 'Procesar Estructura'}</button></div>
-                        </div>
-                    ) : (
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-amber-100 space-y-6 animate-in fade-in slide-in-from-bottom-4 shadow-xl">
-                            <div className="flex items-center gap-3 border-b border-amber-50 pb-4"><CheckCircle2 className="text-emerald-500" /><h4 className="font-black text-slate-800 uppercase tracking-tight">Estructura Detectada por la IA</h4></div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 text-center"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cuentas</span><p className="text-3xl font-black text-slate-900">{migrationPreview.accounts.length}</p></div>
-                                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 text-center"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Familias</span><p className="text-3xl font-black text-slate-900">{migrationPreview.families.length}</p></div>
-                                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 text-center"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categorías</span><p className="text-3xl font-black text-slate-900">{migrationPreview.categories.length}</p></div>
-                            </div>
-                            <div className="flex gap-3"><button onClick={confirmMigration} className="flex-1 py-5 bg-emerald-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100">Aplicar Nueva Estructura</button><button onClick={() => { setMigrationPreview(null); setMigrationText(''); }} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-black text-[11px] uppercase hover:bg-slate-200 transition-all">Cancelar</button></div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="bg-slate-900 p-10 rounded-[3rem] shadow-2xl border border-white/5 space-y-10 text-center relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-full bg-indigo-600/5 mix-blend-overlay"></div>
-                    <div className="relative z-10 space-y-8">
-                        <div className="mx-auto bg-indigo-600 text-white w-20 h-20 rounded-3xl flex items-center justify-center shadow-2xl shadow-indigo-600/30 rotate-3"><DatabaseZap size={36} /></div>
-                        <div className="space-y-2">
-                            <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Soberanía de Datos</h3>
-                            <p className="text-slate-400 text-sm font-bold uppercase tracking-widest leading-relaxed max-w-md mx-auto text-balance">Tus finanzas son tuyas. Genera copias de seguridad completas en formato JSON o informes listos para imprimir.</p>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                            <button onClick={exportBackup} className="flex-1 flex items-center justify-center gap-3 p-6 bg-white text-slate-900 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-indigo-50 transition-all shadow-xl active:scale-95"><FileJson size={20} /> Exportar JSON</button>
-                            <button onClick={() => window.print()} className="flex-1 flex items-center justify-center gap-3 p-6 bg-slate-800 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] border border-white/10 hover:bg-slate-700 transition-all active:scale-95"><Download size={20} /> Generar PDF</button>
-                        </div>
                     </div>
                 </div>
             </div>

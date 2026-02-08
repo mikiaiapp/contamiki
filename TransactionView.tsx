@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, Family, Category, Account, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from './types';
 import { Plus, Trash2, Search, ArrowRightLeft, X, Sparkles, Paperclip, Calendar, Filter, ChevronDown, MoreVertical, Repeat, Star, Edit3, AlertTriangle, Tag, ChevronUp, ChevronLeft, ChevronRight, Copy, Save, Clock, FileSpreadsheet, Upload, Info, ShieldCheck, CheckCircle2, Loader2, Eraser } from 'lucide-react';
@@ -28,7 +27,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<string | null>(null);
   
-  // Estados para Smart Import Bancario
   const [showSmartImport, setShowSmartImport] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importStep, setImportStep] = useState<'IDLE' | 'PREVIEW' | 'SUCCESS'>('IDLE');
@@ -36,22 +34,18 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [mappedTransactions, setMappedTransactions] = useState<any[]>([]);
   const importFileRef = useRef<HTMLInputElement>(null);
 
-  // Estados para Borrado Masivo
   const [showMassDelete, setShowMassDelete] = useState(false);
   const [massDeleteYear, setMassDeleteYear] = useState<string | null>(null);
 
-  // Modales de conversión
   const [txToFavorite, setTxToFavorite] = useState<Transaction | null>(null);
   const [txToRecurrent, setTxToRecurrent] = useState<Transaction | null>(null);
   const [favName, setFavName] = useState('');
   const [recFreq, setRecFreq] = useState<RecurrenceFrequency>('MONTHLY');
   const [recInterval, setRecInterval] = useState('1');
 
-  // Ordenación
   const [sortField, setSortField] = useState<SortField>('DATE');
   const [sortDirection, setSortDirection] = useState<SortDirection>('DESC');
 
-  // Filtros de búsqueda
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTime, setFilterTime] = useState<TimeRange>('ALL');
   const [referenceDate, setReferenceDate] = useState(new Date());
@@ -301,7 +295,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       else { setFilterCategory(entity.id); setFilterAccount('ALL'); const cat = data.categories.find(c => c.id === entity.id); if (cat) setFilterFamily(cat.familyId); }
   };
 
-  // RANGO 2015
+  // PUNTO DE PARTIDA 2015
   const startYear = 2015;
   const currentYear = new Date().getFullYear();
   const years = Array.from({length: currentYear - startYear + 3}, (_, i) => startYear + i);
@@ -335,7 +329,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         </div>
       </div>
 
-      {/* MODAL BORRADO MASIVO */}
       {showMassDelete && (
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[300] p-6 animate-in fade-in duration-300">
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 sm:p-12 relative flex flex-col max-h-[90vh] overflow-hidden">
@@ -519,246 +512,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             );
         })}
       </div>
-
-      {/* MODAL SMART BANK IMPORT */}
-      {showSmartImport && (
-          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[300] p-6 animate-in fade-in duration-300">
-              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-8 sm:p-12 relative flex flex-col max-h-[95vh] overflow-hidden">
-                  <button onClick={() => { setShowSmartImport(false); setImportStep('IDLE'); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:bg-rose-50 hover:text-rose-600 transition-all"><X size={20}/></button>
-                  <div className="mb-8 space-y-2">
-                      <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3"><ShieldCheck className="text-indigo-600" size={28}/> Smart Bank Import</h3>
-                      <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em]">IA Gemini para volcado masivo de extractos</p>
-                  </div>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-                    {isImporting ? (
-                        <div className="py-20 flex flex-col items-center justify-center gap-6 animate-pulse">
-                            <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                            <div className="text-center space-y-2">
-                                <p className="text-[10px] font-black text-slate-900 uppercase tracking-[0.4em]">Analizando extracto...</p>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Identificando columnas y categorizando movimientos</p>
-                            </div>
-                        </div>
-                    ) : importStep === 'IDLE' ? (
-                        <div className="space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {[
-                                    { icon: <Upload className="text-indigo-500" />, title: "Sube tu archivo", desc: "Arrastra el Excel/CSV de tu banco aquí." },
-                                    { icon: <Sparkles className="text-indigo-500" />, title: "IA de Mapeo", desc: "Sugeriremos categorías automáticamente." }
-                                ].map((step, i) => (
-                                    <div key={i} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-3">
-                                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm border border-slate-100">{step.icon}</div>
-                                        <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-tight">{step.title}</h4>
-                                        <p className="text-[9px] font-bold text-slate-400 leading-relaxed uppercase">{step.desc}</p>
-                                    </div>
-                                ))}
-                            </div>
-                            <button onClick={() => importFileRef.current?.click()} className="w-full py-10 border-2 border-dashed border-indigo-200 rounded-[2.5rem] bg-indigo-50/50 hover:bg-indigo-50 transition-all flex flex-col items-center justify-center gap-4 group">
-                                <div className="p-4 bg-white rounded-2xl shadow-sm text-indigo-600 group-hover:scale-110 transition-transform"><FileSpreadsheet size={40} /></div>
-                                <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Seleccionar Archivo .CSV o .XLSX</span>
-                            </button>
-                            <input type="file" ref={importFileRef} className="hidden" accept=".csv, .xlsx, .xls" onChange={handleFileImport} />
-                        </div>
-                    ) : importStep === 'PREVIEW' ? (
-                        <div className="space-y-6">
-                            <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 flex flex-col md:flex-row items-center justify-between gap-6">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100"><Info size={24}/></div>
-                                    <div className="space-y-1">
-                                        <h4 className="text-[11px] font-black text-indigo-900 uppercase">Previsualización ({mappedTransactions.length})</h4>
-                                        <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Revisa antes de volcar a tu cuenta.</p>
-                                    </div>
-                                </div>
-                                <select className="w-full md:w-48 px-4 py-4 bg-white border border-indigo-200 rounded-xl font-bold text-[10px] uppercase outline-none" value={importAccount} onChange={e => setImportAccount(e.target.value)}>
-                                    {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-2">
-                                {mappedTransactions.map((tx, idx) => (
-                                    <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-4">
-                                        <div className="flex items-center gap-4 min-w-0">
-                                            <div className="bg-white px-3 py-2 rounded-lg text-[9px] font-black text-slate-400 shrink-0">{tx.date}</div>
-                                            <div className="min-w-0">
-                                                <p className="text-[10px] font-black text-slate-800 uppercase truncate">{tx.description}</p>
-                                                <p className="text-[8px] font-bold text-indigo-500 uppercase tracking-tighter">Sugerencia: {data.categories.find(c => c.id === tx.categoryId)?.name || 'Sin Categoría'}</p>
-                                            </div>
-                                        </div>
-                                        <span className={`text-xs font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'} shrink-0`}>
-                                            {tx.type === 'INCOME' ? '+' : '-'}{tx.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="flex gap-3 sticky bottom-0 bg-white pt-4">
-                                <button onClick={confirmSmartImport} className="flex-1 py-5 bg-emerald-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-100">Vuelcar ahora</button>
-                                <button onClick={() => { setImportStep('IDLE'); setMappedTransactions([]); }} className="px-8 py-5 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all">Cancelar</button>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="py-20 flex flex-col items-center justify-center gap-6">
-                             <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-[2rem] flex items-center justify-center shadow-xl shadow-emerald-100"><CheckCircle2 size={40}/></div>
-                             <div className="text-center space-y-2">
-                                <h4 className="text-xl font-black text-slate-900 uppercase">¡Éxito!</h4>
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em]">Movimientos volcados correctamente</p>
-                             </div>
-                        </div>
-                    )}
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* MODAL GUARDAR FAVORITO */}
-      {txToFavorite && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[250] p-4 animate-in fade-in duration-300">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm p-8 relative animate-in zoom-in-95">
-                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-6 flex items-center gap-3"><Star className="text-amber-500" fill="currentColor" size={24} /> Nuevo Favorito</h3>
-                  <div className="space-y-4">
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Nombre del Atajo</label>
-                          <input type="text" className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={favName} onChange={e => setFavName(e.target.value)} autoFocus />
-                      </div>
-                      <div className="bg-slate-50 p-4 rounded-xl text-[10px] font-bold text-slate-400 space-y-1 border border-slate-100">
-                          <p>Importe: <span className="text-slate-900">{txToFavorite.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span></p>
-                          <p>Descripción: <span className="text-slate-900">{txToFavorite.description}</span></p>
-                      </div>
-                      <div className="flex gap-2 pt-4">
-                          <button onClick={confirmSaveFavorite} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-700 transition-all">Guardar</button>
-                          <button onClick={() => setTxToFavorite(null)} className="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-slate-200 transition-all">Cancelar</button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* MODAL CREAR RECURRENTE */}
-      {txToRecurrent && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[250] p-4 animate-in fade-in duration-300">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm p-8 relative animate-in zoom-in-95">
-                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-6 flex items-center gap-3"><Repeat className="text-indigo-600" size={24} /> Automatizar</h3>
-                  <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                              <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Cada (X)</label>
-                              <input type="number" className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recInterval} onChange={e => setRecInterval(e.target.value)} min="1" />
-                          </div>
-                          <div className="space-y-1">
-                              <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Periodo</label>
-                              <select className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recFreq} onChange={e => setRecFreq(e.target.value as any)}>
-                                  <option value="DAYS">Días</option>
-                                  <option value="WEEKS">Semanas</option>
-                                  <option value="MONTHLY">Meses</option>
-                                  <option value="YEARS">Años</option>
-                              </select>
-                          </div>
-                      </div>
-                      <div className="bg-slate-50 p-4 rounded-xl text-[10px] font-bold text-slate-400 space-y-1 border border-slate-100">
-                          <p>Concepto: <span className="text-slate-900">{txToRecurrent.description}</span></p>
-                          <p>Importe: <span className="text-slate-900">{txToRecurrent.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span></p>
-                      </div>
-                      <div className="flex gap-2 pt-4">
-                          <button onClick={confirmCreateRecurrence} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-700 transition-all">Activar</button>
-                          <button onClick={() => setTxToRecurrent(null)} className="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-slate-200 transition-all">Cancelar</button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* MODAL PREVIEW ADJUNTO */}
-      {previewAttachment && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[300] p-4 animate-in fade-in duration-300">
-            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl p-6 relative flex flex-col max-h-[90vh]">
-                <button onClick={() => setPreviewAttachment(null)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full hover:bg-rose-50 hover:text-rose-600 transition-all"><X size={20}/></button>
-                <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
-                    <Paperclip className="text-indigo-600" />
-                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Comprobante Adjunto</h3>
-                </div>
-                <div className="flex-1 overflow-auto bg-slate-50 rounded-xl p-4 flex items-center justify-center min-h-[300px]">
-                    {previewAttachment.startsWith('data:image') ? (
-                        <img src={previewAttachment} className="max-w-full max-h-full object-contain shadow-sm rounded-lg" alt="Adjunto" />
-                    ) : (
-                        <iframe src={previewAttachment} className="w-full h-full min-h-[500px] rounded-lg" title="Documento" />
-                    )}
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <button onClick={() => setPreviewAttachment(null)} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 transition-all">Cerrar Visor</button>
-                </div>
-            </div>
-        </div>
-      )}
-
-      {/* MODAL NUEVO / EDITAR */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[210] p-4 animate-in fade-in duration-300">
-            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-6 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar">
-                <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:bg-rose-50 hover:text-rose-600 transition-all"><X size={20}/></button>
-                <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase mb-8">{editingTx ? 'Editar Movimiento' : 'Nuevo Movimiento'}</h3>
-                <form className="space-y-6">
-                    <div className="bg-slate-100 p-1.5 rounded-2xl flex gap-1.5 shadow-inner">
-                        {['EXPENSE', 'INCOME', 'TRANSFER'].map((m) => (
-                            <button key={m} type="button" onClick={() => { setType(m as any); setSelectedCategoryId(''); }} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all ${type === m ? 'bg-white text-indigo-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
-                                {m === 'EXPENSE' ? 'Gasto' : m === 'INCOME' ? 'Ingreso' : 'Traspaso'}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe</label><input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-xl font-black outline-none focus:border-indigo-500 transition-all" value={amount} onChange={e => setAmount(e.target.value)} /></div>
-                        <div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={date} onChange={e => setDate(e.target.value)} /></div>
-                    </div>
-                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Sparkles size={14} className="text-indigo-400"/> Descripción</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={description} onChange={e => setDescription(e.target.value)} /></div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {type === 'EXPENSE' && (
-                            <><div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={selectedCategoryId} onChange={e => setSelectedCategoryId(e.target.value)}><option value="">Seleccionar...</option>{data.categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select></div><div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Cuenta</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accountId} onChange={e => setAccountId(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div></>
-                        )}
-                        {type === 'INCOME' && (
-                            <><div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Cuenta</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accountId} onChange={e => setAccountId(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div><div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={selectedCategoryId} onChange={e => setSelectedCategoryId(e.target.value)}><option value="">Seleccionar...</option>{data.categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select></div></>
-                        )}
-                        {type === 'TRANSFER' && (
-                            <><div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Hacia</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={transferDestId} onChange={e => setTransferDestId(e.target.value)}><option value="">Seleccionar...</option>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div><div className="space-y-2"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Desde</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accountId} onChange={e => setAccountId(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div></>
-                        )}
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Paperclip size={14} /> Adjuntar Comprobante</label>
-                        <div className="flex items-center gap-2">
-                          <button type="button" onClick={() => fileInputRef.current?.click()} className={`flex-1 flex items-center justify-center gap-3 px-6 py-4 border-2 border-dashed rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest ${attachment ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-indigo-200 hover:bg-slate-50'}`}>
-                              {attachment ? 'Cambiar Archivo' : 'Seleccionar Archivo'}
-                          </button>
-                          {attachment && <button type="button" onClick={() => setAttachment(undefined)} className="p-4 bg-rose-50 text-rose-500 rounded-2xl border border-rose-100 shadow-sm"><Trash2 size={20}/></button>}
-                        </div>
-                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileChange} />
-                    </div>
-                    <button type="button" onClick={() => {
-                            if (!amount || !description) return alert("Completa importe y descripción.");
-                            const finalTx: Transaction = { id: editingTx ? editingTx.id : generateId(), date, amount: parseFloat(amount), description, accountId, type, familyId: '', categoryId: '', attachment };
-                            if (type === 'TRANSFER') finalTx.transferAccountId = transferDestId;
-                            else { const cat = data.categories.find(c => c.id === selectedCategoryId); if (cat) { finalTx.familyId = cat.familyId; finalTx.categoryId = cat.id; } }
-                            editingTx ? onUpdateTransaction(finalTx) : onAddTransaction(finalTx);
-                            setIsModalOpen(false); resetForm();
-                        }} className="w-full py-6 bg-slate-950 text-white rounded-3xl font-black uppercase text-[11px] shadow-2xl hover:bg-indigo-600 transition-all mt-6">Confirmar</button>
-                </form>
-            </div>
-        </div>
-      )}
-      
-      {isFavModalOpen && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
-              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 relative animate-in zoom-in-95 max-h-[80vh] flex flex-col">
-                  <button onClick={() => setIsFavModalOpen(false)} className="absolute top-8 right-8 p-3 bg-slate-50 rounded-full text-slate-400 hover:text-rose-500 transition-colors"><X size={20}/></button>
-                  <div className="mb-6 space-y-4">
-                      <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3"><Star className="text-amber-500" fill="currentColor" size={24} /> Favoritos</h3>
-                      <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} /><input type="text" className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500" placeholder="Buscar favorito..." value={favSearch} onChange={e => setFavSearch(e.target.value)} /></div>
-                  </div>
-                  <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-                      {(data.favorites || []).filter(f => f.name.toLowerCase().includes(favSearch.toLowerCase())).map(f => (
-                          <button key={f.id} onClick={() => { resetForm(); setType(f.type); setAmount(f.amount.toString()); setDescription(f.description); setAccountId(f.accountId); setTransferDestId(f.transferAccountId || ''); setSelectedCategoryId(f.categoryId); setIsFavModalOpen(false); setIsModalOpen(true); }} className="w-full flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-transparent hover:border-indigo-500 hover:bg-white transition-all text-left group shadow-sm">
-                              <div className="flex items-center gap-4"><div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-amber-500 shadow-sm border border-slate-100 group-hover:scale-110 transition-transform"><Star size={20} fill="currentColor" /></div><div><p className="font-black text-slate-900 text-sm uppercase tracking-tight">{f.name}</p></div></div>
-                              <p className="text-lg font-black text-slate-800 tracking-tighter">{f.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-                          </button>
-                      ))}
-                  </div>
-              </div>
-          </div>
-      )}
     </div>
   );
 };
