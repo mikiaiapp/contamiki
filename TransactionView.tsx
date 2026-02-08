@@ -17,8 +17,15 @@ interface TransactionViewProps {
 
 type SortField = 'DATE' | 'DESCRIPTION' | 'AMOUNT' | 'ACCOUNT' | 'CATEGORY' | 'ATTACHMENT';
 type SortDirection = 'ASC' | 'DESC';
+type AmountOperator = 'ALL' | 'GT' | 'LT' | 'EQ' | 'BETWEEN';
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
+
+// Formateador estricto para España
+const numberFormatter = new Intl.NumberFormat('es-ES', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTransaction, onDeleteTransaction, onUpdateTransaction, filter, onUpdateFilter, initialSpecificFilters, clearSpecificFilters }) => {
   // Editor State
@@ -35,23 +42,41 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Column Specific Filters
-  const [colFilterDate, setColFilterDate] = useState('');
-  const [colFilterEntry, setColFilterEntry] = useState('');
+  const [colFilterEntry, setColFilterEntry] = useState('ALL');
   const [colFilterDesc, setColFilterDesc] = useState('');
   const [colFilterClip, setColFilterClip] = useState<'ALL' | 'YES' | 'NO'>('ALL');
-  const [colFilterExit, setColFilterExit] = useState('');
-  const [colFilterAmount, setColFilterAmount] = useState('');
+  const [colFilterExit, setColFilterExit] = useState('ALL');
+  
+  // Advanced Amount Filters
+  const [colFilterAmountOp, setColFilterAmountOp] = useState<AmountOperator>('ALL');
+  const [colFilterAmountVal1, setColFilterAmountVal1] = useState('');
+  const [colFilterAmountVal2, setColFilterAmountVal2] = useState('');
 
   // Sorting
   const [sortField, setSortField] = useState<SortField>('DATE');
   const [sortDirection, setSortDirection] = useState<SortDirection>('DESC');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  // Helper para formatear fecha dd/mm/aa
+  const formatDateDisplay = (dateStr: string) => {
+    if (!dateStr) return '--/--/--';
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year.slice(-2)}`;
+  };
+
+  // Helper para moneda estilo español con signo forzado para gastos
+  const formatCurrency = (amount: number, type: 'INCOME' | 'EXPENSE' | 'TRANSFER') => {
+    const value = type === 'EXPENSE' ? -Math.abs(amount) : amount;
+    return `${numberFormatter.format(value)} €`;
+  };
+
   useEffect(() => {
     if (initialSpecificFilters) {
       if (initialSpecificFilters.filterCategory) {
-          const cat = data.categories.find(c => c.id === initialSpecificFilters.filterCategory);
-          if (cat) setColFilterEntry(cat.name);
+          setColFilterEntry(initialSpecificFilters.filterCategory);
+      }
+      if (initialSpecificFilters.filterAccount) {
+          setColFilterExit(initialSpecificFilters.filterAccount);
       }
       if (clearSpecificFilters) clearSpecificFilters();
     }
@@ -109,8 +134,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   };
 
   const filteredTransactions = useMemo(() => {
-    let res = data.transactions.filter(t => {
-      // Sincronización Temporal Global (App level)
+    return data.transactions.filter(t => {
+      // Time Range Filter
       const y = filter.referenceDate.getFullYear();
       const m = filter.referenceDate.getMonth();
       let start = ''; let end = '';
@@ -125,28 +150,54 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       }
       if (filter.timeRange !== 'ALL' && (t.date < start || t.date > end)) return false;
 
-      // Column Filters
-      if (colFilterDate && !t.date.includes(colFilterDate)) return false;
-      
-      const cat = data.categories.find(c => c.id === t.categoryId);
-      const dstAcc = t.transferAccountId ? data.accounts.find(x=>x.id===t.transferAccountId) : null;
-      const entryText = t.type === 'TRANSFER' ? (dstAcc?.name || '') : (cat?.name || '');
-      if (colFilterEntry && !entryText.toLowerCase().includes(colFilterEntry.toLowerCase())) return false;
+      // Entry Filter
+      if (colFilterEntry !== 'ALL') {
+          if (t.categoryId !== colFilterEntry && t.transferAccountId !== colFilterEntry) return false;
+      }
 
-      if (colFilterDesc && !t.description.toLowerCase().includes(colFilterDesc.toLowerCase())) return false;
+      // Description Wildcard Filter
+      if (colFilterDesc && colFilterDesc.trim() !== '') {
+          const pattern = colFilterDesc.trim();
+          const hasWildcards = pattern.includes('*') || pattern.includes('?');
+          if (hasWildcards) {
+              let regexStr = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+              regexStr = regexStr.replace(/\\\*/g, '.*').replace(/\\\?/g, '.');
+              const regex = new RegExp(`^${regexStr}$`, 'i');
+              if (!regex.test(t.description)) return false;
+          } else {
+              if (!t.description.toLowerCase().includes(pattern.toLowerCase())) return false;
+          }
+      }
       
+      // Clip Filter
       if (colFilterClip === 'YES' && !t.attachment) return false;
       if (colFilterClip === 'NO' && t.attachment) return false;
 
-      const srcAcc = data.accounts.find(x=>x.id===t.accountId);
-      if (colFilterExit && !srcAcc?.name.toLowerCase().includes(colFilterExit.toLowerCase())) return false;
+      // Exit Filter
+      if (colFilterExit !== 'ALL' && t.accountId !== colFilterExit) return false;
 
-      if (colFilterAmount && t.amount < parseFloat(colFilterAmount)) return false;
+      // Amount Filter
+      if (colFilterAmountOp !== 'ALL') {
+          const val = t.amount;
+          const v1 = parseFloat(colFilterAmountVal1);
+          const v2 = parseFloat(colFilterAmountVal2);
+
+          if (!isNaN(v1)) {
+              if (colFilterAmountOp === 'GT' && val <= v1) return false;
+              if (colFilterAmountOp === 'LT' && val >= v1) return false;
+              if (colFilterAmountOp === 'EQ' && Math.abs(val - v1) > 0.01) return false;
+              if (colFilterAmountOp === 'BETWEEN') {
+                  if (isNaN(v2)) {
+                      if (val < v1) return false;
+                  } else {
+                      if (val < v1 || val > v2) return false;
+                  }
+              }
+          }
+      }
 
       return true;
-    });
-
-    return res.sort((a, b) => {
+    }).sort((a, b) => {
       let vA: any, vB: any;
       if (sortField === 'DATE') { vA = a.date; vB = b.date; }
       else if (sortField === 'DESCRIPTION') { vA = a.description.toLowerCase(); vB = b.description.toLowerCase(); }
@@ -166,7 +217,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       if (vA > vB) return sortDirection === 'ASC' ? 1 : -1;
       return 0;
     });
-  }, [data.transactions, filter, colFilterDate, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmount, sortField, sortDirection, data.accounts, data.categories]);
+  }, [data.transactions, filter, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2, sortField, sortDirection, data.accounts, data.categories]);
 
   const handleSort = (field: SortField) => {
       if (sortField === field) {
@@ -189,13 +240,23 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
-    if (iconStr?.startsWith('http')) return <img src={iconStr} className={`${className} object-contain`} referrerPolicy="no-referrer" />;
+    if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
     return <span className="text-xl">{iconStr || '📂'}</span>;
   }
 
   const SortIcon = ({ field }: { field: SortField }) => {
       if (sortField !== field) return <ArrowUpDown size={12} className="opacity-20" />;
       return sortDirection === 'ASC' ? <SortAsc size={12} className="text-indigo-600" /> : <SortDesc size={12} className="text-indigo-600" />;
+  };
+
+  const clearAllFilters = () => {
+    setColFilterEntry('ALL');
+    setColFilterDesc('');
+    setColFilterClip('ALL');
+    setColFilterExit('ALL');
+    setColFilterAmountOp('ALL');
+    setColFilterAmountVal1('');
+    setColFilterAmountVal2('');
   };
 
   return (
@@ -221,12 +282,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         </select>
                     )}
                 </div>
-                {filter.timeRange === 'CUSTOM' && (
-                    <div className="flex gap-2">
-                        <input type="date" className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-[10px]" value={filter.customStart} onChange={e => onUpdateFilter({...filter, customStart: e.target.value})} />
-                        <input type="date" className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-[10px]" value={filter.customEnd} onChange={e => onUpdateFilter({...filter, customEnd: e.target.value})} />
-                    </div>
-                )}
                 <button onClick={() => openEditor()} className="sm:ml-4 bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 active:scale-95">
                   <Plus size={16} /> Nuevo
                 </button>
@@ -246,66 +301,90 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         </div>
       </div>
 
-      {/* Listado de Movimientos con Cabecera Funcional */}
       <div className="space-y-4">
-          {/* Cabecera de tabla con Ordenación y Filtrado */}
-          <div className="hidden lg:grid grid-cols-[100px_200px_1fr_60px_200px_140px_100px] gap-4 px-10 py-6 items-start bg-white/50 rounded-[2.5rem] border border-slate-100 shadow-sm">
-            {/* Fecha */}
+          <div className="hidden lg:grid grid-cols-[100px_180px_1fr_60px_180px_180px_100px] gap-4 px-10 py-6 items-start bg-white rounded-[2.5rem] border border-slate-100 shadow-sm">
             <div className="space-y-3">
-                <button onClick={() => handleSort('DATE')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
+                <button onClick={() => handleSort('DATE')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors pt-2">
                     Fecha <SortIcon field="DATE" />
                 </button>
-                <input type="text" placeholder="Filtrar..." className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-300" value={colFilterDate} onChange={e => setColFilterDate(e.target.value)} />
             </div>
             
-            {/* Entrada / Categoría */}
             <div className="space-y-3">
                 <button onClick={() => handleSort('CATEGORY')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
                     Entrada/Cat <SortIcon field="CATEGORY" />
                 </button>
-                <input type="text" placeholder="Filtrar..." className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-300" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)} />
+                <select className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none cursor-pointer focus:border-indigo-300 transition-all" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)}>
+                    <option value="ALL">TODAS</option>
+                    {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    <optgroup label="Cuentas (Traspasos)">
+                        {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </optgroup>
+                </select>
             </div>
 
-            {/* Descripción */}
             <div className="space-y-3">
                 <button onClick={() => handleSort('DESCRIPTION')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
                     Descripción <SortIcon field="DESCRIPTION" />
                 </button>
-                <input type="text" placeholder="Buscar concepto..." className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-300" value={colFilterDesc} onChange={e => setColFilterDesc(e.target.value)} />
+                <div className="relative group">
+                    <input 
+                      type="text" 
+                      placeholder="Ej: Sup* o Com?ra" 
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-300 transition-all placeholder:text-slate-300" 
+                      value={colFilterDesc} 
+                      onChange={e => setColFilterDesc(e.target.value)} 
+                    />
+                    {colFilterDesc && <button onClick={() => setColFilterDesc('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-rose-500"><X size={12} /></button>}
+                </div>
             </div>
 
-            {/* Clip */}
             <div className="space-y-3 flex flex-col items-center">
                 <button onClick={() => handleSort('ATTACHMENT')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
                     Clip <SortIcon field="ATTACHMENT" />
                 </button>
-                <select className="w-full px-1 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-black outline-none cursor-pointer" value={colFilterClip} onChange={e => setColFilterClip(e.target.value as any)}>
+                <select className="w-full px-1 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-black outline-none cursor-pointer focus:border-indigo-300 transition-all" value={colFilterClip} onChange={e => setColFilterClip(e.target.value as any)}>
                     <option value="ALL">TODOS</option>
                     <option value="YES">SÍ</option>
                     <option value="NO">NO</option>
                 </select>
             </div>
 
-            {/* Cuenta de Salida */}
             <div className="space-y-3">
                 <button onClick={() => handleSort('ACCOUNT')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
                     Cuenta <SortIcon field="ACCOUNT" />
                 </button>
-                <input type="text" placeholder="Filtrar..." className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-300" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)} />
+                <select className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none cursor-pointer focus:border-indigo-300 transition-all" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}>
+                    <option value="ALL">TODAS</option>
+                    {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
             </div>
 
-            {/* Importe */}
             <div className="space-y-3">
                 <button onClick={() => handleSort('AMOUNT')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors justify-end w-full">
                     Importe <SortIcon field="AMOUNT" />
                 </button>
-                <input type="number" placeholder="Mínimo..." className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-300 text-right" value={colFilterAmount} onChange={e => setColFilterAmount(e.target.value)} />
+                <div className="space-y-1.5">
+                    <select className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[9px] font-black uppercase outline-none cursor-pointer focus:border-indigo-300 transition-all" value={colFilterAmountOp} onChange={e => setColFilterAmountOp(e.target.value as AmountOperator)}>
+                        <option value="ALL">Todos</option>
+                        <option value="GT">{"Mayor que (>)..."}</option>
+                        <option value="LT">{"Menor que (<)..."}</option>
+                        <option value="EQ">{"Igual a (=)..."}</option>
+                        <option value="BETWEEN">{"Entre..."}</option>
+                    </select>
+                    {colFilterAmountOp !== 'ALL' && (
+                        <div className={`grid gap-1 ${colFilterAmountOp === 'BETWEEN' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                            <input type="number" step="0.01" className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-500" placeholder="Val 1" value={colFilterAmountVal1} onChange={e => setColFilterAmountVal1(e.target.value)} />
+                            {colFilterAmountOp === 'BETWEEN' && (
+                                <input type="number" step="0.01" className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-500" placeholder="Val 2" value={colFilterAmountVal2} onChange={e => setColFilterAmountVal2(e.target.value)} />
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* Acciones */}
-            <div className="flex flex-col items-center justify-center pt-1 h-full">
-                <button onClick={() => { setColFilterDate(''); setColFilterEntry(''); setColFilterDesc(''); setColFilterClip('ALL'); setColFilterExit(''); setColFilterAmount(''); }} className="p-2 text-slate-300 hover:text-indigo-500 transition-colors" title="Limpiar todos los filtros">
-                    <X size={16} />
+            <div className="flex flex-col items-center justify-center pt-2 h-full">
+                <button onClick={clearAllFilters} className="p-2 text-slate-300 hover:text-rose-500 transition-colors group/clear" title="Limpiar todos los filtros">
+                    <X size={18} />
                 </button>
             </div>
           </div>
@@ -331,45 +410,30 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
               return (
                   <div key={t.id} className="group bg-white p-5 lg:px-10 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl hover:border-indigo-100 transition-all relative overflow-hidden animate-in fade-in slide-in-from-bottom-2">
-                      <div className="grid grid-cols-1 lg:grid-cols-[100px_200px_1fr_60px_200px_140px_100px] items-center gap-4 lg:gap-6">
-                        {/* Fecha */}
-                        <div className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">{t.date}</div>
-                        
-                        {/* Entrada / Categoría */}
+                      <div className="grid grid-cols-1 lg:grid-cols-[100px_180px_1fr_60px_180px_180px_100px] items-center gap-4 lg:gap-6">
+                        <div className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">
+                            {formatDateDisplay(t.date)}
+                        </div>
                         <div className="text-xs uppercase">{entryNode}</div>
-                        
-                        {/* Descripción */}
                         <div className="text-sm font-black text-slate-800 truncate uppercase tracking-tight">{t.description}</div>
-                        
-                        {/* Clip Adjunto */}
                         <div className="flex justify-center">
                             {t.attachment ? (
                                 <div className="bg-indigo-600 text-white p-2.5 rounded-xl shadow-lg shadow-indigo-100 group-hover:scale-110 transition-transform cursor-pointer" title="Ver adjunto">
                                     <Link2 size={18} />
                                 </div>
                             ) : (
-                                <div className="text-slate-100 p-2.5">
-                                    <Link2Off size={18} />
-                                </div>
+                                <div className="text-slate-100 p-2.5"><Link2Off size={18} /></div>
                             )}
                         </div>
-
-                        {/* Salida */}
                         <div className="text-xs uppercase">{exitNode}</div>
-
-                        {/* Importe */}
                         <div className={`text-right text-xl font-black tracking-tighter ${t.type === 'EXPENSE' ? 'text-rose-600' : t.type === 'INCOME' ? 'text-emerald-600' : 'text-indigo-400'}`}>
-                            {t.type === 'EXPENSE' ? '-' : t.type === 'INCOME' ? '+' : ''}
-                            {t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                            {formatCurrency(t.amount, t.type)}
                         </div>
-
-                        {/* Acciones */}
                         <div className="flex justify-center gap-1">
                             <button onClick={() => openEditor(t)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all active:scale-90"><Edit3 size={18}/></button>
                             <button onClick={() => setDeleteConfirmId(t.id)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all active:scale-90"><Trash2 size={18}/></button>
                         </div>
                       </div>
-
                       {deleteConfirmId === t.id && (
                         <div className="absolute inset-0 bg-white/95 backdrop-blur-sm rounded-[2.5rem] z-10 flex items-center justify-center gap-6 animate-in zoom-in-95">
                           <p className="text-xs font-black text-slate-900 uppercase tracking-widest">¿Confirmar borrado definitivo?</p>
@@ -387,10 +451,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             <div className="py-32 text-center space-y-6 bg-slate-50/50 rounded-[3rem] border-4 border-dashed border-slate-100">
                 <div className="mx-auto bg-white p-8 w-24 h-24 rounded-full flex items-center justify-center text-slate-200 shadow-sm border border-slate-100"><Search size={48}/></div>
                 <div className="space-y-1">
-                  <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest">Silencio absoluto</p>
-                  <p className="text-[10px] font-medium text-slate-300 uppercase tracking-widest">No hay movimientos que coincidan con estos filtros</p>
+                  <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest">Sin coincidencias</p>
+                  <p className="text-[10px] font-medium text-slate-300 uppercase tracking-widest">Ajusta los filtros para encontrar lo que buscas</p>
                 </div>
-                <button onClick={() => { setColFilterDate(''); setColFilterEntry(''); setColFilterDesc(''); setColFilterClip('ALL'); setColFilterExit(''); setColFilterAmount(''); }} className="px-6 py-3 bg-indigo-50 text-indigo-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all">Limpiar filtros</button>
+                <button onClick={clearAllFilters} className="px-6 py-3 bg-indigo-50 text-indigo-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all">Limpiar filtros</button>
             </div>
           )}
       </div>
@@ -399,7 +463,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-white/20">
                 <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
-                
                 <div className="flex items-center gap-4 mb-10">
                     <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20">< Receipt size={28} /></div>
                     <div>
@@ -407,7 +470,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Registro de Movimiento</p>
                     </div>
                 </div>
-
                 <div className="space-y-8">
                     <div className="bg-slate-100 p-2 rounded-[1.5rem] flex gap-2 shadow-inner">
                         {[
@@ -418,7 +480,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                           <button key={m.id} type="button" onClick={() => setFType(m.id as any)} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${fType === m.id ? `bg-white text-${m.color}-600 shadow-xl` : 'text-slate-400 hover:text-slate-600'}`}>{m.label}</button>
                         ))}
                     </div>
-
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe Bruto</label>
@@ -432,12 +493,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                           <input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all shadow-inner" value={fDate} onChange={e => setFDate(e.target.value)} />
                         </div>
                     </div>
-
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Descripción / Concepto</label>
                         <input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all shadow-inner" placeholder="Escribe un concepto claro..." value={fDesc} onChange={e => setFDesc(e.target.value)} />
                     </div>
-
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{fType === 'TRANSFER' ? 'Desde Cuenta' : 'Cuenta de Pago/Cobro'}</label>
@@ -455,7 +514,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                           </div>
                         )}
                     </div>
-
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Paperclip size={14} /> Adjuntar Comprobante (Opcional)</label>
                         <div className="flex gap-3">
@@ -467,9 +525,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         </div>
                         <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={e => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = ev => setFAttachment(ev.target?.result as string); reader.readAsDataURL(file); }}} />
                     </div>
-
                     <button onClick={handleSave} className="w-full py-7 bg-slate-950 text-white rounded-[2.5rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-indigo-600 transition-all active:scale-95 mt-10">
-                      {editingTx ? 'Guardar Cambios del Movimiento' : 'Confirmar y Registrar'}
+                      {editingTx ? 'Guardar Cambios' : 'Confirmar y Registrar'}
                     </button>
                 </div>
             </div>

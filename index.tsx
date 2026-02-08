@@ -1,6 +1,6 @@
 
 import React from 'react';
-import ReactDOM from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 import App from './App';
 
 console.log("ContaMiki: Booting client application...");
@@ -20,7 +20,7 @@ const hideLoader = () => {
 
 const mountApp = () => {
     try {
-        const root = ReactDOM.createRoot(rootElement);
+        const root = createRoot(rootElement);
         root.render(
           <React.StrictMode>
             <App />
@@ -28,11 +28,13 @@ const mountApp = () => {
         );
         console.log("ContaMiki: React mounted successfully.");
         // Ocultamos el loader tras un pequeño respiro para el renderizado inicial
-        setTimeout(hideLoader, 100);
+        setTimeout(hideLoader, 200);
     } catch (err) {
         console.error("ContaMiki: Error during mount:", err);
         const status = document.getElementById('loader-status');
-        if (status) status.innerHTML = '<span class="text-rose-500 font-bold">Error crítico al iniciar React. Revisa la consola.</span>';
+        if (status) {
+            status.innerHTML = '<span class="text-rose-500 font-bold">Error al iniciar: ' + (err instanceof Error ? err.message : 'Error desconocido') + '</span>';
+        }
     }
 };
 

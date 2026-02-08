@@ -1,7 +1,7 @@
 
-import React, { useState, useRef } from 'react';
-import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useRef, useMemo } from 'react';
+import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from '../types';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import * as XLSX from 'xlsx';
 
@@ -11,6 +11,12 @@ interface SettingsViewProps {
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
+
+// Formateador estricto para España
+const numberFormatter = new Intl.NumberFormat('es-ES', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }) => {
   const [activeTab, setActiveTab] = useState('ACC_GROUPS');
@@ -47,6 +53,38 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [catParent, setCatParent] = useState('');
   const [catIcon, setCatIcon] = useState('🏷️');
 
+  // Recurrents Form State
+  const [recId, setRecId] = useState<string | null>(null);
+  const [recDesc, setRecDesc] = useState('');
+  const [recAmount, setRecAmount] = useState('');
+  const [recType, setRecType] = useState<TransactionType>('EXPENSE');
+  const [recAcc, setRecAcc] = useState('');
+  const [recCat, setRecCat] = useState('');
+  const [recFreq, setRecFreq] = useState<RecurrenceFrequency>('MONTHLY');
+  const [recInterval, setRecInterval] = useState('1');
+  const [recStart, setRecStart] = useState(new Date().toISOString().split('T')[0]);
+
+  // Favorites Form State
+  const [favId, setFavId] = useState<string | null>(null);
+  const [favName, setFavName] = useState('');
+  const [favDesc, setFavDesc] = useState('');
+  const [favAmount, setFavAmount] = useState('');
+  const [favType, setFavType] = useState<TransactionType>('EXPENSE');
+  const [favAcc, setFavAcc] = useState('');
+  const [favCat, setFavCat] = useState('');
+  const [favIcon, setFavIcon] = useState('⭐');
+
+  const formatDateDisplay = (dateStr: string) => {
+    if (!dateStr) return '--/--/--';
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year.slice(-2)}`;
+  };
+
+  const formatCurrency = (amount: number, type: 'INCOME' | 'EXPENSE' | 'TRANSFER' | 'NEUTRAL' = 'NEUTRAL') => {
+    const value = type === 'EXPENSE' ? -Math.abs(amount) : amount;
+    return `${numberFormatter.format(value)} €`;
+  };
+
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
     if (!iconStr) return <span className="text-xl">📂</span>;
     if (iconStr.startsWith('http') || iconStr.startsWith('data:image')) {
@@ -60,6 +98,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     setAccId(null); setAccName(''); setAccBalance(''); setAccIcon('🏦'); setAccGroupId('');
     setFamId(null); setFamName(''); setFamIcon('📂'); setFamType('EXPENSE');
     setCatId(null); setCatName(''); setCatIcon('🏷️'); setCatParent('');
+    
+    setRecId(null); setRecDesc(''); setRecAmount(''); setRecType('EXPENSE'); setRecAcc(data.accounts[0]?.id || ''); setRecCat(''); setRecFreq('MONTHLY'); setRecInterval('1'); setRecStart(new Date().toISOString().split('T')[0]);
+    
+    setFavId(null); setFavName(''); setFavDesc(''); setFavAmount(''); setFavType('EXPENSE'); setFavAcc(data.accounts[0]?.id || ''); setFavCat(''); setFavIcon('⭐');
+
     setImportReport(null); setStructureReport(null); setPasteData('');
     setWebLogos([]);
   };
@@ -76,6 +119,59 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         return `${year}-${month}-${day}`;
     }
     return s;
+  };
+
+  const handleSaveRecurrent = () => {
+    if (!recDesc || !recAmount || !recAcc || !recCat) {
+      alert("Faltan datos obligatorios."); return;
+    }
+    const newRec: RecurrentMovement = {
+      id: recId || generateId(),
+      description: recDesc,
+      amount: Math.abs(parseFloat(recAmount)),
+      type: recType,
+      accountId: recAcc,
+      familyId: data.categories.find(c => c.id === recCat)?.familyId || '',
+      categoryId: recCat,
+      frequency: recFreq,
+      interval: parseInt(recInterval) || 1,
+      startDate: recStart,
+      nextDueDate: recStart, // Para simplificar, asumimos que vence en la fecha de inicio al crearlo
+      active: true
+    };
+
+    const currentRecurrents = data.recurrents || [];
+    if (recId) {
+      onUpdateData({ recurrents: currentRecurrents.map(r => r.id === recId ? newRec : r) });
+    } else {
+      onUpdateData({ recurrents: [...currentRecurrents, newRec] });
+    }
+    resetForm();
+  };
+
+  const handleSaveFavorite = () => {
+    if (!favName || !favDesc || !favAmount || !favAcc || !favCat) {
+      alert("Faltan datos obligatorios."); return;
+    }
+    const newFav: FavoriteMovement = {
+      id: favId || generateId(),
+      name: favName,
+      description: favDesc,
+      amount: Math.abs(parseFloat(favAmount)),
+      type: favType,
+      accountId: favAcc,
+      familyId: data.categories.find(c => c.id === favCat)?.familyId || '',
+      categoryId: favCat,
+      icon: favIcon
+    };
+
+    const currentFavorites = data.favorites || [];
+    if (favId) {
+      onUpdateData({ favorites: currentFavorites.map(f => f.id === favId ? newFav : f) });
+    } else {
+      onUpdateData({ favorites: [...currentFavorites, newFav] });
+    }
+    resetForm();
   };
 
   const handleProcessImport = (rawData: string) => {
@@ -196,7 +292,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     
     if (window.confirm(msg)) {
       if (mode === 'ALL') {
-        // Usamos una actualización directa del estado
         onUpdateData({ transactions: [] });
         alert("Historial vaciado correctamente.");
       } else if (massDeleteYear) {
@@ -292,6 +387,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             {id: 'ACCOUNTS', label: 'Cuentas', icon: <Wallet size={16}/>},
             {id: 'FAMILIES', label: 'Familias', icon: <Layers size={16}/>},
             {id: 'CATEGORIES', label: 'Categorías', icon: <Tag size={16}/>},
+            {id: 'RECURRENTS', label: 'Recurrentes', icon: <CalendarClock size={16}/>},
+            {id: 'FAVORITES', label: 'Favoritos', icon: <Heart size={16}/>},
             {id: 'TOOLS', label: 'Herramientas', icon: <DatabaseZap size={16}/>}
         ].map(t => (
             <button key={t.id} className={`flex-1 flex items-center justify-center gap-2 px-6 py-3.5 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => { setActiveTab(t.id); resetForm(); }}>
@@ -364,7 +461,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                     <div>
                                         <span className="font-black text-slate-900 block text-xs uppercase">{acc.name}</span>
                                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{grp?.name || 'Sin grupo'}</span>
-                                        <span className="text-[10px] font-black text-indigo-500 block mt-0.5">{acc.initialBalance.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                                        <span className="text-[10px] font-black text-indigo-500 block mt-0.5">{formatCurrency(acc.initialBalance)}</span>
                                     </div>
                                 </div>
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { setAccId(acc.id); setAccName(acc.name); setAccBalance(acc.initialBalance.toString()); setAccIcon(acc.icon); setAccGroupId(acc.groupId); }} className="p-3 text-indigo-400 hover:bg-indigo-50 rounded-xl"><Edit2 size={18}/></button><button onClick={() => onUpdateData({accounts: data.accounts.filter(a=>a.id!==acc.id)})} className="p-3 text-rose-400 hover:bg-rose-50 rounded-xl"><Trash2 size={18}/></button></div>
@@ -443,6 +540,162 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                     <div><span className="font-black text-slate-900 uppercase text-xs block">{c.name}</span><span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Familia: {fam?.name || '---'}</span></div>
                                 </div>
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { setCatId(c.id); setCatName(c.name); setCatParent(c.familyId); setCatIcon(c.icon); }} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button><button onClick={() => onUpdateData({categories: data.categories.filter(x=>x.id!==c.id)})} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 size={16}/></button></div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'RECURRENTS' && (
+            <div className="grid grid-cols-1 gap-10">
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><CalendarClock className="text-indigo-600"/> {recId ? 'Editar Recurrente' : 'Nuevo Movimiento Recurrente'}</h3>
+                    <div className="space-y-6">
+                        <div className="bg-slate-100 p-2 rounded-[1.5rem] flex gap-2">
+                            {['EXPENSE', 'INCOME', 'TRANSFER'].map(type => (
+                                <button key={type} onClick={() => setRecType(type as any)} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${recType === type ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>{type === 'EXPENSE' ? 'Gasto' : type === 'INCOME' ? 'Ingreso' : 'Traspaso'}</button>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Concepto</label>
+                                <input type="text" placeholder="Ej: Suscripción Netflix..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={recDesc} onChange={e => setRecDesc(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe Bruto (€)</label>
+                                <input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cuenta</label>
+                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recAcc} onChange={e => setRecAcc(e.target.value)}>
+                                    {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoría</label>
+                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recCat} onChange={e => setRecCat(e.target.value)}>
+                                    <option value="">Seleccionar...</option>
+                                    {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Frecuencia</label>
+                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recFreq} onChange={e => setRecFreq(e.target.value as any)}>
+                                    <option value="DAYS">Días</option>
+                                    <option value="WEEKS">Semanas</option>
+                                    <option value="MONTHLY">Meses</option>
+                                    <option value="YEARS">Años</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Intervalo</label>
+                                <input type="number" min="1" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recInterval} onChange={e => setRecInterval(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha Inicio</label>
+                                <input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recStart} onChange={e => setRecStart(e.target.value)} />
+                            </div>
+                        </div>
+                        <button onClick={handleSaveRecurrent} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all shadow-xl">Guardar Recurrente</button>
+                    </div>
+                </div>
+                <div className="space-y-4">
+                    {data.recurrents?.map(r => {
+                        const cat = data.categories.find(c => c.id === r.categoryId);
+                        const acc = data.accounts.find(a => a.id === r.accountId);
+                        return (
+                            <div key={r.id} className="p-6 bg-white rounded-3xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm group hover:border-indigo-100 transition-all">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 flex items-center justify-center bg-slate-50 rounded-xl">{renderIcon(cat?.icon || '📅', "w-8 h-8")}</div>
+                                    <div>
+                                        <span className="font-black text-slate-900 uppercase text-xs block">{r.description}</span>
+                                        <div className="flex gap-2 items-center">
+                                            <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1"><Clock size={10}/> Cada {r.interval} {r.frequency}</span>
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">• {acc?.name}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between sm:justify-end gap-6">
+                                    <div className="text-right">
+                                        <p className={`text-sm font-black ${r.type === 'EXPENSE' ? 'text-rose-500' : 'text-emerald-500'}`}>{formatCurrency(r.amount, r.type)}</p>
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center justify-end gap-1"><Calendar size={10}/> Prox: {formatDateDisplay(r.nextDueDate)}</p>
+                                    </div>
+                                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => { setRecId(r.id); setRecDesc(r.description); setRecAmount(r.amount.toString()); setRecType(r.type); setRecAcc(r.accountId); setRecCat(r.categoryId); setRecFreq(r.frequency); setRecInterval(r.interval.toString()); setRecStart(r.startDate); }} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button>
+                                        <button onClick={() => onUpdateData({recurrents: data.recurrents?.filter(x=>x.id!==r.id)})} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 size={16}/></button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'FAVORITES' && (
+            <div className="grid grid-cols-1 gap-10">
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Heart className="text-indigo-600"/> {favId ? 'Editar Favorito' : 'Nuevo Movimiento Favorito'}</h3>
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre Corto</label>
+                                <input type="text" placeholder="Ej: Compra Semanal..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={favName} onChange={e => setFavName(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Concepto Transacción</label>
+                                <input type="text" placeholder="Concepto real de la transacción..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={favDesc} onChange={e => setFavDesc(e.target.value)} />
+                            </div>
+                        </div>
+                        <div className="bg-slate-100 p-2 rounded-[1.5rem] flex gap-2">
+                            {['EXPENSE', 'INCOME', 'TRANSFER'].map(type => (
+                                <button key={type} onClick={() => setFavType(type as any)} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${favType === type ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>{type === 'EXPENSE' ? 'Gasto' : type === 'INCOME' ? 'Ingreso' : 'Traspaso'}</button>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe Predeterminado (€)</label>
+                                <input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favAmount} onChange={e => setFavAmount(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cuenta</label>
+                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favAcc} onChange={e => setFavAcc(e.target.value)}>
+                                    {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoría</label>
+                            <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favCat} onChange={e => setFavCat(e.target.value)}>
+                                <option value="">Seleccionar...</option>
+                                {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        {renderIconInput(favIcon, setFavIcon, favName)}
+                        <button onClick={handleSaveFavorite} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all shadow-xl">Guardar Favorito</button>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {data.favorites?.map(f => {
+                        const acc = data.accounts.find(a => a.id === f.accountId);
+                        return (
+                            <div key={f.id} className="p-6 bg-white rounded-3xl border border-slate-100 flex items-center justify-between shadow-sm group hover:border-indigo-100 transition-all">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 flex items-center justify-center bg-slate-50 rounded-xl overflow-hidden">{renderIcon(f.icon || '⭐', "w-8 h-8")}</div>
+                                    <div>
+                                        <span className="font-black text-slate-900 uppercase text-xs block">{f.name}</span>
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{acc?.name} • {formatCurrency(f.amount, f.type)}</span>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => { setFavId(f.id); setFavName(f.name); setFavDesc(f.description); setFavAmount(f.amount.toString()); setFavType(f.type); setFavAcc(f.accountId); setFavCat(f.categoryId); setFavIcon(f.icon || '⭐'); }} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Edit2 size={16}/></button>
+                                    <button onClick={() => onUpdateData({favorites: data.favorites?.filter(x=>x.id!==f.id)})} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 size={16}/></button>
+                                </div>
                             </div>
                         );
                     })}

@@ -1,29 +1,35 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { LayoutDashboard, Receipt, Settings, BrainCircuit, Wallet, LogOut } from 'lucide-react';
-import { View } from './types';
+import { View, AppState } from './types';
 import { logout } from './services/authService';
 
 interface LayoutProps {
   currentView: View;
   setCurrentView: (view: View) => void;
   children: React.ReactNode;
+  data: AppState;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children }) => {
-  const mainNavItems: { id: View; label: string; icon: React.ReactNode }[] = [
-    { id: 'RESUMEN', label: 'Resumen', icon: <LayoutDashboard size={22} /> },
+export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data }) => {
+  const pendingRecurrentsCount = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return data.recurrents?.filter(r => r.active && r.nextDueDate <= today).length || 0;
+  }, [data.recurrents]);
+
+  const mainNavItems: { id: View; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { id: 'RESUMEN', label: 'Resumen', icon: <LayoutDashboard size={22} />, badge: pendingRecurrentsCount },
     { id: 'TRANSACTIONS', label: 'Movimientos', icon: <Receipt size={22} /> },
     { id: 'SETTINGS', label: 'Ajustes', icon: <Settings size={22} /> },
   ];
 
   const aiNavItem = { id: 'AI_INSIGHTS' as View, label: 'Asesor IA', icon: <BrainCircuit size={22} /> };
 
-  const renderNavItem = (item: { id: View; label: string; icon: React.ReactNode }, isMobile = false) => (
+  const renderNavItem = (item: { id: View; label: string; icon: React.ReactNode; badge?: number }, isMobile = false) => (
     <button
       key={item.id}
       onClick={() => setCurrentView(item.id)}
-      className={`w-full flex items-center gap-4 px-6 py-4 rounded-[1.25rem] transition-all duration-300 group ${
+      className={`w-full flex items-center gap-4 px-6 py-4 rounded-[1.25rem] transition-all duration-300 group relative ${
         currentView === item.id
           ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20 translate-x-1'
           : 'text-slate-400 hover:bg-white/5 hover:text-white'
@@ -33,6 +39,12 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         {item.icon}
       </div>
       <span className={`font-bold uppercase tracking-[0.2em] ${isMobile ? 'text-[8px]' : 'text-[11px]'}`}>{item.label}</span>
+      
+      {item.badge !== undefined && item.badge > 0 && (
+        <span className="absolute top-3 right-5 bg-rose-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-lg border-2 border-slate-950 animate-bounce">
+          {item.badge}
+        </span>
+      )}
     </button>
   );
 
@@ -89,12 +101,17 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
           <button
             key={item.id}
             onClick={() => setCurrentView(item.id)}
-            className={`flex flex-col items-center gap-1 p-3 transition-all ${
+            className={`flex flex-col items-center gap-1 p-3 transition-all relative ${
               currentView === item.id ? 'text-indigo-400 scale-110' : 'text-slate-500 hover:text-slate-300'
             }`}
           >
             {item.icon}
             <span className="text-[8px] font-black uppercase tracking-[0.1em]">{item.label}</span>
+            {item.badge !== undefined && item.badge > 0 && (
+                <span className="absolute top-1 right-2 bg-rose-500 text-white text-[7px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md">
+                    {item.badge}
+                </span>
+            )}
           </button>
         ))}
         <button

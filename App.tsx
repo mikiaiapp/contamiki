@@ -96,7 +96,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <Layout currentView={currentView} setCurrentView={setCurrentView}>
+    <Layout currentView={currentView} setCurrentView={setCurrentView} data={data}>
       {currentView === 'RESUMEN' && (
         <Dashboard 
             data={data} 
