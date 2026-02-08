@@ -220,7 +220,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       const errors: {fila: number, dato: string, error: string}[] = [];
 
       lines.forEach((line, index) => {
-          // SEPARADOR CAMBIADO A PUNTO Y COMA
+          // SEPARADOR ESTANDARIZADO A PUNTO Y COMA
           const parts = line.split(';').map(s => s.trim());
           if (parts.length < 5) { 
               errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente (fecha; categoria; cuenta; concepto; importe)" });
@@ -276,6 +276,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
               return;
           }
 
+          // LÓGICA DE SIGNOS: Negativo -> Gasto | Positivo -> Ingreso
           if (txType !== 'TRANSFER') {
               txType = amountVal < 0 ? 'EXPENSE' : 'INCOME';
           }
@@ -603,7 +604,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre</label>
-                                    <input type="text" placeholder="Ej: Vivienda, Ocio..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={famName} onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} />
+                                    <input type="text" placeholder="Ej: Vivienda; Ocio..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={famName} onChange={e => { setFamName(e.target.value); triggerWebSearch(e.target.value); }} />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo</label>
@@ -667,7 +668,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre</label>
-                                    <input type="text" placeholder="Ej: Supermercado, Cine..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={catName} onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} />
+                                    <input type="text" placeholder="Ej: Supermercado; Cine..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={catName} onChange={e => { setCatName(e.target.value); triggerWebSearch(e.target.value); }} />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Familia Superior</label>
@@ -835,7 +836,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     <div className="space-y-6">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre Atajo</label>
-                            <input type="text" placeholder="Ej: Café Diario, Compra Semanal..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favName} onChange={e => setFavName(e.target.value)} />
+                            <input type="text" placeholder="Ej: Café Diario; Compra Semanal..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favName} onChange={e => setFavName(e.target.value)} />
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
@@ -958,7 +959,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                     <>
                                         <div>
                                             <span className="text-3xl font-black text-slate-900 tracking-tighter">{year}</span>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{count} movimientos</p>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{count} movimientos detectados</p>
                                         </div>
                                         <button onClick={() => setMassDeleteYear(year)} className="w-full py-4 bg-rose-50 text-rose-600 border border-rose-100 rounded-2xl font-black text-[10px] uppercase hover:bg-rose-600 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2 group-hover:scale-105 transition-transform">
                                             <Trash2 size={16} /> Purgar Año
