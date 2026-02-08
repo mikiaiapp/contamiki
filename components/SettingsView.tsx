@@ -220,7 +220,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       const errors: {fila: number, dato: string, error: string}[] = [];
 
       lines.forEach((line, index) => {
-          // SEPARADOR ESTANDARIZADO A PUNTO Y COMA
+          // SEPARADOR ESTANDARIZADO A PUNTO Y COMA (;)
           const parts = line.split(';').map(s => s.trim());
           if (parts.length < 5) { 
               errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente (fecha; categoria; cuenta; concepto; importe)" });
@@ -270,13 +270,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
               familyId = category.familyId;
           }
 
-          const amountVal = parseFloat(amountStr.replace(',','.'));
+          // Lógica mejorada para manejar comas como decimales y signos negativos
+          const amountVal = parseFloat(amountStr.replace(',', '.'));
           if (isNaN(amountVal)) {
               errors.push({ fila: index + 1, dato: line, error: `Importe "${amountStr}" no numérico` });
               return;
           }
 
-          // LÓGICA DE SIGNOS: Negativo -> Gasto | Positivo -> Ingreso
+          // DETECCIÓN DE SIGNOS: Si es negativo es GASTO, si es positivo es INGRESO
           if (txType !== 'TRANSFER') {
               txType = amountVal < 0 ? 'EXPENSE' : 'INCOME';
           }
@@ -285,7 +286,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
               id: generateId(),
               date: fec,
               description: concept,
-              amount: Math.abs(amountVal),
+              amount: Math.abs(amountVal), // Guardamos el valor absoluto
               type: txType,
               accountId: accId,
               transferAccountId: transferAccId,
@@ -1002,7 +1003,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                         <div className="flex flex-col sm:flex-row justify-between items-center bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 gap-4">
                              <div className="flex items-center gap-3 text-indigo-600">
                                 <Sparkles size={20} />
-                                <p className="text-[10px] font-black uppercase tracking-widest leading-tight">Separador: <strong>Punto y coma (;)</strong>. Detectamos signo automáticamente.</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest leading-tight">Separador: <strong>Punto y coma (;)</strong>. Importes negativos se registran como GASTOS.</p>
                              </div>
                              <div className="flex gap-3 w-full sm:w-auto">
                                 <button onClick={handleManualMovementImport} className="flex-1 sm:flex-none px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-indigo-200">

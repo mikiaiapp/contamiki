@@ -262,7 +262,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                             </div>
                             <div className="flex gap-2">
                                 <button onClick={() => processRecurrence(r)} className="p-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-400 active:scale-90 transition-all"><CheckCircle2 size={18} /></button>
-                                <button onClick={() => handleEditRecurrenceBeforeProcess(r)} className="p-3 bg-indigo-500 text-white rounded-xl hover:bg-indigo-400 active:scale-90 transition-all"><Edit2 size={18} /></button>
+                                <button onClick={() => handleEditRecurrenceBeforeProcess(r)} className="p-3 bg-indigo-50 text-white rounded-xl hover:bg-indigo-400 active:scale-90 transition-all"><Edit2 size={18} /></button>
                                 <button onClick={() => skipRecurrence(r)} className="p-3 bg-white/10 text-slate-300 rounded-xl hover:bg-white/20 active:scale-90 transition-all"><X size={18} /></button>
                             </div>
                         </div>
