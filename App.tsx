@@ -6,7 +6,7 @@ import { TransactionView } from './TransactionView';
 import { SettingsView } from './components/SettingsView';
 import { AIInsights } from './components/AIInsights';
 import { LoginView } from './LoginView';
-import { AppState, View, Transaction, GlobalFilter, TimeRange } from './types';
+import { AppState, View, Transaction, GlobalFilter } from './types';
 import { loadData, saveData } from './services/dataService';
 import { isAuthenticated, logout } from './services/authService';
 
@@ -25,7 +25,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('RESUMEN');
   const [dataLoaded, setDataLoaded] = useState(false);
   
-  // Filtro Global Sincronizado
+  // Filtro Global Compartido (Sincronizado)
   const [globalFilter, setGlobalFilter] = useState<GlobalFilter>({
     timeRange: 'MONTH',
     referenceDate: new Date(),

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import * as XLSX from 'xlsx';
 
@@ -14,9 +14,10 @@ const generateId = () => Math.random().toString(36).substring(2, 15);
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }) => {
   const [activeTab, setActiveTab] = useState('ACC_GROUPS');
-  const [importMode, setImportMode] = useState<'NORMAL' | 'TRANSFER'>('NORMAL');
-  const [pasteMovements, setPasteMovements] = useState('');
+  const [importType, setImportType] = useState<'GROUPS' | 'ACCOUNTS' | 'FAMILIES' | 'CATEGORIES' | 'TRANSACTIONS' | 'TRANSFER'>('TRANSACTIONS');
+  const [pasteData, setPasteData] = useState('');
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
+  const [structureReport, setStructureReport] = useState<{ added: number, type: string } | null>(null);
   const [massDeleteYear, setMassDeleteYear] = useState('');
   
   const [webLogos, setWebLogos] = useState<{url: string, source: string}[]>([]);
@@ -54,7 +55,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     setAccId(null); setAccName(''); setAccBalance(''); setAccIcon('🏦'); setAccGroupId('');
     setFamId(null); setFamName(''); setFamIcon('📂'); setFamType('EXPENSE');
     setCatId(null); setCatName(''); setCatIcon('🏷️'); setCatParent('');
-    setImportReport(null); setPasteMovements('');
+    setImportReport(null); setStructureReport(null); setPasteData('');
   };
 
   const parseDate = (dateStr: string) => {
@@ -71,77 +72,136 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     return s;
   };
 
-  const processImportLines = (lines: string[]) => {
-      const newTransactions: Transaction[] = [];
-      const localAccs = [...data.accounts];
-      const localCats = [...data.categories];
-      const report: ImportReport = { added: 0, newAccounts: [], newCategories: [], errors: [] };
+  const handleProcessImport = (rawData: string) => {
+    if (!rawData.trim()) return;
+    const lines = rawData.split('\n').filter(l => l.trim());
+    
+    const localGroups = [...data.accountGroups];
+    const localAccs = [...data.accounts];
+    const localFamilies = [...data.families];
+    const localCategories = [...data.categories];
+    const localTxs = [...data.transactions];
 
-      lines.forEach((line, index) => {
-          if (!line.trim()) return;
-          const parts = line.split(';').map(s => s.trim());
-          if (parts.length < 5) { report.errors.push({ fila: index + 1, error: "Formato incompleto" }); return; }
-          const [fecRaw, cName, aName, concept, amStr] = parts;
+    let addedCount = 0;
+    const txReport: ImportReport = { added: 0, newAccounts: [], newCategories: [], errors: [] };
 
-          const fec = parseDate(fecRaw);
-          const amountVal = parseFloat(amStr.replace(',', '.'));
-          if (isNaN(amountVal)) { report.errors.push({ fila: index + 1, error: "Importe no numérico" }); return; }
+    lines.forEach(line => {
+      const parts = line.split(';').map(p => p.trim());
+      if (parts.length < 2) return;
 
-          if (importMode === 'NORMAL') {
-              let acc = localAccs.find(a => a.name.toLowerCase() === aName.toLowerCase());
-              if (!acc) {
-                  acc = { id: generateId(), name: aName, initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: data.accountGroups[0]?.id || 'g1' };
-                  localAccs.push(acc); report.newAccounts.push(aName);
-              }
-              let cat = localCats.find(c => c.name.toLowerCase() === cName.toLowerCase());
-              if (!cat) {
-                  cat = { id: generateId(), name: cName, familyId: data.families[0]?.id || 'f1', icon: '🏷️' };
-                  localCats.push(cat); report.newCategories.push(cName);
-              }
-              newTransactions.push({ id: generateId(), date: fec, description: concept, amount: Math.abs(amountVal), type: amountVal < 0 ? 'EXPENSE' : 'INCOME', accountId: acc.id, categoryId: cat.id, familyId: cat.familyId });
-          } else {
-              let src = localAccs.find(a => a.name.toLowerCase() === parts[1].toLowerCase());
-              if (!src) { src = { id: generateId(), name: parts[1], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: 'g1' }; localAccs.push(src); report.newAccounts.push(parts[1]); }
-              let dst = localAccs.find(a => a.name.toLowerCase() === parts[2].toLowerCase());
-              if (!dst) { dst = { id: generateId(), name: parts[2], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: 'g1' }; localAccs.push(dst); report.newAccounts.push(parts[2]); }
-              newTransactions.push({ id: generateId(), date: fec, description: parts[3], amount: Math.abs(amountVal), type: 'TRANSFER', accountId: src.id, transferAccountId: dst.id, familyId: '', categoryId: '' });
+      switch (importType) {
+        case 'GROUPS':
+          if (!localGroups.find(g => g.name.toLowerCase() === parts[0].toLowerCase())) {
+            localGroups.push({ id: generateId(), name: parts[0], icon: parts[1] || '🗂️' });
+            addedCount++;
           }
-      });
+          break;
+        case 'ACCOUNTS':
+          // Nombre; Grupo; Saldo; Icono
+          const accGrp = localGroups.find(g => g.name.toLowerCase() === parts[1]?.toLowerCase()) || localGroups[0];
+          if (!localAccs.find(a => a.name.toLowerCase() === parts[0].toLowerCase())) {
+            localAccs.push({ id: generateId(), name: parts[0], initialBalance: parseFloat(parts[2]) || 0, currency: 'EUR', icon: parts[3] || '🏦', groupId: accGrp?.id || 'g1' });
+            addedCount++;
+          }
+          break;
+        case 'FAMILIES':
+          // Nombre; Tipo(EXPENSE/INCOME); Icono
+          const fType = parts[1]?.toUpperCase() === 'INCOME' ? 'INCOME' : 'EXPENSE';
+          if (!localFamilies.find(f => f.name.toLowerCase() === parts[0].toLowerCase())) {
+            localFamilies.push({ id: generateId(), name: parts[0], type: fType, icon: parts[2] || '📂' });
+            addedCount++;
+          }
+          break;
+        case 'CATEGORIES':
+          // Nombre; Familia; Icono
+          const fParent = localFamilies.find(f => f.name.toLowerCase() === parts[1]?.toLowerCase()) || localFamilies[0];
+          if (!localCategories.find(c => c.name.toLowerCase() === parts[0].toLowerCase())) {
+            localCategories.push({ id: generateId(), name: parts[0], familyId: fParent?.id || 'f1', icon: parts[2] || '🏷️' });
+            addedCount++;
+          }
+          break;
+        case 'TRANSACTIONS':
+          // Fecha; Categoria; Cuenta; Concepto; Importe
+          const fec = parseDate(parts[0]);
+          const amountVal = parseFloat(parts[4].replace(',', '.'));
+          if (isNaN(amountVal)) return;
 
-      report.added = newTransactions.length;
-      onUpdateData({ transactions: [...data.transactions, ...newTransactions], accounts: localAccs, categories: localCats });
-      setImportReport(report);
+          let txAcc = localAccs.find(a => a.name.toLowerCase() === parts[2].toLowerCase());
+          if (!txAcc) {
+            txAcc = { id: generateId(), name: parts[2], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: localGroups[0]?.id || 'g1' };
+            localAccs.push(txAcc); txReport.newAccounts.push(parts[2]);
+          }
+          let txCat = localCategories.find(c => c.name.toLowerCase() === parts[1].toLowerCase());
+          if (!txCat) {
+            txCat = { id: generateId(), name: parts[1], familyId: localFamilies[0]?.id || 'f1', icon: '🏷️' };
+            localCategories.push(txCat); txReport.newCategories.push(parts[1]);
+          }
+          localTxs.push({ 
+            id: generateId(), date: fec, description: parts[3], amount: Math.abs(amountVal), 
+            type: amountVal < 0 ? 'EXPENSE' : 'INCOME', accountId: txAcc.id, 
+            categoryId: txCat.id, familyId: txCat.familyId 
+          });
+          txReport.added++;
+          break;
+        case 'TRANSFER':
+          // Fecha; Origen; Destino; Concepto; Importe
+          const tFec = parseDate(parts[0]);
+          const tAmount = Math.abs(parseFloat(parts[4].replace(',', '.')));
+          if (isNaN(tAmount)) return;
+
+          let tSrc = localAccs.find(a => a.name.toLowerCase() === parts[1].toLowerCase());
+          if (!tSrc) { tSrc = { id: generateId(), name: parts[1], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: 'g1' }; localAccs.push(tSrc); txReport.newAccounts.push(parts[1]); }
+          let tDst = localAccs.find(a => a.name.toLowerCase() === parts[2].toLowerCase());
+          if (!tDst) { tDst = { id: generateId(), name: parts[2], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: 'g1' }; localAccs.push(tDst); txReport.newAccounts.push(parts[2]); }
+          
+          localTxs.push({ 
+            id: generateId(), date: tFec, description: parts[3], amount: tAmount, 
+            type: 'TRANSFER', accountId: tSrc.id, transferAccountId: tDst.id, familyId: '', categoryId: '' 
+          });
+          txReport.added++;
+          break;
+      }
+    });
+
+    if (['GROUPS', 'ACCOUNTS', 'FAMILIES', 'CATEGORIES'].includes(importType)) {
+      setStructureReport({ added: addedCount, type: importType });
+      onUpdateData({ accountGroups: localGroups, accounts: localAccs, families: localFamilies, categories: localCategories });
+    } else {
+      setImportReport(txReport);
+      onUpdateData({ transactions: localTxs, accounts: localAccs, categories: localCategories });
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-          const bstr = evt.target?.result;
-          const wb = XLSX.read(bstr, { type: 'binary' });
-          const wsname = wb.SheetNames[0];
-          const ws = wb.Sheets[wsname];
-          const dataJson = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-          const lines = dataJson.map(row => row.join(';'));
-          processImportLines(lines);
-      };
-      reader.readAsBinaryString(file);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const dataJson = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+        const lines = dataJson.map(row => row.join(';')).join('\n');
+        handleProcessImport(lines);
+    };
+    reader.readAsBinaryString(file);
   };
 
   const handleMassDelete = (mode: 'YEAR' | 'ALL') => {
     const msg = mode === 'ALL' 
-        ? "¿Estás seguro de que quieres borrar ABSOLUTAMENTE TODOS los movimientos? Esta acción es irreversible."
-        : `¿Estás seguro de que quieres borrar TODOS los movimientos del año ${massDeleteYear}?`;
+        ? "¿Estás seguro de que quieres borrar ABSOLUTAMENTE TODOS los movimientos del historial? Esta acción no se puede deshacer."
+        : `¿Confirmas el borrado de TODOS los movimientos del año ${massDeleteYear}?`;
     
     if (window.confirm(msg)) {
       if (mode === 'ALL') {
         onUpdateData({ transactions: [] });
-        alert("Se han borrado todos los movimientos.");
+        alert("Historial de movimientos vaciado completamente.");
       } else if (massDeleteYear) {
         const filtered = data.transactions.filter(t => !t.date.startsWith(massDeleteYear));
+        const deleted = data.transactions.length - filtered.length;
         onUpdateData({ transactions: filtered });
-        alert(`Se han borrado los movimientos de ${massDeleteYear}.`);
+        alert(`Se han borrado ${deleted} movimientos del año ${massDeleteYear}.`);
       }
       setMassDeleteYear('');
     }
@@ -197,7 +257,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Configuración y Herramientas</p>
       </div>
 
-      <div className="flex bg-slate-100 p-1.5 rounded-2xl shadow-inner border border-slate-200/50 overflow-x-auto scrollbar-hide">
+      <nav className="flex bg-slate-100 p-1.5 rounded-2xl shadow-inner border border-slate-200/50 overflow-x-auto scrollbar-hide">
         {[
             {id: 'ACC_GROUPS', label: 'Grupos', icon: <BoxSelect size={16}/>},
             {id: 'ACCOUNTS', label: 'Cuentas', icon: <Wallet size={16}/>},
@@ -209,7 +269,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
               {t.icon} <span className="hidden sm:inline">{t.label}</span>
             </button>
         ))}
-      </div>
+      </nav>
 
       <div className="max-w-4xl mx-auto">
         {activeTab === 'ACC_GROUPS' && (
@@ -217,7 +277,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-6">
                     <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><BoxSelect className="text-indigo-600"/> {grpId ? 'Editar Grupo' : 'Nuevo Grupo'}</h3>
                     <div className="space-y-4">
-                        <input type="text" placeholder="Nombre del grupo" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={grpName} onChange={e => setGrpName(e.target.value)} />
+                        <input type="text" placeholder="Nombre del grupo (ej: Bancos)" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={grpName} onChange={e => setGrpName(e.target.value)} />
                         <div className="flex items-center gap-4">
                             <input type="text" placeholder="Icono" className="w-24 px-4 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-center" value={grpIcon} onChange={e => setGrpIcon(e.target.value)} />
                             <button onClick={() => { if(!grpName) return; if(grpId) onUpdateData({accountGroups: data.accountGroups.map(g=>g.id===grpId?{...g,name:grpName,icon:grpIcon}:g)}); else onUpdateData({accountGroups: [...data.accountGroups, {id:generateId(),name:grpName,icon:grpIcon}]}); resetForm(); }} className="flex-1 py-5 bg-slate-950 text-white rounded-2xl font-black uppercase text-[10px] hover:bg-indigo-600 transition-all">Guardar Grupo</button>
@@ -241,7 +301,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Wallet className="text-indigo-600"/> {accId ? 'Editar Cuenta' : 'Nueva Cuenta'}</h3>
                     <div className="space-y-6">
                         <input type="text" placeholder="Nombre de la cuenta" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accName} onChange={e => setAccName(e.target.value)} />
-                        <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={accGroupId} onChange={e => setAccGroupId(e.target.value)}><option value="">Vincular a un Grupo...</option>{data.accountGroups.map(g => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}</select>
+                        <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={accGroupId} onChange={e => setAccGroupId(e.target.value)}>
+                            <option value="">Vincular a un Grupo...</option>
+                            {data.accountGroups.map(g => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
+                        </select>
                         {renderIconInput(accIcon, setAccIcon, accName)}
                         <input type="number" placeholder="Saldo Inicial €" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
                         <button onClick={() => { if(!accName) return; const balanceVal = parseFloat(accBalance) || 0; if (accId) onUpdateData({ accounts: data.accounts.map(a => a.id === accId ? { ...a, name: accName, initialBalance: balanceVal, icon: accIcon, groupId: accGroupId } : a) }); else onUpdateData({ accounts: [...data.accounts, { id: generateId(), name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon, groupId: accGroupId || (data.accountGroups[0]?.id || 'g1') }] }); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all shadow-xl">Confirmar Cuenta</button>
@@ -251,7 +314,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     {data.accounts.map(acc => {
                         const grp = data.accountGroups.find(g => g.id === acc.groupId);
                         return (
-                            <div key={acc.id} className="flex justify-between items-center p-6 bg-white rounded-3xl border border-slate-100 shadow-sm">
+                            <div key={acc.id} className="flex justify-between items-center p-6 bg-white rounded-3xl border border-slate-100 shadow-sm hover:border-indigo-100 transition-all">
                                 <div className="flex items-center gap-4">
                                     <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100">{renderIcon(acc.icon, "w-8 h-8")}</div>
                                     <div>
@@ -273,7 +336,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-6">
                     <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Layers className="text-indigo-600"/> {famId ? 'Editar Familia' : 'Nueva Familia'}</h3>
                     <div className="space-y-4">
-                        <input type="text" placeholder="Nombre" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={famName} onChange={e => setFamName(e.target.value)} />
+                        <input type="text" placeholder="Nombre de familia" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={famName} onChange={e => setFamName(e.target.value)} />
                         <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1.5">
                             <button onClick={() => setFamType('EXPENSE')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${famType === 'EXPENSE' ? 'bg-white text-rose-500 shadow-sm' : 'text-slate-400'}`}>Gasto</button>
                             <button onClick={() => setFamType('INCOME')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${famType === 'INCOME' ? 'bg-white text-emerald-500 shadow-sm' : 'text-slate-400'}`}>Ingreso</button>
@@ -298,8 +361,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-6">
                     <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Tag className="text-indigo-600"/> {catId ? 'Editar Categoría' : 'Nueva Categoría'}</h3>
                     <div className="space-y-4">
-                        <input type="text" placeholder="Nombre" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={catName} onChange={e => setCatName(e.target.value)} />
-                        <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={catParent} onChange={e => setCatParent(e.target.value)}><option value="">Vincular a una Familia...</option>{data.families.map(f => <option key={f.id} value={f.id}>{f.icon} {f.name} ({f.type === 'EXPENSE' ? 'Gasto' : 'Ingreso'})</option>)}</select>
+                        <input type="text" placeholder="Nombre de categoría" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={catName} onChange={e => setCatName(e.target.value)} />
+                        <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={catParent} onChange={e => setCatParent(e.target.value)}>
+                            <option value="">Vincular a una Familia...</option>
+                            {data.families.map(f => <option key={f.id} value={f.id}>{f.icon} {f.name} ({f.type === 'EXPENSE' ? 'Gasto' : 'Ingreso'})</option>)}
+                        </select>
                         {renderIconInput(catIcon, setCatIcon, catName)}
                         <button onClick={() => { if(!catName || !catParent) return; if(catId) onUpdateData({categories: data.categories.map(c=>c.id===catId?{...c,name:catName,familyId:catParent,icon:catIcon}:c)}); else onUpdateData({categories: [...data.categories, {id:generateId(),name:catName,familyId:catParent,icon:catIcon}]}); resetForm(); }} className="w-full py-5 bg-slate-950 text-white rounded-2xl font-black uppercase text-[10px] hover:bg-indigo-600 transition-all">Guardar Categoría</button>
                     </div>
@@ -321,62 +387,108 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
         {activeTab === 'TOOLS' && (
             <div className="space-y-12">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3"><ClipboardPaste className="text-indigo-600" size={28}/> Mega Importador Maestro</h3>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3"><ClipboardPaste className="text-indigo-600" size={28}/> Importador Maestro</h3>
+                    </div>
+
+                    <div className="flex flex-col gap-4">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Selecciona el tipo de importación:</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 bg-slate-100 p-1.5 rounded-2xl gap-1 shadow-inner overflow-hidden">
+                            {[
+                                { id: 'GROUPS', label: 'Grupos', icon: <BoxSelect size={12}/> },
+                                { id: 'ACCOUNTS', label: 'Cuentas', icon: <Wallet size={12}/> },
+                                { id: 'FAMILIES', label: 'Familias', icon: <Layers size={12}/> },
+                                { id: 'CATEGORIES', label: 'Categorías', icon: <Tag size={12}/> },
+                                { id: 'TRANSACTIONS', label: 'Movimientos', icon: <Receipt size={12}/> },
+                                { id: 'TRANSFER', label: 'Traspasos', icon: <ArrowRightLeft size={12}/> }
+                            ].map(btn => (
+                                <button 
+                                    key={btn.id}
+                                    onClick={() => { setImportType(btn.id as any); setImportReport(null); setStructureReport(null); }}
+                                    className={`px-3 py-3 text-[9px] font-black uppercase tracking-tighter rounded-xl transition-all flex items-center justify-center gap-1.5 ${importType === btn.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}
+                                >
+                                    {btn.icon} <span>{btn.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                     
+                    <div className="bg-indigo-50/50 p-6 rounded-3xl border border-indigo-100 space-y-2">
+                        <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2"><Info size={14}/> Guía de formato para {importType}:</p>
+                        <p className="text-[11px] font-medium text-slate-600 italic">
+                            {importType === 'GROUPS' && "Nombre; Icono/Emoji (ej: Bancos; 🏦)"}
+                            {importType === 'ACCOUNTS' && "Nombre; Nombre del Grupo; Saldo Inicial; Icono (ej: BBVA; Bancos; 1500.50; 🏦)"}
+                            {importType === 'FAMILIES' && "Nombre; Tipo (Gasto/Ingreso); Icono (ej: Alimentación; Gasto; 🍎)"}
+                            {importType === 'CATEGORIES' && "Nombre; Nombre de la Familia; Icono (ej: Supermercado; Alimentación; 🛒)"}
+                            {importType === 'TRANSACTIONS' && "Fecha; Categoría; Cuenta; Concepto; Importe (ej: 27/10/23; Super; BBVA; Compra; -50.00)"}
+                            {importType === 'TRANSFER' && "Fecha; Cuenta Origen; Cuenta Destino; Concepto; Importe (ej: 27/10/23; BBVA; Efectivo; Sacar; 50.00)"}
+                        </p>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-4">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Opción 1: Archivo CSV / Excel</label>
-                            <div onClick={() => fileInputRef.current?.click()} className="group border-2 border-dashed border-slate-200 rounded-[2rem] p-10 text-center hover:border-indigo-500 hover:bg-indigo-50/30 transition-all cursor-pointer">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Archivo CSV / Excel</label>
+                            <div onClick={() => fileInputRef.current?.click()} className="group border-2 border-dashed border-slate-200 rounded-[2rem] p-10 text-center hover:border-indigo-500 hover:bg-indigo-50/30 transition-all cursor-pointer bg-slate-50/50">
                                 <FileSpreadsheet className="mx-auto text-slate-300 group-hover:text-indigo-500 mb-4" size={48} />
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Arrastra o haz clic para subir</p>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Arrastra o selecciona un archivo</p>
                                 <input type="file" ref={fileInputRef} className="hidden" accept=".csv, .xlsx, .xls" onChange={handleFileUpload} />
                             </div>
                         </div>
                         <div className="space-y-4">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Opción 2: Copiar y Pegar Texto</label>
-                            <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit mb-2">
-                                <button onClick={() => setImportMode('NORMAL')} className={`px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${importMode === 'NORMAL' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500'}`}>Gasto/Ingreso</button>
-                                <button onClick={() => setImportMode('TRANSFER')} className={`px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${importMode === 'TRANSFER' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500'}`}>Traspaso</button>
-                            </div>
-                            <textarea className="w-full h-32 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-[11px] outline-none shadow-inner placeholder:text-slate-300" placeholder={importMode === 'NORMAL' ? "27/10/23; Alimentación; BBVA; Compra cena; -25.50" : "27/10/23; BBVA; Efectivo; Retirada; 50.00"} value={pasteMovements} onChange={e => setPasteMovements(e.target.value)} />
-                            <button onClick={() => processImportLines(pasteMovements.split('\n'))} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-indigo-200 hover:bg-slate-900 transition-all">Procesar Texto</button>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Pegar desde Portapapeles</label>
+                            <textarea 
+                              className="w-full h-36 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-[10px] outline-none shadow-inner placeholder:text-slate-300 focus:border-indigo-500 transition-all" 
+                              placeholder="Pega las líneas aquí..." 
+                              value={pasteData} 
+                              onChange={e => setPasteData(e.target.value)} 
+                            />
+                            <button onClick={() => handleProcessImport(pasteData)} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-indigo-200 hover:bg-slate-900 transition-all active:scale-95">Procesar Datos</button>
                         </div>
                     </div>
 
+                    {structureReport && (
+                        <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white space-y-4 animate-in zoom-in-95 border-b-4 border-indigo-500 shadow-xl">
+                            <h4 className="text-sm font-black uppercase flex items-center gap-2 text-indigo-400"><Check size={20} /> Importación completada</h4>
+                            <div className="flex items-center gap-4">
+                                <div className="bg-white/5 p-4 rounded-2xl flex-1 text-center"><p className="text-[9px] uppercase text-slate-400 mb-1">Tipo procesado</p><p className="text-lg font-black text-indigo-400 uppercase tracking-widest">{structureReport.type}</p></div>
+                                <div className="bg-white/5 p-4 rounded-2xl flex-1 text-center"><p className="text-[9px] uppercase text-slate-400 mb-1">Nuevos registros</p><p className="text-4xl font-black text-emerald-400">{structureReport.added}</p></div>
+                            </div>
+                        </div>
+                    )}
+
                     {importReport && (
-                        <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white space-y-4 animate-in zoom-in-95">
-                            <h4 className="text-sm font-black uppercase flex items-center gap-2 text-indigo-400"><CheckCircle2 size={20} /> Importación Exitosa</h4>
-                            <div className="grid grid-cols-3 gap-6">
-                                <div className="bg-white/5 p-4 rounded-2xl"><p className="text-[9px] uppercase text-slate-400 mb-1">Movimientos</p><p className="text-2xl font-black text-emerald-400">{importReport.added}</p></div>
-                                <div className="bg-white/5 p-4 rounded-2xl"><p className="text-[9px] uppercase text-slate-400 mb-1">Nuevas Cuentas</p><p className="text-2xl font-black text-indigo-400">{importReport.newAccounts.length}</p></div>
-                                <div className="bg-white/5 p-4 rounded-2xl"><p className="text-[9px] uppercase text-slate-400 mb-1">Nuevas Cats</p><p className="text-2xl font-black text-amber-400">{importReport.newCategories.length}</p></div>
+                        <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white space-y-4 animate-in zoom-in-95 border-b-4 border-emerald-500 shadow-xl">
+                            <h4 className="text-sm font-black uppercase flex items-center gap-2 text-emerald-400"><CheckCircle2 size={20} /> Movimientos importados</h4>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
+                                <div className="bg-white/5 p-4 rounded-2xl"><p className="text-[9px] uppercase text-slate-400 mb-1">Añadidos</p><p className="text-3xl font-black text-emerald-400">{importReport.added}</p></div>
+                                <div className="bg-white/5 p-4 rounded-2xl"><p className="text-[9px] uppercase text-slate-400 mb-1">Nuevas Cuentas</p><p className="text-3xl font-black text-indigo-400">{importReport.newAccounts.length}</p></div>
+                                <div className="bg-white/5 p-4 rounded-2xl"><p className="text-[9px] uppercase text-slate-400 mb-1">Nuevas Cats</p><p className="text-3xl font-black text-amber-400">{importReport.newCategories.length}</p></div>
                             </div>
                         </div>
                     )}
                 </div>
 
-                <div className="bg-rose-50 p-10 rounded-[3rem] border border-rose-100 space-y-6">
-                    <h3 className="text-2xl font-black text-rose-800 uppercase tracking-tighter flex items-center gap-3"><Eraser className="text-rose-600" size={28}/> Limpieza Profunda</h3>
+                <div className="bg-rose-50 p-10 rounded-[3rem] border border-rose-100 space-y-6 shadow-sm">
+                    <h3 className="text-2xl font-black text-rose-800 uppercase tracking-tighter flex items-center gap-3"><Eraser className="text-rose-600" size={28}/> Limpieza de Datos</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="bg-white p-6 rounded-3xl border border-rose-200 space-y-4">
-                            <p className="text-rose-900 text-[10px] font-black uppercase tracking-widest">Borrar por Año</p>
+                        <div className="bg-white p-6 rounded-3xl border border-rose-200 space-y-4 shadow-sm">
+                            <p className="text-rose-900 text-[10px] font-black uppercase tracking-widest">Eliminar un año completo</p>
                             <div className="flex gap-4">
-                                <input type="number" placeholder="Ej: 2023" className="flex-1 px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-rose-500" value={massDeleteYear} onChange={e => setMassDeleteYear(e.target.value)} />
-                                <button onClick={() => handleMassDelete('YEAR')} className="px-6 py-4 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-rose-200 hover:bg-rose-700 transition-all">Limpiar Año</button>
+                                <input type="number" placeholder="Año (ej: 2024)" className="flex-1 px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-rose-500" value={massDeleteYear} onChange={e => setMassDeleteYear(e.target.value)} />
+                                <button onClick={() => handleMassDelete('YEAR')} className="px-6 py-4 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-rose-200 hover:bg-rose-700 transition-all active:scale-95">Borrar Año</button>
                             </div>
                         </div>
-                        <div className="bg-white p-6 rounded-3xl border border-rose-200 flex flex-col justify-center space-y-4">
-                            <p className="text-rose-900 text-[10px] font-black uppercase tracking-widest">Reinicio de Fábrica</p>
-                            <button onClick={() => handleMassDelete('ALL')} className="w-full py-4 bg-rose-950 text-white rounded-xl font-black text-[10px] uppercase shadow-xl hover:bg-black transition-all flex items-center justify-center gap-3"><AlertTriangle size={16}/> Borrar todo el Historial</button>
+                        <div className="bg-white p-6 rounded-3xl border border-rose-200 flex flex-col justify-center space-y-4 shadow-sm">
+                            <p className="text-rose-900 text-[10px] font-black uppercase tracking-widest">Borrado total de historial</p>
+                            <button onClick={() => handleMassDelete('ALL')} className="w-full py-4 bg-rose-950 text-white rounded-xl font-black text-[10px] uppercase shadow-xl hover:bg-black transition-all flex items-center justify-center gap-3 active:scale-95"><AlertTriangle size={16}/> VACIAR TODO EL DIARIO</button>
                         </div>
                     </div>
                 </div>
 
-                <div className="bg-slate-900 p-10 rounded-[3rem] text-center space-y-6 shadow-2xl overflow-hidden relative group">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
+                <div className="bg-slate-900 p-10 rounded-[3rem] text-center space-y-6 shadow-2xl overflow-hidden relative group border-t-4 border-indigo-500">
                     <div className="mx-auto bg-indigo-600 text-white w-16 h-16 rounded-3xl flex items-center justify-center shadow-2xl rotate-3 group-hover:rotate-12 transition-transform duration-500"><DatabaseZap size={32} /></div>
-                    <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Soberanía de Datos</h3>
-                    <button onClick={exportBackup} className="flex items-center justify-center gap-3 w-full p-5 bg-white text-slate-900 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-xl active:scale-95"><FileJson size={20} /> Exportar Backup JSON</button>
+                    <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Copia de Seguridad</h3>
+                    <button onClick={exportBackup} className="flex items-center justify-center gap-3 w-full p-5 bg-white text-slate-900 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-xl active:scale-95"><FileJson size={20} /> Exportar JSON completo</button>
                 </div>
             </div>
         )}

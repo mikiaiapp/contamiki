@@ -1,8 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter } from './types';
-// Fixed missing imports for Wallet, Tag, Receipt, CheckCircle2, and Upload
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc } from 'lucide-react';
 
 interface TransactionViewProps {
   data: AppState;
@@ -16,7 +15,7 @@ interface TransactionViewProps {
   clearSpecificFilters?: () => void;
 }
 
-type SortField = 'DATE' | 'DESCRIPTION' | 'AMOUNT' | 'ACCOUNT' | 'CATEGORY';
+type SortField = 'DATE' | 'DESCRIPTION' | 'AMOUNT' | 'ACCOUNT' | 'CATEGORY' | 'ATTACHMENT';
 type SortDirection = 'ASC' | 'DESC';
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
@@ -35,19 +34,25 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [fAttachment, setFAttachment] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // View Filter State
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterAccount, setFilterAccount] = useState('ALL');
-  const [filterCategory, setFilterCategory] = useState('ALL');
-  const [minAmount, setMinAmount] = useState('');
-  const [maxAmount, setMaxAmount] = useState('');
+  // Column Specific Filters
+  const [colFilterDate, setColFilterDate] = useState('');
+  const [colFilterEntry, setColFilterEntry] = useState('');
+  const [colFilterDesc, setColFilterDesc] = useState('');
+  const [colFilterClip, setColFilterClip] = useState<'ALL' | 'YES' | 'NO'>('ALL');
+  const [colFilterExit, setColFilterExit] = useState('');
+  const [colFilterAmount, setColFilterAmount] = useState('');
+
+  // Sorting
   const [sortField, setSortField] = useState<SortField>('DATE');
   const [sortDirection, setSortDirection] = useState<SortDirection>('DESC');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialSpecificFilters) {
-      if (initialSpecificFilters.filterCategory) setFilterCategory(initialSpecificFilters.filterCategory);
+      if (initialSpecificFilters.filterCategory) {
+          const cat = data.categories.find(c => c.id === initialSpecificFilters.filterCategory);
+          if (cat) setColFilterEntry(cat.name);
+      }
       if (clearSpecificFilters) clearSpecificFilters();
     }
   }, [initialSpecificFilters]);
@@ -105,32 +110,39 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
   const filteredTransactions = useMemo(() => {
     let res = data.transactions.filter(t => {
-      // Sincronización Temporal Global
+      // Sincronización Temporal Global (App level)
       const y = filter.referenceDate.getFullYear();
       const m = filter.referenceDate.getMonth();
       let start = ''; let end = '';
       if (filter.timeRange === 'MONTH') {
         start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
         end = `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`;
-      } else if (filter.timeRange === 'QUARTER') {
-        const q = Math.floor(m / 3);
-        const startMonth = q * 3 + 1;
-        const endMonth = q * 3 + 3;
-        start = `${y}-${String(startMonth).padStart(2, '0')}-01`;
-        end = `${y}-${String(endMonth).padStart(2, '0')}-${new Date(y, endMonth, 0).getDate()}`;
       } else if (filter.timeRange === 'YEAR') {
         start = `${y}-01-01`; end = `${y}-12-31`;
       } else if (filter.timeRange === 'CUSTOM') {
         start = filter.customStart || '1900-01-01';
         end = filter.customEnd || '2100-12-31';
       }
-      
       if (filter.timeRange !== 'ALL' && (t.date < start || t.date > end)) return false;
-      if (filterAccount !== 'ALL' && t.accountId !== filterAccount && t.transferAccountId !== filterAccount) return false;
-      if (filterCategory !== 'ALL' && t.categoryId !== filterCategory) return false;
-      if (searchTerm && !t.description.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-      if (minAmount && t.amount < parseFloat(minAmount)) return false;
-      if (maxAmount && t.amount > parseFloat(maxAmount)) return false;
+
+      // Column Filters
+      if (colFilterDate && !t.date.includes(colFilterDate)) return false;
+      
+      const cat = data.categories.find(c => c.id === t.categoryId);
+      const dstAcc = t.transferAccountId ? data.accounts.find(x=>x.id===t.transferAccountId) : null;
+      const entryText = t.type === 'TRANSFER' ? (dstAcc?.name || '') : (cat?.name || '');
+      if (colFilterEntry && !entryText.toLowerCase().includes(colFilterEntry.toLowerCase())) return false;
+
+      if (colFilterDesc && !t.description.toLowerCase().includes(colFilterDesc.toLowerCase())) return false;
+      
+      if (colFilterClip === 'YES' && !t.attachment) return false;
+      if (colFilterClip === 'NO' && t.attachment) return false;
+
+      const srcAcc = data.accounts.find(x=>x.id===t.accountId);
+      if (colFilterExit && !srcAcc?.name.toLowerCase().includes(colFilterExit.toLowerCase())) return false;
+
+      if (colFilterAmount && t.amount < parseFloat(colFilterAmount)) return false;
+
       return true;
     });
 
@@ -139,118 +151,163 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       if (sortField === 'DATE') { vA = a.date; vB = b.date; }
       else if (sortField === 'DESCRIPTION') { vA = a.description.toLowerCase(); vB = b.description.toLowerCase(); }
       else if (sortField === 'AMOUNT') { vA = a.amount; vB = b.amount; }
-      else if (sortField === 'ACCOUNT') { vA = data.accounts.find(x=>x.id===a.accountId)?.name || ''; vB = data.accounts.find(x=>x.id===b.accountId)?.name || ''; }
-      else if (sortField === 'CATEGORY') { vA = data.categories.find(x=>x.id===a.categoryId)?.name || ''; vB = data.categories.find(x=>x.id===b.categoryId)?.name || ''; }
+      else if (sortField === 'ACCOUNT') { 
+          vA = data.accounts.find(x=>x.id===a.accountId)?.name.toLowerCase() || ''; 
+          vB = data.accounts.find(x=>x.id===b.accountId)?.name.toLowerCase() || ''; 
+      }
+      else if (sortField === 'CATEGORY') { 
+          const catA = data.categories.find(x=>x.id===a.categoryId)?.name.toLowerCase() || '';
+          const catB = data.categories.find(x=>x.id===b.categoryId)?.name.toLowerCase() || '';
+          vA = catA; vB = catB;
+      }
+      else if (sortField === 'ATTACHMENT') { vA = a.attachment ? 1 : 0; vB = b.attachment ? 1 : 0; }
       
       if (vA < vB) return sortDirection === 'ASC' ? -1 : 1;
       if (vA > vB) return sortDirection === 'ASC' ? 1 : -1;
       return 0;
     });
-  }, [data.transactions, filter, filterAccount, filterCategory, searchTerm, minAmount, maxAmount, sortField, sortDirection, data.accounts, data.categories]);
+  }, [data.transactions, filter, colFilterDate, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmount, sortField, sortDirection, data.accounts, data.categories]);
+
+  const handleSort = (field: SortField) => {
+      if (sortField === field) {
+          setSortDirection(sortDirection === 'ASC' ? 'DESC' : 'ASC');
+      } else {
+          setSortField(field);
+          setSortDirection('DESC');
+      }
+  };
+
+  const navigatePeriod = (direction: 'prev' | 'next') => {
+    const newDate = new Date(filter.referenceDate);
+    const step = direction === 'next' ? 1 : -1;
+    if (filter.timeRange === 'MONTH') newDate.setMonth(newDate.getMonth() + step);
+    else if (filter.timeRange === 'YEAR') newDate.setFullYear(newDate.getFullYear() + step);
+    onUpdateFilter({ ...filter, referenceDate: newDate });
+  };
+
+  const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
+  const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
     if (iconStr?.startsWith('http')) return <img src={iconStr} className={`${className} object-contain`} referrerPolicy="no-referrer" />;
     return <span className="text-xl">{iconStr || '📂'}</span>;
   }
 
-  const navigatePeriod = (direction: 'prev' | 'next') => {
-    const newDate = new Date(filter.referenceDate);
-    const step = direction === 'next' ? 1 : -1;
-    if (filter.timeRange === 'MONTH') newDate.setMonth(newDate.getMonth() + step);
-    else if (filter.timeRange === 'QUARTER') newDate.setMonth(newDate.getMonth() + (step * 3));
-    else if (filter.timeRange === 'YEAR') newDate.setFullYear(newDate.getFullYear() + step);
-    onUpdateFilter({ ...filter, referenceDate: newDate });
+  const SortIcon = ({ field }: { field: SortField }) => {
+      if (sortField !== field) return <ArrowUpDown size={12} className="opacity-20" />;
+      return sortDirection === 'ASC' ? <SortAsc size={12} className="text-indigo-600" /> : <SortDesc size={12} className="text-indigo-600" />;
   };
 
   return (
     <div className="space-y-6 md:space-y-10 pb-24">
-      {/* Cabecera Superior con navegación y filtros globales */}
-      <div className="flex flex-col xl:flex-row justify-between items-center gap-6">
-        <div className="text-center md:text-left">
-          <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
-          <div className="flex items-center gap-1 mt-2">
-              <button onClick={() => navigatePeriod('prev')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={18} /></button>
-              <button onClick={() => navigatePeriod('next')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={18} /></button>
-              <span className="px-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Navegar Periodo</span>
-          </div>
-        </div>
-        
-        <div className="flex flex-col md:flex-row items-center gap-4 w-full xl:w-auto">
-          <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto w-full md:w-auto scrollbar-hide">
-            {['ALL', 'MONTH', 'QUARTER', 'YEAR', 'CUSTOM'].map(r => (
-              <button key={r} onClick={() => onUpdateFilter({...filter, timeRange: r as any})} className={`flex-1 md:flex-none px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${filter.timeRange === r ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
-                {r === 'ALL' ? 'Todo' : r === 'MONTH' ? 'Mes' : r === 'QUARTER' ? 'Trim' : r === 'YEAR' ? 'Año' : 'Pers'}
-              </button>
-            ))}
-          </div>
-          <button onClick={() => openEditor()} className="w-full md:w-auto bg-slate-950 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] shadow-2xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-3 active:scale-95">
-            <Plus size={20} /> Nuevo Movimiento
-          </button>
-        </div>
-      </div>
-
-      {/* Panel de Control Integrado - Filtros y Búsqueda */}
-      <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
-              <div className="relative">
-                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                <input type="text" placeholder="Buscar por concepto..." className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 font-bold text-sm outline-none transition-all shadow-inner" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-              </div>
-              
-              <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 rounded-2xl border-2 border-transparent focus-within:border-indigo-500 shadow-inner transition-all">
-                <Wallet size={18} className="text-slate-300" />
-                <select className="w-full bg-transparent font-bold text-sm outline-none cursor-pointer" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
-                  <option value="ALL">TODAS LAS CUENTAS</option>
-                  {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 rounded-2xl border-2 border-transparent focus-within:border-indigo-500 shadow-inner transition-all">
-                <Tag size={18} className="text-slate-300" />
-                <select className="w-full bg-transparent font-bold text-sm outline-none cursor-pointer" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-                  <option value="ALL">TODAS LAS CATEGORÍAS</option>
-                  {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-
-              <div className="flex gap-2">
-                  <div className="flex-1 relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300">MIN</span>
-                    <input type="number" className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 text-sm font-bold outline-none shadow-inner" value={minAmount} onChange={e => setMinAmount(e.target.value)} />
-                  </div>
-                  <div className="flex-1 relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300">MAX</span>
-                    <input type="number" className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 text-sm font-bold outline-none shadow-inner" value={maxAmount} onChange={e => setMaxAmount(e.target.value)} />
-                  </div>
-              </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-4 pt-5 border-t border-slate-50">
-              <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 shrink-0"><ArrowUpDown size={14}/> Ordenar por:</span>
-                <div className="flex gap-2">
-                  {['DATE', 'DESCRIPTION', 'AMOUNT', 'ACCOUNT', 'CATEGORY'].map(f => (
-                    <button key={f} onClick={() => { if(sortField === f) setSortDirection(sortDirection === 'ASC' ? 'DESC' : 'ASC'); else { setSortField(f as SortField); setSortDirection('DESC'); }}} className={`text-[9px] font-black uppercase tracking-tighter px-4 py-2 rounded-xl transition-all whitespace-nowrap ${sortField === f ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-400 bg-slate-50 hover:bg-slate-100'}`}>
-                      {f === 'DATE' ? 'Fecha' : f === 'DESCRIPTION' ? 'Concepto' : f === 'AMOUNT' ? 'Importe' : f === 'ACCOUNT' ? 'Cuenta' : 'Cat'} {sortField === f && (sortDirection === 'ASC' ? '↑' : '↓')}
-                    </button>
-                  ))}
+      {/* Cabecera Superior */}
+      <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8">
+        <div className="space-y-4 text-center md:text-left">
+            <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
+            <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
+                <div className="flex items-center gap-1">
+                    <button onClick={() => navigatePeriod('prev')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={20} /></button>
+                    <button onClick={() => navigatePeriod('next')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={20} /></button>
                 </div>
-              </div>
-              <div className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{filteredTransactions.length} Movimientos</div>
-          </div>
+                <div className="flex gap-2">
+                    {filter.timeRange !== 'CUSTOM' && filter.timeRange !== 'ALL' && (
+                        <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
+                            {years.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    )}
+                    {filter.timeRange === 'MONTH' && (
+                        <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
+                            {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                        </select>
+                    )}
+                </div>
+                {filter.timeRange === 'CUSTOM' && (
+                    <div className="flex gap-2">
+                        <input type="date" className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-[10px]" value={filter.customStart} onChange={e => onUpdateFilter({...filter, customStart: e.target.value})} />
+                        <input type="date" className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-[10px]" value={filter.customEnd} onChange={e => onUpdateFilter({...filter, customEnd: e.target.value})} />
+                    </div>
+                )}
+                <button onClick={() => openEditor()} className="sm:ml-4 bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 active:scale-95">
+                  <Plus size={16} /> Nuevo
+                </button>
+            </div>
+        </div>
+        <div className="bg-slate-100/80 p-1.5 rounded-2xl flex flex-wrap justify-center gap-1 shadow-inner border border-slate-200/50 w-full sm:w-fit mx-auto xl:mx-0">
+            {[
+                { id: 'ALL', label: 'Todo' },
+                { id: 'MONTH', label: 'Mes' },
+                { id: 'YEAR', label: 'Año' },
+                { id: 'CUSTOM', label: 'Pers' }
+            ].map((range) => (
+                <button key={range.id} onClick={() => onUpdateFilter({...filter, timeRange: range.id as any})} className={`flex-1 sm:flex-none px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === range.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                    {range.label}
+                </button>
+            ))}
+        </div>
       </div>
 
-      {/* Listado de Movimientos Estructurado */}
+      {/* Listado de Movimientos con Cabecera Funcional */}
       <div className="space-y-4">
-          {/* Cabecera visual de tabla (Desktop) */}
-          <div className="hidden lg:grid grid-cols-[100px_200px_1fr_60px_200px_140px_100px] gap-4 px-10 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">
-            <div>Fecha</div>
-            <div>Entrada / Categoría</div>
-            <div>Descripción / Concepto</div>
-            <div className="text-center">Clip</div>
-            <div>Cuenta de Salida</div>
-            <div className="text-right">Importe</div>
-            <div className="text-center">Acciones</div>
+          {/* Cabecera de tabla con Ordenación y Filtrado */}
+          <div className="hidden lg:grid grid-cols-[100px_200px_1fr_60px_200px_140px_100px] gap-4 px-10 py-6 items-start bg-white/50 rounded-[2.5rem] border border-slate-100 shadow-sm">
+            {/* Fecha */}
+            <div className="space-y-3">
+                <button onClick={() => handleSort('DATE')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
+                    Fecha <SortIcon field="DATE" />
+                </button>
+                <input type="text" placeholder="Filtrar..." className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-300" value={colFilterDate} onChange={e => setColFilterDate(e.target.value)} />
+            </div>
+            
+            {/* Entrada / Categoría */}
+            <div className="space-y-3">
+                <button onClick={() => handleSort('CATEGORY')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
+                    Entrada/Cat <SortIcon field="CATEGORY" />
+                </button>
+                <input type="text" placeholder="Filtrar..." className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-300" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)} />
+            </div>
+
+            {/* Descripción */}
+            <div className="space-y-3">
+                <button onClick={() => handleSort('DESCRIPTION')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
+                    Descripción <SortIcon field="DESCRIPTION" />
+                </button>
+                <input type="text" placeholder="Buscar concepto..." className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-300" value={colFilterDesc} onChange={e => setColFilterDesc(e.target.value)} />
+            </div>
+
+            {/* Clip */}
+            <div className="space-y-3 flex flex-col items-center">
+                <button onClick={() => handleSort('ATTACHMENT')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
+                    Clip <SortIcon field="ATTACHMENT" />
+                </button>
+                <select className="w-full px-1 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-black outline-none cursor-pointer" value={colFilterClip} onChange={e => setColFilterClip(e.target.value as any)}>
+                    <option value="ALL">TODOS</option>
+                    <option value="YES">SÍ</option>
+                    <option value="NO">NO</option>
+                </select>
+            </div>
+
+            {/* Cuenta de Salida */}
+            <div className="space-y-3">
+                <button onClick={() => handleSort('ACCOUNT')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
+                    Cuenta <SortIcon field="ACCOUNT" />
+                </button>
+                <input type="text" placeholder="Filtrar..." className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-300" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)} />
+            </div>
+
+            {/* Importe */}
+            <div className="space-y-3">
+                <button onClick={() => handleSort('AMOUNT')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors justify-end w-full">
+                    Importe <SortIcon field="AMOUNT" />
+                </button>
+                <input type="number" placeholder="Mínimo..." className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-300 text-right" value={colFilterAmount} onChange={e => setColFilterAmount(e.target.value)} />
+            </div>
+
+            {/* Acciones */}
+            <div className="flex flex-col items-center justify-center pt-1 h-full">
+                <button onClick={() => { setColFilterDate(''); setColFilterEntry(''); setColFilterDesc(''); setColFilterClip('ALL'); setColFilterExit(''); setColFilterAmount(''); }} className="p-2 text-slate-300 hover:text-indigo-500 transition-colors" title="Limpiar todos los filtros">
+                    <X size={16} />
+                </button>
+            </div>
           </div>
 
           {filteredTransactions.map(t => {
@@ -333,7 +390,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                   <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest">Silencio absoluto</p>
                   <p className="text-[10px] font-medium text-slate-300 uppercase tracking-widest">No hay movimientos que coincidan con estos filtros</p>
                 </div>
-                <button onClick={() => { setSearchTerm(''); setFilterAccount('ALL'); setFilterCategory('ALL'); setMinAmount(''); setMaxAmount(''); }} className="px-6 py-3 bg-indigo-50 text-indigo-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all">Limpiar filtros</button>
+                <button onClick={() => { setColFilterDate(''); setColFilterEntry(''); setColFilterDesc(''); setColFilterClip('ALL'); setColFilterExit(''); setColFilterAmount(''); }} className="px-6 py-3 bg-indigo-50 text-indigo-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all">Limpiar filtros</button>
             </div>
           )}
       </div>

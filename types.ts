@@ -94,7 +94,7 @@ export interface ImportReport {
 
 export type View = 'RESUMEN' | 'TRANSACTIONS' | 'SETTINGS' | 'AI_INSIGHTS';
 
-export type TimeRange = 'ALL' | 'MONTH' | 'QUARTER' | 'YEAR' | 'CUSTOM';
+export type TimeRange = 'ALL' | 'MONTH' | 'YEAR' | 'CUSTOM';
 
 export interface GlobalFilter {
   timeRange: TimeRange;

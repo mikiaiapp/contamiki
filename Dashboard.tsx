@@ -24,13 +24,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
       startStr = `${y}-${String(m + 1).padStart(2, '0')}-01`;
       const lastDay = new Date(y, m + 1, 0).getDate();
       endStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    } else if (filter.timeRange === 'QUARTER') {
-      const quarter = Math.floor(m / 3);
-      const startMonth = quarter * 3 + 1;
-      const endMonth = quarter * 3 + 3;
-      startStr = `${y}-${String(startMonth).padStart(2, '0')}-01`;
-      const lastDay = new Date(y, endMonth, 0).getDate();
-      endStr = `${y}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
     } else if (filter.timeRange === 'YEAR') {
       startStr = `${y}-01-01`; 
       endStr = `${y}-12-31`;
@@ -96,7 +89,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
     const newDate = new Date(filter.referenceDate);
     const step = direction === 'next' ? 1 : -1;
     if (filter.timeRange === 'MONTH') newDate.setMonth(newDate.getMonth() + step);
-    else if (filter.timeRange === 'QUARTER') newDate.setMonth(newDate.getMonth() + (step * 3));
     else if (filter.timeRange === 'YEAR') newDate.setFullYear(newDate.getFullYear() + step);
     onUpdateFilter({ ...filter, referenceDate: newDate });
   };
@@ -121,12 +113,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
                 </div>
                 <div className="flex gap-2">
                     {filter.timeRange !== 'CUSTOM' && filter.timeRange !== 'ALL' && (
-                        <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
+                        <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
                             {years.map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                     )}
                     {filter.timeRange === 'MONTH' && (
-                        <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
+                        <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
                             {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
                         </select>
                     )}
@@ -143,7 +135,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
             {[
                 { id: 'ALL', label: 'Todo' },
                 { id: 'MONTH', label: 'Mes' },
-                { id: 'QUARTER', label: 'Trim' },
                 { id: 'YEAR', label: 'Año' },
                 { id: 'CUSTOM', label: 'Pers' }
             ].map((range) => (
