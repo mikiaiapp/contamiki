@@ -6,13 +6,14 @@ import { TransactionView } from './TransactionView';
 import { SettingsView } from './components/SettingsView';
 import { AIInsights } from './components/AIInsights';
 import { LoginView } from './LoginView';
-import { AppState, View, Transaction, RecurrentMovement, FavoriteMovement } from './types';
+import { AppState, View, Transaction, GlobalFilter, TimeRange } from './types';
 import { loadData, saveData } from './services/dataService';
 import { isAuthenticated, logout } from './services/authService';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(isAuthenticated());
   const [data, setData] = useState<AppState>({
+    accountGroups: [],
     accounts: [],
     families: [],
     categories: [],
@@ -20,10 +21,20 @@ const App: React.FC = () => {
     recurrents: [],
     favorites: []
   });
+  
   const [currentView, setCurrentView] = useState<View>('RESUMEN');
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [pendingFilters, setPendingFilters] = useState<any>(null);
-  const saveTimeoutRef = useRef<number | null>(null);
+  
+  // Filtro Global Sincronizado
+  const [globalFilter, setGlobalFilter] = useState<GlobalFilter>({
+    timeRange: 'MONTH',
+    referenceDate: new Date(),
+    customStart: '',
+    customEnd: ''
+  });
+
+  const [pendingSpecificFilters, setPendingSpecificFilters] = useState<any>(null);
+  const saveTimeoutRef = useRef<number>(null);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -38,7 +49,6 @@ const App: React.FC = () => {
                 setDataLoaded(true);
             })
             .catch(err => {
-                console.error("Failed to load data:", err);
                 if (err.message.includes('401') || err.message.includes('403')) {
                     logout();
                 } else {
@@ -55,13 +65,10 @@ const App: React.FC = () => {
           saveData(data);
       }, 1500);
     }
-    return () => {
-        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    }
   }, [data, dataLoaded, isLoggedIn]);
 
   const handleAddTransaction = (t: Transaction) => {
-    setData(prev => ({...prev, transactions: [...prev.transactions, t]}));
+    setData(prev => ({...prev, transactions: [t, ...prev.transactions]}));
   };
 
   const handleUpdateTransaction = (t: Transaction) => {
@@ -75,11 +82,6 @@ const App: React.FC = () => {
     setData(prev => ({...prev, transactions: prev.transactions.filter(tx => tx.id !== id)}));
   };
 
-  const handleNavigateWithFilters = (view: View, filters: any) => {
-    setPendingFilters(filters);
-    setCurrentView(view);
-  };
-
   if (!isLoggedIn) {
       return <LoginView onLoginSuccess={() => setIsLoggedIn(true)} />;
   }
@@ -87,8 +89,8 @@ const App: React.FC = () => {
   if (!dataLoaded) {
       return (
           <div className="fixed inset-0 flex flex-col items-center justify-center bg-slate-950 text-white z-[999]">
-              <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6 shadow-[0_0_20px_rgba(99,102,241,0.3)]"></div>
-              <p className="text-xs font-black uppercase tracking-[0.4em] animate-pulse">Cifrando Finanzas</p>
+              <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+              <p className="text-xs font-black uppercase tracking-[0.4em]">Sincronizando Libro...</p>
           </div>
       );
   }
@@ -100,7 +102,12 @@ const App: React.FC = () => {
             data={data} 
             onAddTransaction={handleAddTransaction}
             onUpdateData={(newData) => setData(prev => ({...prev, ...newData}))}
-            onNavigateToTransactions={(filters) => handleNavigateWithFilters('TRANSACTIONS', filters)}
+            filter={globalFilter}
+            onUpdateFilter={setGlobalFilter}
+            onNavigateToTransactions={(spec) => {
+                setPendingSpecificFilters(spec);
+                setCurrentView('TRANSACTIONS');
+            }}
         />
       )}
       {currentView === 'TRANSACTIONS' && (
@@ -110,8 +117,10 @@ const App: React.FC = () => {
           onDeleteTransaction={handleDeleteTransaction}
           onUpdateTransaction={handleUpdateTransaction}
           onUpdateData={(newData) => setData(prev => ({...prev, ...newData}))}
-          initialFilters={pendingFilters}
-          clearInitialFilters={() => setPendingFilters(null)}
+          filter={globalFilter}
+          onUpdateFilter={setGlobalFilter}
+          initialSpecificFilters={pendingSpecificFilters}
+          clearSpecificFilters={() => setPendingSpecificFilters(null)}
         />
       )}
       {currentView === 'SETTINGS' && (

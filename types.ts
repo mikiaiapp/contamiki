@@ -14,7 +14,7 @@ export interface Account {
   initialBalance: number;
   currency: string;
   icon: string;
-  groupId: string; // Nuevo campo para vincular a una agrupación
+  groupId: string;
 }
 
 export interface Family {
@@ -52,11 +52,11 @@ export interface RecurrentMovement {
   amount: number;
   type: TransactionType;
   accountId: string;
-  transferAccountId?: string; // Cuenta de contrapartida
+  transferAccountId?: string;
   familyId: string;
   categoryId: string;
   frequency: RecurrenceFrequency;
-  interval: number; // El "X" en "cada X meses"
+  interval: number;
   startDate: string;
   nextDueDate: string;
   active: boolean;
@@ -69,14 +69,14 @@ export interface FavoriteMovement {
   amount: number;
   type: TransactionType;
   accountId: string;
-  transferAccountId?: string; // Cuenta de contrapartida
+  transferAccountId?: string;
   familyId: string;
   categoryId: string;
   icon?: string;
 }
 
 export interface AppState {
-  accountGroups: AccountGroup[]; // Nueva colección
+  accountGroups: AccountGroup[];
   accounts: Account[];
   families: Family[];
   categories: Category[];
@@ -86,3 +86,12 @@ export interface AppState {
 }
 
 export type View = 'RESUMEN' | 'TRANSACTIONS' | 'SETTINGS' | 'AI_INSIGHTS';
+
+export type TimeRange = 'ALL' | 'MONTH' | 'QUARTER' | 'YEAR' | 'CUSTOM';
+
+export interface GlobalFilter {
+  timeRange: TimeRange;
+  referenceDate: Date;
+  customStart: string;
+  customEnd: string;
+}
