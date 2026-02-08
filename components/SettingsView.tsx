@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, AccountGroup } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText, MoveRight, BoxSelect, AlertOctagon, Eraser, AlertTriangle } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, ImageIcon, Sparkles, ChevronDown, XCircle, Info, Download, Upload, FileJson, FileSpreadsheet, DatabaseZap, ClipboardPaste, ListOrdered, CheckCircle2, Repeat, Star, Power, Calendar, ArrowRightLeft, ShieldCheck, AlertCircle, Plus, FileText, MoveRight, BoxSelect, AlertOctagon, Eraser, AlertTriangle, RefreshCcw } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import { parseMigrationData } from '../services/geminiService';
 import * as XLSX from 'xlsx';
@@ -91,8 +91,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [favCounterpartId, setFavCounterpartId] = useState('');
   const [favCat, setFavCat] = useState('');
 
-  // Estados Borrado Masivo
+  // Estados Borrado Masivo y Reset
   const [massDeleteYear, setMassDeleteYear] = useState<string | null>(null);
+  const [showFullResetConfirm, setShowFullResetConfirm] = useState(false);
 
   useEffect(() => { 
     setWebLogos([]); 
@@ -109,7 +110,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       setFavId(null); setFavName(''); setFavAmount(''); setFavAcc(data.accounts[0]?.id || ''); setFavCounterpartId(''); setFavCat('');
       setWebLogos([]); setHasSearched(false);
       setShowQuickImport(false); setPasteData(''); setPasteMovements(''); setImportErrors([]);
-      setMigrationText(''); setMigrationPreview(null); setMassDeleteYear(null);
+      setMigrationText(''); setMigrationPreview(null); setMassDeleteYear(null); setShowFullResetConfirm(false);
       if (entityImportFileRef.current) entityImportFileRef.current.value = '';
   };
 
@@ -219,9 +220,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       const errors: {fila: number, dato: string, error: string}[] = [];
 
       lines.forEach((line, index) => {
-          const parts = line.split(',').map(s => s.trim());
+          // SEPARADOR CAMBIADO A PUNTO Y COMA
+          const parts = line.split(';').map(s => s.trim());
           if (parts.length < 5) { 
-              errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente (fecha, categoria, cuenta, concepto, importe)" });
+              errors.push({ fila: index + 1, dato: line, error: "Formato insuficiente (fecha; categoria; cuenta; concepto; importe)" });
               return; 
           }
 
@@ -234,7 +236,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           let concept = '';
           let amountStr = '';
 
-          // Buscar cuenta origen
           const account = data.accounts.find(a => a.name.toLowerCase() === accName.toLowerCase());
           if (!account) { 
               errors.push({ fila: index + 1, dato: line, error: `Cuenta "${accName}" no encontrada en el sistema` });
@@ -275,9 +276,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
               return;
           }
 
-          // Lógica de signos inteligente:
-          // Negativo -> Gasto (EXPENSE)
-          // Positivo -> Ingreso o Devolución de Gasto (INCOME)
           if (txType !== 'TRANSFER') {
               txType = amountVal < 0 ? 'EXPENSE' : 'INCOME';
           }
@@ -326,8 +324,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             counts[year] = (counts[year] || 0) + 1;
         }
     });
-    // Aseguramos que el listado pueda manejar años desde 2015 aunque no haya movimientos
-    // pero aquí mostramos solo los que TIENEN datos para que el usuario sepa qué puede borrar.
     return Object.entries(counts).sort((a,b) => b[0].localeCompare(a[0]));
   }, [data.transactions]);
 
@@ -338,25 +334,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       alert(`Limpieza completada: Se han borrado todos los movimientos de ${year}.`);
   };
 
+  const handleFullReset = () => {
+      onUpdateData({ transactions: [] });
+      setShowFullResetConfirm(false);
+      alert("Se han eliminado TODOS los movimientos de la aplicación.");
+  };
+
   const handleQuickImport = () => {
       if (!pasteData.trim()) return;
       const lines = pasteData.trim().split('\n');
       if (activeTab === 'FAMILIES') {
           const newFamilies: Family[] = lines.map(line => {
-              const [name, icon, type] = line.split(',').map(s => s.trim());
+              const [name, icon, type] = line.split(';').map(s => s.trim());
               return { id: generateId(), name: name || 'Nueva Familia', icon: icon || '📂', type: (type === 'INCOME' ? 'INCOME' : 'EXPENSE') as any };
           });
           onUpdateData({ families: [...data.families, ...newFamilies] });
       } else if (activeTab === 'CATEGORIES') {
           const newCategories: Category[] = lines.map(line => {
-              const [name, icon, familyName] = line.split(',').map(s => s.trim());
+              const [name, icon, familyName] = line.split(';').map(s => s.trim());
               const family = data.families.find(f => f.name.toLowerCase() === familyName?.toLowerCase()) || data.families[0];
               return { id: generateId(), name: name || 'Nueva Categoría', icon: icon || '🏷️', familyId: family?.id || '' };
           });
           onUpdateData({ categories: [...data.categories, ...newCategories] });
       } else if (activeTab === 'ACC_GROUPS') {
           const newGroups: AccountGroup[] = lines.map(line => {
-              const [name, icon] = line.split(',').map(s => s.trim());
+              const [name, icon] = line.split(';').map(s => s.trim());
               return { id: generateId(), name: name || 'Nuevo Grupo', icon: icon || '🗂️' };
           });
           onUpdateData({ accountGroups: [...(data.accountGroups || []), ...newGroups] });
@@ -365,7 +367,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           const newGroupsToAdd: AccountGroup[] = [];
           const currentGroups = [...(data.accountGroups || [])];
           lines.forEach(line => {
-              const parts = line.split(',').map(s => s.trim());
+              const parts = line.split(';').map(s => s.trim());
               if (parts.length < 2) return;
               const groupName = parts[0];
               const name = parts[1];
@@ -470,11 +472,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     let importHint = "";
     let placeholderExample = "";
     switch(activeTab) {
-        case 'ACCOUNTS': importHint = "Agrupación, Cuenta, Icono/URL, (Saldo - Opcional)"; placeholderExample = "Bancos, BBVA, 🏦, 1500.00\nEfectivo, Cartera, 💶, 50.00"; break;
-        case 'ACC_GROUPS': importHint = "Nombre Agrupación, Icono"; placeholderExample = "Bancos, 🏦\nCrypto, 🪙"; break;
-        case 'FAMILIES': importHint = "Nombre, Icono/Emoji, Tipo (INCOME/EXPENSE)"; placeholderExample = "Vivienda, 🏠, EXPENSE\nNómina, 💼, INCOME"; break;
-        case 'CATEGORIES': importHint = "Nombre, Icono/Emoji, Nombre de Familia"; placeholderExample = "Alquiler, 🔑, Vivienda\nSupermercado, 🛒, Alimentación"; break;
-        default: importHint = "Formato genérico"; placeholderExample = "Dato1, Dato2, Dato3";
+        case 'ACCOUNTS': importHint = "Agrupación; Cuenta; Icono/URL; (Saldo - Opcional)"; placeholderExample = "Bancos; BBVA; 🏦; 1500.00\nEfectivo; Cartera; 💶; 50.00"; break;
+        case 'ACC_GROUPS': importHint = "Nombre Agrupación; Icono"; placeholderExample = "Bancos; 🏦\nCrypto; 🪙"; break;
+        case 'FAMILIES': importHint = "Nombre; Icono/Emoji; Tipo (INCOME/EXPENSE)"; placeholderExample = "Vivienda; 🏠; EXPENSE\nNómina; 💼; INCOME"; break;
+        case 'CATEGORIES': importHint = "Nombre; Icono/Emoji; Nombre de Familia"; placeholderExample = "Alquiler; 🔑; Vivienda\nSupermercado; 🛒; Alimentación"; break;
+        default: importHint = "Formato genérico"; placeholderExample = "Dato1; Dato2; Dato3";
     }
     return (
         <div className="bg-white p-8 rounded-[2.5rem] border-2 border-dashed border-indigo-100 shadow-sm space-y-6">
@@ -908,30 +910,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
         {activeTab === 'TOOLS' && (
             <div className="space-y-8 pb-10">
-                
-                {/* BORRADO MASIVO POR AÑO */}
                 <div className="bg-rose-50 p-10 rounded-[3rem] shadow-sm border border-rose-100 space-y-8">
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
                         <div className="space-y-2">
                             <h3 className="text-2xl font-black text-rose-900 uppercase tracking-tighter flex items-center gap-3">
-                                <Eraser className="text-rose-600" size={28}/> Borrado Masivo por Año
+                                <Eraser className="text-rose-600" size={28}/> Limpieza de Movimientos
                             </h3>
                             <p className="text-rose-700/60 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                                Elimina permanentemente todos los movimientos de un año específico. <br/>
-                                <span className="text-rose-600">Punto de partida configurado para historiales desde 2015.</span>
+                                Elimina movimientos de forma selectiva por año o realiza un vaciado completo de la tabla. <br/>
+                                <span className="text-rose-600 font-black">Historial habilitado desde 2015.</span>
                             </p>
                         </div>
+                        <button onClick={() => setShowFullResetConfirm(true)} className="flex items-center gap-2 px-6 py-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 shadow-xl shadow-rose-200 active:scale-95 transition-all">
+                            <RefreshCcw size={16} /> Reset Completo
+                        </button>
                     </div>
+
+                    {showFullResetConfirm && (
+                        <div className="bg-rose-600 p-8 rounded-3xl text-white space-y-6 animate-in zoom-in-95 shadow-2xl">
+                            <div className="flex items-center gap-4">
+                                <AlertTriangle size={32} className="animate-bounce" />
+                                <h4 className="text-lg font-black uppercase">¡OPERACIÓN CRÍTICA!</h4>
+                            </div>
+                            <p className="text-sm font-bold leading-relaxed uppercase opacity-90">
+                                Estás a punto de eliminar **TODOS** los movimientos registrados en la aplicación. Esta acción es irreversible y borrará el historial completo de todas tus cuentas.
+                            </p>
+                            <div className="flex gap-3">
+                                <button onClick={handleFullReset} className="flex-1 py-4 bg-white text-rose-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-slate-50 transition-all">BORRAR TODO EL HISTORIAL</button>
+                                <button onClick={() => setShowFullResetConfirm(false)} className="flex-1 py-4 bg-rose-800 text-white rounded-xl border border-rose-400 font-black text-[10px] uppercase hover:bg-rose-900 transition-all">CANCELAR</button>
+                            </div>
+                        </div>
+                    )}
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-rose-100">
                         {transactionsPerYear.length > 0 ? transactionsPerYear.map(([year, count]) => (
                             <div key={year} className="bg-white p-6 rounded-3xl border border-rose-100 flex flex-col justify-between gap-4 group hover:shadow-lg transition-all relative overflow-hidden">
                                 {massDeleteYear === year ? (
                                     <div className="absolute inset-0 bg-rose-600 text-white p-6 flex flex-col justify-center items-center text-center animate-in fade-in zoom-in-95">
                                         <AlertTriangle size={32} className="mb-2" />
-                                        <p className="text-[11px] font-black uppercase mb-4">¿Borrar {year} permanentemente?</p>
+                                        <p className="text-[11px] font-black uppercase mb-4">¿Borrar {year}?</p>
                                         <div className="flex gap-2 w-full">
-                                            <button onClick={() => handleMassDelete(year)} className="flex-1 py-3 bg-white text-rose-600 rounded-xl text-[10px] font-black uppercase shadow-lg">Confirmar</button>
+                                            <button onClick={() => handleMassDelete(year)} className="flex-1 py-3 bg-white text-rose-600 rounded-xl text-[10px] font-black uppercase shadow-lg">Sí</button>
                                             <button onClick={() => setMassDeleteYear(null)} className="flex-1 py-3 bg-rose-800 text-white rounded-xl text-[10px] font-black uppercase">No</button>
                                         </div>
                                     </div>
@@ -947,8 +966,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                     </>
                                 )}
                             </div>
-                        )) : (
-                            <div className="col-span-full py-20 text-center space-y-4 border-2 border-dashed border-rose-200 rounded-[2.5rem] bg-white">
+                        )) : !showFullResetConfirm && (
+                            <div className="col-span-full py-10 text-center space-y-4">
                                 <Info size={40} className="mx-auto text-rose-200" />
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">No hay movimientos registrados para purgar.</p>
                             </div>
@@ -956,7 +975,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     </div>
                 </div>
 
-                {/* IMPORTADOR DE MOVIMIENTOS POR TEXTO */}
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
                         <div className="space-y-2">
@@ -965,10 +983,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             </h3>
                             <div className="space-y-1">
                                 <p className="text-slate-400 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                                    Formato: <strong>fecha, categoria, cuenta, concepto, importe</strong>
+                                    Formato: <strong>fecha; categoria; cuenta; concepto; importe</strong>
                                 </p>
                                 <p className="text-indigo-500 text-[10px] font-black uppercase tracking-widest">
-                                    Si es Traspaso: <strong>fecha, Traspaso entre cuentas, cuenta_origen, cuenta_destino, concepto, importe</strong>
+                                    Si es Traspaso: <strong>fecha; Traspaso entre cuentas; cuenta_origen; cuenta_destino; concepto; importe</strong>
                                 </p>
                             </div>
                         </div>
@@ -976,17 +994,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     <div className="space-y-4">
                         <textarea 
                             className="w-full h-48 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-[11px] text-slate-600 outline-none focus:border-indigo-500 transition-all custom-scrollbar placeholder:text-slate-200 shadow-inner"
-                            placeholder="2023-10-27, Alimentación, Mi Banco, Compra cena, -25.50&#10;2023-10-28, Traspaso entre cuentas, Mi Banco, Efectivo, Retirada de cajero, 50.00"
+                            placeholder="2023-10-27; Alimentación; Mi Banco; Compra cena; -25.50&#10;2023-10-28; Traspaso entre cuentas; Mi Banco; Efectivo; Retirada de cajero; 50.00"
                             value={pasteMovements}
                             onChange={e => setPasteMovements(e.target.value)}
                         />
-                        <div className="flex justify-between items-center bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100">
+                        <div className="flex flex-col sm:flex-row justify-between items-center bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 gap-4">
                              <div className="flex items-center gap-3 text-indigo-600">
                                 <Sparkles size={20} />
-                                <p className="text-[10px] font-black uppercase tracking-widest leading-none">El sistema detectará el signo: Negativos son Gastos, Positivos son Ingresos.</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest leading-tight">Separador: <strong>Punto y coma (;)</strong>. Detectamos signo automáticamente.</p>
                              </div>
-                             <div className="flex gap-3">
-                                <button onClick={handleManualMovementImport} className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-indigo-200">
+                             <div className="flex gap-3 w-full sm:w-auto">
+                                <button onClick={handleManualMovementImport} className="flex-1 sm:flex-none px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-indigo-200">
                                     Importar Datos
                                 </button>
                                 <button onClick={() => { setPasteMovements(''); setImportErrors([]); }} className="px-6 py-4 bg-white text-slate-500 border border-slate-200 rounded-xl font-black text-[10px] uppercase">Limpiar</button>
@@ -1023,7 +1041,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     )}
                 </div>
 
-                {/* MIGRACIÓN INTELIGENTE */}
                 <div className="bg-amber-50 p-10 rounded-[3rem] shadow-sm border border-amber-100 space-y-8 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/10 blur-[80px] -mr-16 -mt-16 pointer-events-none"></div>
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 relative z-10">
@@ -1055,7 +1072,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     )}
                 </div>
 
-                {/* COPIAS DE SEGURIDAD */}
                 <div className="bg-slate-900 p-10 rounded-[3rem] shadow-2xl border border-white/5 space-y-10 text-center relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-full bg-indigo-600/5 mix-blend-overlay"></div>
                     <div className="relative z-10 space-y-8">

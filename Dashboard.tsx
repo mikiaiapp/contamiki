@@ -77,7 +77,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     let periodIncome = 0;
     let periodExpense = 0;
     transactions.forEach(t => {
-      // Comparación estricta de strings YYYY-MM-DD
       if (t.date >= dateBounds.startStr && t.date <= dateBounds.endStr) {
         if (t.type === 'INCOME') periodIncome += t.amount;
         if (t.type === 'EXPENSE') periodExpense += t.amount;
@@ -112,7 +111,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       return { incomes: buildHierarchy('INCOME'), expenses: buildHierarchy('EXPENSE') };
   }, [families, categories, transactions, dateBounds]);
 
-  // Fix: Defined dueRecurrents to filter active recurrent movements that are due today or in the past.
   const dueRecurrents = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return (recurrents || []).filter(r => r.active && r.nextDueDate <= today);
@@ -128,7 +126,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       if (clickTimerRef.current) {
           window.clearTimeout(clickTimerRef.current);
           clickTimerRef.current = null;
-          // Doble clic: Navegar a Movimientos con los filtros del resumen
           onNavigateToTransactions({
               filterTime: timeRange === 'MONTH' ? 'MONTH' : timeRange === 'QUARTER' ? 'QUARTER' : timeRange === 'YEAR' ? 'YEAR' : 'CUSTOM',
               referenceDate: new Date(referenceDate),
@@ -202,7 +199,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     setReferenceDate(newDate);
   };
 
-  // Fix: Added handleFileChange to handle file selection for transaction attachments.
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -233,12 +229,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       setQuickAddCat(null);
   };
 
-  const years = Array.from({length: 10}, (_, i) => new Date().getFullYear() - 5 + i);
+  // PUNTO DE PARTIDA 2015
+  const startYear = 2015;
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({length: currentYear - startYear + 3}, (_, i) => startYear + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
   return (
     <div className="space-y-8 md:space-y-12 max-w-full pb-10">
-      {/* SECCIÓN AVISOS RECURRENTES */}
       {dueRecurrents.length > 0 && (
           <div className="bg-slate-900 rounded-[2.5rem] p-6 sm:p-10 shadow-2xl border border-white/10 relative overflow-hidden animate-in slide-in-from-top-4 duration-500">
               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[100px] -mr-32 -mt-32"></div>
@@ -335,7 +333,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
-          {/* INGRESOS */}
           <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-4">
                   <div className="flex items-center gap-3"><ArrowUpCircle className="text-emerald-500" size={24} /><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Ingresos</h3></div>
@@ -364,7 +361,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
               </div>
           </div>
 
-          {/* GASTOS */}
           <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-4">
                   <div className="flex items-center gap-3"><ArrowDownCircle className="text-rose-500" size={24} /><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Gastos</h3></div>

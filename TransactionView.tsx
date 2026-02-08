@@ -301,7 +301,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       else { setFilterCategory(entity.id); setFilterAccount('ALL'); const cat = data.categories.find(c => c.id === entity.id); if (cat) setFilterFamily(cat.familyId); }
   };
 
-  const years = Array.from({length: 10}, (_, i) => new Date().getFullYear() - 5 + i);
+  // RANGO 2015
+  const startYear = 2015;
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({length: currentYear - startYear + 3}, (_, i) => startYear + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
   const clearAllFilters = () => {
