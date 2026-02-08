@@ -1,7 +1,7 @@
 
-import React, { useMemo, useState } from 'react';
-import { AppState, Category, Transaction, GlobalFilter } from './types';
-import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Paperclip, Bell, CheckCircle2, Edit2, Repeat } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { AppState, Transaction, GlobalFilter } from './types';
+import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, Paperclip } from 'lucide-react';
 
 interface DashboardProps {
   data: AppState;
@@ -13,7 +13,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilter, onNavigateToTransactions }) => {
-  const { transactions, accounts, families, categories, recurrents = [] } = data;
+  const { transactions, accounts, families, categories } = data;
 
   const dateBounds = useMemo(() => {
     const y = filter.referenceDate.getFullYear();
@@ -22,15 +22,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
 
     if (filter.timeRange === 'MONTH') {
       startStr = `${y}-${String(m + 1).padStart(2, '0')}-01`;
-      endStr = `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`;
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      endStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
     } else if (filter.timeRange === 'QUARTER') {
-      const q = Math.floor(m / 3);
-      startStr = `${y}-${String(q * 3 + 1).padStart(2, '0')}-01`;
-      endStr = `${y}-${String(q * 3 + 3).padStart(2, '0')}-${new Date(y, q * 3 + 3, 0).getDate()}`;
+      const quarter = Math.floor(m / 3); // 0, 1, 2, 3
+      const startMonth = quarter * 3 + 1;
+      const endMonth = quarter * 3 + 3;
+      startStr = `${y}-${String(startMonth).padStart(2, '0')}-01`;
+      const lastDay = new Date(y, endMonth, 0).getDate();
+      endStr = `${y}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
     } else if (filter.timeRange === 'YEAR') {
-      startStr = `${y}-01-01`; endStr = `${y}-12-31`;
+      startStr = `${y}-01-01`; 
+      endStr = `${y}-12-31`;
     } else if (filter.timeRange === 'CUSTOM') {
-      startStr = filter.customStart; endStr = filter.customEnd;
+      startStr = filter.customStart || '1900-01-01';
+      endStr = filter.customEnd || '2100-12-31';
     }
     return { startStr, endStr };
   }, [filter]);
@@ -43,6 +49,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
     let periodExpense = 0;
 
     transactions.forEach(t => {
+      // Balance Global (siempre se calcula sobre todas las transacciones)
       if (t.type === 'INCOME') accTotals[t.accountId] = (accTotals[t.accountId] || 0) + t.amount;
       else if (t.type === 'EXPENSE') accTotals[t.accountId] = (accTotals[t.accountId] || 0) - t.amount;
       else if (t.type === 'TRANSFER' && t.transferAccountId) {
@@ -50,6 +57,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
         accTotals[t.transferAccountId] = (accTotals[t.transferAccountId] || 0) + t.amount;
       }
 
+      // Totales del Periodo (filtrados por fecha)
       const inPeriod = filter.timeRange === 'ALL' || (t.date >= dateBounds.startStr && t.date <= dateBounds.endStr);
       if (inPeriod) {
         if (t.type === 'INCOME') periodIncome += t.amount;
@@ -95,8 +103,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
     onUpdateFilter({ ...filter, referenceDate: newDate });
   };
 
-  const years = Array.from({length: new Date().getFullYear() - 2015 + 3}, (_, i) => 2015 + i);
+  const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+  const renderIcon = (iconStr: string, className = "w-10 h-10") => {
+    if (iconStr?.startsWith('http')) return <img src={iconStr} className={`${className} object-contain`} referrerPolicy="no-referrer" />;
+    return <span className="text-xl">{iconStr || '📂'}</span>;
+  };
 
   return (
     <div className="space-y-8 md:space-y-12 pb-10">
@@ -120,12 +133,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
                         </select>
                     )}
                 </div>
+                {filter.timeRange === 'CUSTOM' && (
+                    <div className="flex gap-2">
+                        <input type="date" className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-[10px]" value={filter.customStart} onChange={e => onUpdateFilter({...filter, customStart: e.target.value})} />
+                        <input type="date" className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-[10px]" value={filter.customEnd} onChange={e => onUpdateFilter({...filter, customEnd: e.target.value})} />
+                    </div>
+                )}
             </div>
         </div>
         <div className="bg-slate-100/80 p-1.5 rounded-2xl flex flex-wrap justify-center gap-1 shadow-inner border border-slate-200/50 w-full sm:w-fit mx-auto xl:mx-0">
-            {['ALL', 'MONTH', 'QUARTER', 'YEAR', 'CUSTOM'].map((range) => (
-                <button key={range} onClick={() => onUpdateFilter({...filter, timeRange: range as any})} className={`flex-1 sm:flex-none px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === range ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                    {range === 'ALL' ? 'Todo' : range === 'MONTH' ? 'Mes' : range === 'QUARTER' ? 'Trim' : range === 'YEAR' ? 'Año' : 'Pers'}
+            {[
+                { id: 'ALL', label: 'Todo' },
+                { id: 'MONTH', label: 'Mes' },
+                { id: 'QUARTER', label: 'Trim' },
+                { id: 'YEAR', label: 'Año' },
+                { id: 'CUSTOM', label: 'Pers' }
+            ].map((range) => (
+                <button key={range.id} onClick={() => onUpdateFilter({...filter, timeRange: range.id as any})} className={`flex-1 sm:flex-none px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === range.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                    {range.label}
                 </button>
             ))}
         </div>
@@ -163,8 +188,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
                           <div key={item.family.id} className={`bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm transition-all ${item.total === 0 ? 'opacity-40 grayscale' : ''}`}>
                               <div className="w-full flex items-center justify-between p-6 border-b border-slate-50">
                                   <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center border shrink-0 bg-slate-50 text-2xl">
-                                        {item.family.icon.startsWith('http') ? <img src={item.family.icon} className="w-8 h-8 object-contain" /> : item.family.icon}
+                                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center border shrink-0 bg-slate-50">
+                                        {renderIcon(item.family.icon, "w-8 h-8")}
                                     </div>
                                     <span className="font-black text-base uppercase tracking-tight text-slate-900">{item.family.name}</span>
                                   </div>
@@ -174,8 +199,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, filter, onUpdateFilt
                                   {item.categories.map(cat => (
                                       <div key={cat.category.id} onClick={() => onNavigateToTransactions({ filterCategory: cat.category.id })} className="flex items-center justify-between px-5 py-3 rounded-2xl bg-white border border-slate-100 shadow-sm hover:border-indigo-300 cursor-pointer transition-all active:scale-95 group">
                                           <div className="flex items-center gap-3">
-                                            <span className="text-xl group-hover:scale-125 transition-transform">
-                                                {cat.category.icon.startsWith('http') ? <img src={cat.category.icon} className="w-6 h-6 object-contain" /> : cat.category.icon}
+                                            <span className="group-hover:scale-125 transition-transform flex items-center justify-center">
+                                                {renderIcon(cat.category.icon, "w-6 h-6")}
                                             </span>
                                             <span className="text-[10px] font-bold text-slate-600 uppercase">{cat.category.name}</span>
                                           </div>

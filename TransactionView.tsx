@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Filter } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Filter, Link2, Link2Off } from 'lucide-react';
 
 interface TransactionViewProps {
   data: AppState;
@@ -69,7 +69,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       setFType(t.type);
       setFAmount(t.amount.toString());
       setFDesc(t.description);
-      setFDate(t.date); // ISO string YYYY-MM-DD
+      setFDate(t.date); 
       setFAcc(t.accountId);
       setFCat(t.categoryId);
       setFTransferDest(t.transferAccountId || '');
@@ -104,7 +104,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
   const filteredTransactions = useMemo(() => {
     let res = data.transactions.filter(t => {
-      // Time sync
+      // Sincronización Temporal Global
       const y = filter.referenceDate.getFullYear();
       const m = filter.referenceDate.getMonth();
       let start = ''; let end = '';
@@ -113,13 +113,17 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         end = `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`;
       } else if (filter.timeRange === 'QUARTER') {
         const q = Math.floor(m / 3);
-        start = `${y}-${String(q * 3 + 1).padStart(2, '0')}-01`;
-        end = `${y}-${String(q * 3 + 3).padStart(2, '0')}-${new Date(y, q * 3 + 3, 0).getDate()}`;
+        const startMonth = q * 3 + 1;
+        const endMonth = q * 3 + 3;
+        start = `${y}-${String(startMonth).padStart(2, '0')}-01`;
+        end = `${y}-${String(endMonth).padStart(2, '0')}-${new Date(y, endMonth, 0).getDate()}`;
       } else if (filter.timeRange === 'YEAR') {
         start = `${y}-01-01`; end = `${y}-12-31`;
       } else if (filter.timeRange === 'CUSTOM') {
-        start = filter.customStart; end = filter.customEnd;
+        start = filter.customStart || '1900-01-01';
+        end = filter.customEnd || '2100-12-31';
       }
+      
       if (filter.timeRange !== 'ALL' && (t.date < start || t.date > end)) return false;
       
       if (filterAccount !== 'ALL' && t.accountId !== filterAccount && t.transferAccountId !== filterAccount) return false;
@@ -145,8 +149,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   }, [data.transactions, filter, filterAccount, filterCategory, searchTerm, minAmount, maxAmount, sortField, sortDirection, data.accounts, data.categories]);
 
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
-    if (iconStr.startsWith('http')) return <img src={iconStr} className={`${className} object-contain`} />;
-    return <span className="text-xl">{iconStr}</span>;
+    if (iconStr?.startsWith('http')) return <img src={iconStr} className={`${className} object-contain`} referrerPolicy="no-referrer" />;
+    return <span className="text-xl">{iconStr || '📂'}</span>;
   }
 
   return (
@@ -200,39 +204,82 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       </div>
 
       <div className="space-y-4">
+          {/* Cabecera de tabla solo para escritorio */}
+          <div className="hidden lg:grid grid-cols-[100px_160px_1fr_60px_160px_120px_100px] gap-4 px-10 py-4 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
+            <div>Fecha</div>
+            <div>Entrada / Categoría</div>
+            <div>Descripción</div>
+            <div className="text-center">Adjunto</div>
+            <div>Salida</div>
+            <div className="text-right">Importe</div>
+            <div className="text-center">Acciones</div>
+          </div>
+
           {filteredTransactions.map(t => {
-              const acc = data.accounts.find(x=>x.id===t.accountId);
+              const srcAcc = data.accounts.find(x=>x.id===t.accountId);
+              const dstAcc = t.transferAccountId ? data.accounts.find(x=>x.id===t.transferAccountId) : null;
               const cat = data.categories.find(x=>x.id===t.categoryId);
-              const isEx = t.type === 'EXPENSE';
-              const isTr = t.type === 'TRANSFER';
+              
+              // Lógica de visualización:
+              // GASTO: Entrada=Categoría, Salida=Cuenta
+              // INGRESO: Entrada=Cuenta, Salida=Categoría (o vacío)
+              // TRASPASO: Entrada=Cuenta Destino, Salida=Cuenta Origen
+              
+              let entryNode: React.ReactNode;
+              let exitNode: React.ReactNode;
+
+              if (t.type === 'TRANSFER') {
+                entryNode = <div className="flex items-center gap-2 text-indigo-600 font-bold truncate">{renderIcon(dstAcc?.icon || '🏦', "w-6 h-6")} {dstAcc?.name}</div>;
+                exitNode = <div className="flex items-center gap-2 text-slate-500 font-bold truncate">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
+              } else if (t.type === 'INCOME') {
+                entryNode = <div className="flex items-center gap-2 text-emerald-600 font-bold truncate">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
+                exitNode = <div className="flex items-center gap-2 text-slate-400 italic truncate">{renderIcon(cat?.icon || '🏷️', "w-6 h-6")} {cat?.name}</div>;
+              } else {
+                entryNode = <div className="flex items-center gap-2 text-rose-600 font-bold truncate">{renderIcon(cat?.icon || '🏷️', "w-6 h-6")} {cat?.name}</div>;
+                exitNode = <div className="flex items-center gap-2 text-slate-500 font-bold truncate">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
+              }
+
               return (
-                  <div key={t.id} className="group bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-100 transition-all flex flex-col md:flex-row md:items-center justify-between gap-5 relative">
-                      <div className="flex items-center gap-5">
-                        <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100 shadow-sm shrink-0">
-                          {renderIcon(isEx ? (cat?.icon || '🏷️') : (acc?.icon || '🏦'), "w-9 h-9")}
+                  <div key={t.id} className="group bg-white p-5 lg:px-10 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-100 transition-all relative overflow-hidden">
+                      <div className="grid grid-cols-1 lg:grid-cols-[100px_160px_1fr_60px_160px_120px_100px] items-center gap-4 md:gap-6">
+                        {/* Fecha */}
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{t.date}</div>
+                        
+                        {/* Entrada / Categoría */}
+                        <div className="text-xs uppercase">{entryNode}</div>
+                        
+                        {/* Descripción */}
+                        <div className="text-sm font-black text-slate-800 truncate uppercase">{t.description}</div>
+                        
+                        {/* Clip Adjunto */}
+                        <div className="flex justify-center">
+                            {t.attachment ? (
+                                <div className="bg-indigo-600 text-white p-2 rounded-xl shadow-lg shadow-indigo-200">
+                                    <Link2 size={16} />
+                                </div>
+                            ) : (
+                                <div className="text-slate-200 p-2">
+                                    <Link2Off size={16} />
+                                </div>
+                            )}
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{t.date}</p>
-                          <h4 className="text-sm font-black text-slate-900 truncate uppercase leading-tight">{t.description}</h4>
-                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                            <span className="text-[9px] font-black px-2 py-1 bg-slate-100 text-slate-500 rounded-lg uppercase tracking-tight">{acc?.name}</span>
-                            {isTr && <><ArrowRightLeft size={10} className="text-slate-300"/><span className="text-[9px] font-black px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg uppercase tracking-tight">{data.accounts.find(x=>x.id===t.transferAccountId)?.name}</span></>}
-                            {cat && <span className="text-[9px] font-black px-2 py-1 bg-slate-100 text-indigo-400 rounded-lg uppercase tracking-tight">#{cat.name}</span>}
-                          </div>
+
+                        {/* Salida */}
+                        <div className="text-xs uppercase">{exitNode}</div>
+
+                        {/* Importe */}
+                        <div className={`text-right text-lg font-black tracking-tighter ${t.type === 'EXPENSE' ? 'text-rose-600' : t.type === 'INCOME' ? 'text-emerald-600' : 'text-indigo-400'}`}>
+                            {t.type === 'EXPENSE' ? '-' : t.type === 'INCOME' ? '+' : ''}
+                            {t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                        </div>
+
+                        {/* Acciones */}
+                        <div className="flex justify-center gap-1">
+                            <button onClick={() => openEditor(t)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"><Edit3 size={16}/></button>
+                            <button onClick={() => setDeleteConfirmId(t.id)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all"><Trash2 size={16}/></button>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-none pt-4 md:pt-0">
-                          <div className="text-right">
-                            <p className={`text-2xl font-black tracking-tighter ${isEx ? 'text-rose-600' : t.type === 'INCOME' ? 'text-emerald-600' : 'text-slate-400'}`}>
-                              {isEx ? '-' : t.type === 'INCOME' ? '+' : ''}{t.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                            </p>
-                            {t.attachment && <span className="text-[9px] font-black text-indigo-500 uppercase flex items-center justify-end gap-1 mt-1"><Paperclip size={12}/> Adjunto</span>}
-                          </div>
-                          <div className="flex gap-1.5">
-                            <button onClick={() => openEditor(t)} className="p-3.5 bg-slate-50 text-slate-400 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"><Edit3 size={20}/></button>
-                            <button onClick={() => setDeleteConfirmId(t.id)} className="p-3.5 bg-slate-50 text-slate-400 rounded-2xl hover:bg-rose-50 hover:text-rose-600 transition-all"><Trash2 size={20}/></button>
-                          </div>
-                      </div>
+
                       {deleteConfirmId === t.id && (
                         <div className="absolute inset-0 bg-white/95 rounded-[2rem] z-10 flex items-center justify-center gap-4 animate-in fade-in">
                           <p className="text-xs font-black text-slate-900 uppercase">¿Borrar movimiento?</p>
