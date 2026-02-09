@@ -72,15 +72,30 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
   useEffect(() => {
     if (initialSpecificFilters) {
-      if (initialSpecificFilters.filterCategory) {
-          setColFilterEntry(initialSpecificFilters.filterCategory);
+      // Caso 1: Acción de NUEVO movimiento (Clic simple en Dashboard)
+      if (initialSpecificFilters.action === 'NEW' && initialSpecificFilters.categoryId) {
+         resetForm();
+         const cat = data.categories.find(c => c.id === initialSpecificFilters.categoryId);
+         const fam = data.families.find(f => f.id === cat?.familyId);
+         
+         setFCat(initialSpecificFilters.categoryId);
+         if (fam) setFType(fam.type === 'INCOME' ? 'INCOME' : 'EXPENSE');
+         
+         setIsModalOpen(true);
+      } 
+      // Caso 2: Filtrado estándar (Doble clic en Dashboard)
+      else {
+          if (initialSpecificFilters.filterCategory) {
+              setColFilterEntry(initialSpecificFilters.filterCategory);
+          }
+          if (initialSpecificFilters.filterAccount) {
+              setColFilterExit(initialSpecificFilters.filterAccount);
+          }
       }
-      if (initialSpecificFilters.filterAccount) {
-          setColFilterExit(initialSpecificFilters.filterAccount);
-      }
+
       if (clearSpecificFilters) clearSpecificFilters();
     }
-  }, [initialSpecificFilters]);
+  }, [initialSpecificFilters, data.categories, data.families]);
 
   const resetForm = () => {
     setEditingTx(null);

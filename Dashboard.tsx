@@ -23,6 +23,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const { transactions, accounts, families, categories, accountGroups, recurrents = [] } = data;
   const [showBalanceDetail, setShowBalanceDetail] = useState(false);
   const [showRecurrentsModal, setShowRecurrentsModal] = useState(false);
+  const [clickTimer, setClickTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   // Helper para formatear fecha dd/mm/aa
   const formatDateDisplay = (dateStr: string) => {
@@ -197,6 +198,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return <span className="text-xl flex items-center justify-center">{iconStr || '📂'}</span>;
   };
 
+  // Manejo de clicks (Simple vs Doble)
+  const handleCategoryClick = (categoryId: string) => {
+    if (clickTimer) {
+        clearTimeout(clickTimer);
+        setClickTimer(null);
+        // Doble Click -> Filtrar listado
+        onNavigateToTransactions({ filterCategory: categoryId });
+    } else {
+        const timer = setTimeout(() => {
+            // Click Simple -> Nuevo movimiento sugerido
+            onNavigateToTransactions({ action: 'NEW', categoryId: categoryId });
+            setClickTimer(null);
+        }, 250); // 250ms de espera para detectar doble clic
+        setClickTimer(timer);
+    }
+  };
+
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
@@ -273,38 +291,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {[
-              { label: 'Ingresos', data: flowData.incomes, total: stats.income, color: 'emerald', icon: <ArrowUpCircle size={24}/>, type: 'INCOME' as const },
-              { label: 'Gastos', data: flowData.expenses, total: stats.expense, color: 'rose', icon: <ArrowDownCircle size={24}/>, type: 'EXPENSE' as const }
+              { label: 'Ingresos', data: flowData.incomes, total: stats.income, color: 'emerald', icon: <ArrowUpCircle size={20}/>, type: 'INCOME' as const },
+              { label: 'Gastos', data: flowData.expenses, total: stats.expense, color: 'rose', icon: <ArrowDownCircle size={20}/>, type: 'EXPENSE' as const }
           ].map((sec, idx) => (
-              <div key={idx} className="space-y-6">
-                  <div className="flex items-center justify-between px-4">
-                      <div className="flex items-center gap-3"><div className={`text-${sec.color}-500`}>{sec.icon}</div><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">{sec.label}</h3></div>
-                      <div className={`bg-${sec.color}-50 px-4 py-2 rounded-xl border border-${sec.color}-100 flex flex-col items-end shadow-sm`}><span className={`text-[9px] font-black text-${sec.color}-600 uppercase mb-1`}>Total</span><span className={`text-sm font-black ${getAmountColor(sec.total, sec.type)}`}>{formatCurrency(sec.total, sec.type)}</span></div>
+              <div key={idx} className="bg-white rounded-[2.5rem] border border-slate-100 p-6 sm:p-8 shadow-sm h-full">
+                  <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-xl bg-${sec.color}-50 text-${sec.color}-500`}>{sec.icon}</div>
+                        <h3 className="text-lg font-black text-slate-800 tracking-tight uppercase">{sec.label}</h3>
+                      </div>
+                      <span className={`text-lg font-black ${getAmountColor(sec.total, sec.type)}`}>{formatCurrency(sec.total, sec.type)}</span>
                   </div>
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                       {sec.data.map(item => (
-                          <div key={item.family.id} className={`bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm transition-all ${item.total === 0 ? 'opacity-40 grayscale' : ''}`}>
-                              <div className="w-full flex items-center justify-between p-6 border-b border-slate-50">
-                                  <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center border shrink-0 bg-slate-50">
-                                        {renderIcon(item.family.icon, "w-8 h-8")}
-                                    </div>
-                                    <span className="font-black text-base uppercase tracking-tight text-slate-900">{item.family.name}</span>
+                          <div key={item.family.id} className={`${item.total === 0 ? 'opacity-40 grayscale' : ''}`}>
+                              <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                      {renderIcon(item.family.icon, "w-4 h-4")}
+                                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.family.name}</span>
                                   </div>
-                                  <span className={`font-black text-sm ${getAmountColor(item.total, sec.type)}`}>{formatCurrency(item.total, sec.type)}</span>
+                                  <span className={`text-[10px] font-black ${getAmountColor(item.total, sec.type)}`}>{formatCurrency(item.total, sec.type)}</span>
                               </div>
-                              <div className="p-4 bg-slate-50/20 space-y-2">
+                              <div className="grid grid-cols-1 gap-1 pl-2 border-l-2 border-slate-50">
                                   {item.categories.map(cat => (
-                                      <div key={cat.category.id} onClick={() => onNavigateToTransactions({ filterCategory: cat.category.id })} className="flex items-center justify-between px-5 py-3 rounded-2xl bg-white border border-slate-100 shadow-sm hover:border-indigo-300 cursor-pointer transition-all active:scale-95 group">
-                                          <div className="flex items-center gap-3">
-                                            <span className="group-hover:scale-125 transition-transform flex items-center justify-center">
-                                                {renderIcon(cat.category.icon, "w-6 h-6")}
-                                            </span>
-                                            <span className="text-[10px] font-bold text-slate-600 uppercase">{cat.category.name}</span>
+                                      <div 
+                                        key={cat.category.id} 
+                                        onClick={() => handleCategoryClick(cat.category.id)}
+                                        className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-slate-50 cursor-pointer group active:scale-[0.98] transition-all"
+                                      >
+                                          <div className="flex items-center gap-2 truncate">
+                                            <span className="text-[8px] group-hover:scale-110 transition-transform text-slate-300">{renderIcon(cat.category.icon, "w-3 h-3")}</span>
+                                            <span className="text-[10px] font-medium text-slate-600 truncate">{cat.category.name}</span>
                                           </div>
-                                          <span className={`text-xs font-black ${getAmountColor(cat.total, sec.type)}`}>
+                                          <span className={`text-[10px] font-bold ${getAmountColor(cat.total, sec.type)} opacity-60 group-hover:opacity-100`}>
                                               {formatCurrency(cat.total, sec.type)}
                                           </span>
                                       </div>
