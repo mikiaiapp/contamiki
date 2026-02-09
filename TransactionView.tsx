@@ -132,15 +132,15 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
   const handleTypeChange = (newType: TransactionType) => {
       setFType(newType);
-      // Invertir el signo del importe automáticamente para ayudar al usuario
       if (fAmount) {
-          const current = parseFloat(fAmount);
-          if (!isNaN(current)) {
-              if (newType === 'EXPENSE' && current > 0) {
-                  setFAmount((-current).toString());
-              } else if (newType === 'INCOME' && current < 0) {
-                  setFAmount((-current).toString());
-              }
+          const val = parseFloat(fAmount);
+          if (!isNaN(val)) {
+              // Si cambia a Gasto y es positivo, lo hacemos negativo (Gasto estándar)
+              if (newType === 'EXPENSE' && val > 0) setFAmount((-val).toString());
+              // Si cambia a Ingreso y es negativo, lo hacemos positivo (Ingreso estándar)
+              else if (newType === 'INCOME' && val < 0) setFAmount((-val).toString());
+              // Si cambia a Traspaso y es positivo, lo hacemos negativo (Salida estándar)
+              else if (newType === 'TRANSFER' && val > 0) setFAmount((-val).toString());
           }
       }
   };

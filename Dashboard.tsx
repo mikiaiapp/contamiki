@@ -78,42 +78,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
     transactions.forEach(t => {
       // 1. Cálculo de Saldos de Cuentas (Acumulado histórico)
-      // Como ahora amount tiene signo (+ ingreso, - gasto), simplemente sumamos.
       if (t.date <= dateBounds.endStr) {
+        // Sumamos el importe tal cual (ej: -50 reduce saldo, +100 aumenta)
+        accTotals[t.accountId] = (accTotals[t.accountId] || 0) + t.amount;
+        
+        // Si es traspaso, invertimos el signo para la cuenta destino
+        // Ej: Sale -50 de A. Entra -(-50) = +50 en B.
         if (t.type === 'TRANSFER' && t.transferAccountId) {
-            // Traspaso: Sale de accountId (negativo), Entra en transferAccountId (positivo)
-            // Asumimos que t.amount está almacenado como negativo para la cuenta origen si se sigue la lógica de gasto
-            // Ojo: En traspasos, normalmente guardamos el valor absoluto y aplicamos lógica aquí.
-            // Para simplificar traspasos en este nuevo modelo: 
-            // Si el usuario guarda -50 en TRANSFER:
-            //   accountId se suma -50 (resta)
-            //   transferId se suma --50 (suma)
-            const amt = t.amount; 
-            // Normalizamos: Si es negativo, sale de origen.
-            const outflow = amt < 0 ? amt : -amt;
-            accTotals[t.accountId] = (accTotals[t.accountId] || 0) + outflow;
-            accTotals[t.transferAccountId] = (accTotals[t.transferAccountId] || 0) - outflow;
-        } else {
-            // Ingreso o Gasto Normal: Suma directa algebraica
-            accTotals[t.accountId] = (accTotals[t.accountId] || 0) + t.amount;
+            accTotals[t.transferAccountId] = (accTotals[t.transferAccountId] || 0) - t.amount;
         }
       }
 
       // 2. Cálculo del Periodo (Ingresos vs Gastos)
       const inPeriod = filter.timeRange === 'ALL' || (t.date >= dateBounds.startStr && t.date <= dateBounds.endStr);
-      if (inPeriod && t.type !== 'TRANSFER') {
-        // Agrupamos por la naturaleza de la familia para totalizar correctamente
-        // Si la familia es de tipo 'EXPENSE', sumamos a gastos (será negativo).
-        // Si la familia es de tipo 'INCOME', sumamos a ingresos.
-        const fam = families.find(f => f.id === t.familyId);
-        if (fam) {
-            if (fam.type === 'INCOME') periodIncome += t.amount;
-            else periodExpense += t.amount;
-        } else {
-            // Fallback si no hay familia: usamos el signo
-            if (t.amount >= 0) periodIncome += t.amount;
-            else periodExpense += t.amount;
-        }
+      if (inPeriod) {
+        if (t.type === 'INCOME') periodIncome += t.amount;
+        // Sumamos algebraicamente. Si es gasto (-50), periodExpense disminuye (se hace más negativo).
+        else if (t.type === 'EXPENSE') periodExpense += t.amount;
       }
     });
 
@@ -121,10 +102,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         income: periodIncome, 
         expense: periodExpense, 
         balance: Object.values(accTotals).reduce((a, b) => a + b, 0), 
-        periodBalance: periodIncome + periodExpense, // Suma algebraica (Ingreso + (-Gasto))
+        // Ahorro del periodo: Suma de Ingresos + Gastos (siendo gastos negativos)
+        // Ej: 1000 + (-800) = 200 de ahorro.
+        periodBalance: periodIncome + periodExpense,
         accTotals
     };
-  }, [transactions, accounts, families, dateBounds, filter.timeRange]);
+  }, [transactions, accounts, dateBounds, filter.timeRange]);
 
   const groupedBalances = useMemo(() => {
     return accountGroups.map(group => {
@@ -143,12 +126,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
   const flowData = useMemo(() => {
       const periodTxs = transactions.filter(t => filter.timeRange === 'ALL' || (t.date >= dateBounds.startStr && t.date <= dateBounds.endStr));
+      
       const buildHierarchy = (type: 'INCOME' | 'EXPENSE') => {
           return families
             .filter(f => f.type === type)
             .map(fam => {
                 const famTxs = periodTxs.filter(t => t.familyId === fam.id);
-                // Suma directa algebraica de los importes
+                // Suma directa algebraica
                 const totalFam = famTxs.reduce((sum, t) => sum + t.amount, 0);
                 
                 const cats = categories
@@ -157,12 +141,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                         category: cat,
                         total: famTxs.filter(t => t.categoryId === cat.id).reduce((sum, t) => sum + t.amount, 0)
                     }))
-                    // Ordenar por magnitud absoluta para que lo más relevante salga primero
+                    // Ordenamos por magnitud absoluta para ver los mayores movimientos primero
                     .sort((a,b) => Math.abs(b.total) - Math.abs(a.total));
                 
                 return { family: fam, total: totalFam, categories: cats };
             })
-            // Ordenar por magnitud absoluta
+            // Ordenamos por magnitud absoluta
             .sort((a,b) => Math.abs(b.total) - Math.abs(a.total));
       };
       return { incomes: buildHierarchy('INCOME'), expenses: buildHierarchy('EXPENSE') };
@@ -190,7 +174,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         id: Math.random().toString(36).substring(2, 15),
         date: r.nextDueDate,
         description: r.description,
-        amount: r.amount, // Ojo: Recurrentes deberían guardar el signo también
+        amount: r.amount, // Debería venir con signo correcto desde configuración
         accountId: r.accountId,
         transferAccountId: r.transferAccountId,
         familyId: r.familyId,
@@ -411,7 +395,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
       </div>
 
-      {/* Modales */}
+      {/* Modales (Sin cambios estructurales, solo visuales para usar getAmountColor) */}
       {showBalanceDetail && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-8 sm:p-12 relative max-h-[90vh] overflow-y-auto custom-scrollbar border border-white/20">
