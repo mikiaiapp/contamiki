@@ -13,7 +13,6 @@ interface DashboardProps {
 }
 
 // Se utiliza 'de-DE' para forzar estrictamente el formato 1.000,00 (Punto miles, Coma decimales)
-// ya que 'es-ES' moderno puede usar espacios en algunos navegadores.
 const numberFormatter = new Intl.NumberFormat('de-DE', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -220,6 +219,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
   return (
     <div className="space-y-8 md:space-y-12 pb-10">
+      {/* HEADER y NAVEGACIÓN TEMPORAL */}
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8">
         <div className="space-y-4 text-center md:text-left">
             <div className="flex items-center justify-center md:justify-start gap-4">
@@ -267,6 +267,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         </div>
       </div>
 
+      {/* TARJETAS KPI SUPERIORES */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-4xl">
         <button 
           onClick={() => setShowBalanceDetail(true)}
@@ -291,51 +292,100 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {[
-              { label: 'Ingresos', data: flowData.incomes, total: stats.income, color: 'emerald', icon: <ArrowUpCircle size={20}/>, type: 'INCOME' as const },
-              { label: 'Gastos', data: flowData.expenses, total: stats.expense, color: 'rose', icon: <ArrowDownCircle size={20}/>, type: 'EXPENSE' as const }
-          ].map((sec, idx) => (
-              <div key={idx} className="bg-white rounded-[2.5rem] border border-slate-100 p-6 sm:p-8 shadow-sm h-full">
-                  <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-xl bg-${sec.color}-50 text-${sec.color}-500`}>{sec.icon}</div>
-                        <h3 className="text-lg font-black text-slate-800 tracking-tight uppercase">{sec.label}</h3>
-                      </div>
-                      <span className={`text-lg font-black ${getAmountColor(sec.total, sec.type)}`}>{formatCurrency(sec.total, sec.type)}</span>
+      <div className="space-y-16">
+          
+          {/* BLOQUE HORIZONTAL: INGRESOS */}
+          <section className="space-y-6">
+              <div className="flex items-center justify-between border-b-2 border-emerald-100 pb-4">
+                  <div className="flex items-center gap-3">
+                      <div className="bg-emerald-100 text-emerald-600 p-2.5 rounded-2xl"><ArrowUpCircle size={28}/></div>
+                      <h3 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter">Ingresos</h3>
                   </div>
-                  <div className="space-y-6">
-                      {sec.data.map(item => (
-                          <div key={item.family.id} className={`${item.total === 0 ? 'opacity-40 grayscale' : ''}`}>
-                              <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-2">
-                                      {renderIcon(item.family.icon, "w-4 h-4")}
-                                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.family.name}</span>
-                                  </div>
-                                  <span className={`text-[10px] font-black ${getAmountColor(item.total, sec.type)}`}>{formatCurrency(item.total, sec.type)}</span>
-                              </div>
-                              <div className="grid grid-cols-1 gap-1 pl-2 border-l-2 border-slate-50">
-                                  {item.categories.map(cat => (
-                                      <div 
-                                        key={cat.category.id} 
-                                        onClick={() => handleCategoryClick(cat.category.id)}
-                                        className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-slate-50 cursor-pointer group active:scale-[0.98] transition-all"
-                                      >
-                                          <div className="flex items-center gap-2 truncate">
-                                            <span className="text-[8px] group-hover:scale-110 transition-transform text-slate-300">{renderIcon(cat.category.icon, "w-3 h-3")}</span>
-                                            <span className="text-[10px] font-medium text-slate-600 truncate">{cat.category.name}</span>
-                                          </div>
-                                          <span className={`text-[10px] font-bold ${getAmountColor(cat.total, sec.type)} opacity-60 group-hover:opacity-100`}>
-                                              {formatCurrency(cat.total, sec.type)}
-                                          </span>
-                                      </div>
-                                  ))}
-                              </div>
-                          </div>
-                      ))}
-                  </div>
+                  <span className="text-2xl md:text-3xl font-black text-emerald-600 tracking-tighter">{formatCurrency(stats.income, 'INCOME')}</span>
               </div>
-          ))}
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {flowData.incomes.map(item => (
+                      <div key={item.family.id} className={`bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all ${item.total === 0 ? 'opacity-60' : ''}`}>
+                          <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
+                              <div className="flex items-center gap-3">
+                                  <div className="bg-emerald-50 w-12 h-12 rounded-2xl flex items-center justify-center border border-emerald-100">
+                                      {renderIcon(item.family.icon, "w-7 h-7")}
+                                  </div>
+                                  <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.family.name}</span>
+                              </div>
+                              <span className="text-lg font-black text-emerald-600">{formatCurrency(item.total, 'INCOME')}</span>
+                          </div>
+                          <div className="space-y-2">
+                              {item.categories.map(cat => (
+                                  <div 
+                                    key={cat.category.id} 
+                                    onClick={() => handleCategoryClick(cat.category.id)}
+                                    className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-emerald-50 cursor-pointer group transition-colors"
+                                  >
+                                      <div className="flex items-center gap-3 overflow-hidden">
+                                          <span className="text-lg group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
+                                          <span className="text-sm font-bold text-slate-600 truncate">{cat.category.name}</span>
+                                      </div>
+                                      <span className="text-sm font-black text-emerald-600 opacity-80 group-hover:opacity-100">
+                                          {formatCurrency(cat.total, 'INCOME')}
+                                      </span>
+                                  </div>
+                              ))}
+                              {item.categories.length === 0 && <p className="text-xs text-slate-400 italic text-center py-2">Sin categorías</p>}
+                          </div>
+                      </div>
+                  ))}
+                  {flowData.incomes.length === 0 && <p className="col-span-full text-center text-slate-400 font-bold py-10 uppercase text-sm">No hay familias de ingresos configuradas</p>}
+              </div>
+          </section>
+
+          {/* BLOQUE HORIZONTAL: GASTOS */}
+          <section className="space-y-6">
+              <div className="flex items-center justify-between border-b-2 border-rose-100 pb-4">
+                  <div className="flex items-center gap-3">
+                      <div className="bg-rose-100 text-rose-600 p-2.5 rounded-2xl"><ArrowDownCircle size={28}/></div>
+                      <h3 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter">Gastos</h3>
+                  </div>
+                  <span className="text-2xl md:text-3xl font-black text-rose-600 tracking-tighter">{formatCurrency(stats.expense, 'EXPENSE')}</span>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {flowData.expenses.map(item => (
+                      <div key={item.family.id} className={`bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all ${item.total === 0 ? 'opacity-60' : ''}`}>
+                          <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
+                              <div className="flex items-center gap-3">
+                                  <div className="bg-rose-50 w-12 h-12 rounded-2xl flex items-center justify-center border border-rose-100">
+                                      {renderIcon(item.family.icon, "w-7 h-7")}
+                                  </div>
+                                  <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.family.name}</span>
+                              </div>
+                              <span className="text-lg font-black text-rose-600">{formatCurrency(item.total, 'EXPENSE')}</span>
+                          </div>
+                          <div className="space-y-2">
+                              {item.categories.map(cat => (
+                                  <div 
+                                    key={cat.category.id} 
+                                    onClick={() => handleCategoryClick(cat.category.id)}
+                                    className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-rose-50 cursor-pointer group transition-colors"
+                                  >
+                                      <div className="flex items-center gap-3 overflow-hidden">
+                                          <span className="text-lg group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
+                                          <span className="text-sm font-bold text-slate-600 truncate">{cat.category.name}</span>
+                                      </div>
+                                      <span className="text-sm font-black text-rose-600 opacity-80 group-hover:opacity-100">
+                                          {formatCurrency(cat.total, 'EXPENSE')}
+                                      </span>
+                                  </div>
+                              ))}
+                              {item.categories.length === 0 && <p className="text-xs text-slate-400 italic text-center py-2">Sin categorías</p>}
+                          </div>
+                      </div>
+                  ))}
+                   {flowData.expenses.length === 0 && <p className="col-span-full text-center text-slate-400 font-bold py-10 uppercase text-sm">No hay familias de gastos configuradas</p>}
+              </div>
+          </section>
+
       </div>
 
       {/* Modal Desglose Patrimonio */}
