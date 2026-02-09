@@ -279,12 +279,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     onUpdateFilter({ ...filter, referenceDate: newDate });
   };
 
-  const handleExport = (type: 'CSV' | 'EXCEL' | 'PDF') => {
-      if (type === 'PDF') {
-          window.print();
-          return;
-      }
-
+  const handleExport = (type: 'CSV' | 'EXCEL') => {
       const exportData = filteredTransactions.map(t => {
           const srcAcc = data.accounts.find(a => a.id === t.accountId);
           const dstAcc = data.accounts.find(a => a.id === t.transferAccountId);
@@ -389,7 +384,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             <div className="flex gap-2">
                 <button onClick={() => handleExport('EXCEL')} className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-[10px] hover:bg-emerald-100 transition-colors flex items-center gap-2"><FileSpreadsheet size={14}/> Excel</button>
                 <button onClick={() => handleExport('CSV')} className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl font-bold text-[10px] hover:bg-slate-100 transition-colors flex items-center gap-2"><FileDown size={14}/> CSV</button>
-                <button onClick={() => handleExport('PDF')} className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-[10px] hover:bg-indigo-100 transition-colors flex items-center gap-2"><Printer size={14}/> PDF</button>
             </div>
         </div>
       </div>

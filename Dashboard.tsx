@@ -87,26 +87,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       }
 
       // 2. Cálculo del Periodo (Ingresos vs Gastos)
+      // La lógica aquí debe ser idéntica a la de 'flowData' para que coincidan los totales.
+      // Se basa en la FAMILIA asociada.
       const inPeriod = filter.timeRange === 'ALL' || (t.date >= dateBounds.startStr && t.date <= dateBounds.endStr);
-      if (inPeriod) {
-        // Determinamos el tipo de cálculo basado en la FAMILIA.
-        // Esto permite que una devolución (+50) en una familia de Gasto, cuente como "Menos Gasto" (se suma algebraicamente a periodExpense)
-        // Y un cargo negativo (-20) en una familia de Ingreso, cuente como "Menos Ingreso".
-        
-        let calculationType = t.type;
-        
-        if (t.type !== 'TRANSFER') {
-            // Intentamos resolver la familia para ver su naturaleza
-            const cat = categories.find(c => c.id === t.categoryId);
-            const fam = families.find(f => f.id === (t.familyId || cat?.familyId));
-            
-            if (fam) {
-                calculationType = fam.type; // 'INCOME' o 'EXPENSE'
-            }
-        }
+      if (inPeriod && t.type !== 'TRANSFER') {
+          // Buscamos la familia
+          const cat = categories.find(c => c.id === t.categoryId);
+          const fam = families.find(f => f.id === (t.familyId || cat?.familyId));
 
-        if (calculationType === 'INCOME') periodIncome += t.amount;
-        else if (calculationType === 'EXPENSE') periodExpense += t.amount;
+          if (fam) {
+              if (fam.type === 'INCOME') periodIncome += t.amount;
+              else if (fam.type === 'EXPENSE') periodExpense += t.amount;
+          } else {
+              // Si no tiene familia (huérfano), usamos el tipo de transacción como fallback
+              if (t.type === 'INCOME') periodIncome += t.amount;
+              else if (t.type === 'EXPENSE') periodExpense += t.amount;
+          }
       }
     });
 
@@ -114,7 +110,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         income: periodIncome, 
         expense: periodExpense, 
         balance: Object.values(accTotals).reduce((a, b) => a + b, 0), 
-        // Ahorro: Ingresos (Positivos/Negativos) + Gastos (Negativos/Positivos)
+        // Ahorro: Suma algebraica de Ingresos + Gastos del periodo
         periodBalance: periodIncome + periodExpense,
         accTotals
     };
