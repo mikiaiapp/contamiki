@@ -31,30 +31,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return `${day}/${month}/${year.slice(-2)}`;
   };
 
-  // Helper para moneda: Respetamos el signo del input.
-  // Gasto (Positivo) -> Se muestra negativo visualmente.
-  // Gasto (Negativo/Devolución) -> Se muestra positivo visualmente (menos gasto).
-  const formatCurrency = (amount: number, type: 'INCOME' | 'EXPENSE' | 'TRANSFER' | 'BALANCE' = 'BALANCE') => {
-    let value = amount;
-    if (type === 'EXPENSE') {
-        // Si es gasto, invertimos el signo para visualización (Positivo es salida, Negativo es devolución)
-        value = -amount; 
-    }
-    return `${numberFormatter.format(value)} €`;
+  // Helper para moneda: Muestra el signo real almacenado
+  const formatCurrency = (amount: number) => {
+    return `${numberFormatter.format(amount)} €`;
   };
 
-  const getAmountColor = (amount: number, type: 'INCOME' | 'EXPENSE' | 'TRANSFER' | 'BALANCE' = 'BALANCE') => {
-    // Para gastos, la lógica visual:
-    // Importe Total > 0 (Gasto neto) -> Rojo
-    // Importe Total < 0 (Devolución neta) -> Verde
-    if (type === 'EXPENSE') {
-        return amount > 0 ? 'text-rose-600' : 'text-emerald-600';
-    }
-    if (type === 'INCOME') return 'text-emerald-600';
-    if (type === 'BALANCE') {
-        return amount < 0 ? 'text-rose-600' : 'text-emerald-600';
-    }
-    return 'text-indigo-600';
+  const getAmountColor = (amount: number) => {
+    if (amount > 0) return 'text-emerald-600';
+    if (amount < 0) return 'text-rose-600';
+    return 'text-slate-400';
   };
 
   const pendingRecurrents = useMemo(() => {
@@ -92,21 +77,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     let periodExpense = 0;
 
     transactions.forEach(t => {
-      // Cálculo de saldos globales (acumulado histórico hasta fin de periodo)
+      // 1. Cálculo de Saldos de Cuentas (Acumulado histórico)
+      // Como ahora amount tiene signo (+ ingreso, - gasto), simplemente sumamos.
       if (t.date <= dateBounds.endStr) {
-        if (t.type === 'INCOME') accTotals[t.accountId] = (accTotals[t.accountId] || 0) + t.amount;
-        else if (t.type === 'EXPENSE') accTotals[t.accountId] = (accTotals[t.accountId] || 0) - t.amount;
-        else if (t.type === 'TRANSFER' && t.transferAccountId) {
-          accTotals[t.accountId] = (accTotals[t.accountId] || 0) - t.amount;
-          accTotals[t.transferAccountId] = (accTotals[t.transferAccountId] || 0) + t.amount;
+        if (t.type === 'TRANSFER' && t.transferAccountId) {
+            // Traspaso: Sale de accountId (negativo), Entra en transferAccountId (positivo)
+            // Asumimos que t.amount está almacenado como negativo para la cuenta origen si se sigue la lógica de gasto
+            // Ojo: En traspasos, normalmente guardamos el valor absoluto y aplicamos lógica aquí.
+            // Para simplificar traspasos en este nuevo modelo: 
+            // Si el usuario guarda -50 en TRANSFER:
+            //   accountId se suma -50 (resta)
+            //   transferId se suma --50 (suma)
+            const amt = t.amount; 
+            // Normalizamos: Si es negativo, sale de origen.
+            const outflow = amt < 0 ? amt : -amt;
+            accTotals[t.accountId] = (accTotals[t.accountId] || 0) + outflow;
+            accTotals[t.transferAccountId] = (accTotals[t.transferAccountId] || 0) - outflow;
+        } else {
+            // Ingreso o Gasto Normal: Suma directa algebraica
+            accTotals[t.accountId] = (accTotals[t.accountId] || 0) + t.amount;
         }
       }
 
-      // Cálculo del periodo actual
+      // 2. Cálculo del Periodo (Ingresos vs Gastos)
       const inPeriod = filter.timeRange === 'ALL' || (t.date >= dateBounds.startStr && t.date <= dateBounds.endStr);
-      if (inPeriod) {
-        if (t.type === 'INCOME') periodIncome += t.amount;
-        if (t.type === 'EXPENSE') periodExpense += t.amount; // Suma algebraica (permite negativos)
+      if (inPeriod && t.type !== 'TRANSFER') {
+        // Agrupamos por la naturaleza de la familia para totalizar correctamente
+        // Si la familia es de tipo 'EXPENSE', sumamos a gastos (será negativo).
+        // Si la familia es de tipo 'INCOME', sumamos a ingresos.
+        const fam = families.find(f => f.id === t.familyId);
+        if (fam) {
+            if (fam.type === 'INCOME') periodIncome += t.amount;
+            else periodExpense += t.amount;
+        } else {
+            // Fallback si no hay familia: usamos el signo
+            if (t.amount >= 0) periodIncome += t.amount;
+            else periodExpense += t.amount;
+        }
       }
     });
 
@@ -114,10 +121,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         income: periodIncome, 
         expense: periodExpense, 
         balance: Object.values(accTotals).reduce((a, b) => a + b, 0), 
-        periodBalance: periodIncome - periodExpense,
+        periodBalance: periodIncome + periodExpense, // Suma algebraica (Ingreso + (-Gasto))
         accTotals
     };
-  }, [transactions, accounts, dateBounds, filter.timeRange]);
+  }, [transactions, accounts, families, dateBounds, filter.timeRange]);
 
   const groupedBalances = useMemo(() => {
     return accountGroups.map(group => {
@@ -141,16 +148,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
             .filter(f => f.type === type)
             .map(fam => {
                 const famTxs = periodTxs.filter(t => t.familyId === fam.id);
+                // Suma directa algebraica de los importes
+                const totalFam = famTxs.reduce((sum, t) => sum + t.amount, 0);
+                
                 const cats = categories
                     .filter(c => c.familyId === fam.id)
                     .map(cat => ({
                         category: cat,
                         total: famTxs.filter(t => t.categoryId === cat.id).reduce((sum, t) => sum + t.amount, 0)
                     }))
-                    .sort((a,b) => b.total - a.total);
-                return { family: fam, total: famTxs.reduce((sum, t) => sum + t.amount, 0), categories: cats };
+                    // Ordenar por magnitud absoluta para que lo más relevante salga primero
+                    .sort((a,b) => Math.abs(b.total) - Math.abs(a.total));
+                
+                return { family: fam, total: totalFam, categories: cats };
             })
-            .sort((a,b) => b.total - a.total);
+            // Ordenar por magnitud absoluta
+            .sort((a,b) => Math.abs(b.total) - Math.abs(a.total));
       };
       return { incomes: buildHierarchy('INCOME'), expenses: buildHierarchy('EXPENSE') };
   }, [families, categories, transactions, dateBounds, filter.timeRange]);
@@ -177,7 +190,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         id: Math.random().toString(36).substring(2, 15),
         date: r.nextDueDate,
         description: r.description,
-        amount: r.amount,
+        amount: r.amount, // Ojo: Recurrentes deberían guardar el signo también
         accountId: r.accountId,
         transferAccountId: r.transferAccountId,
         familyId: r.familyId,
@@ -286,8 +299,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
             <div className="bg-indigo-50 text-indigo-600 w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform"><Banknote size={26}/></div>
             <div>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Patrimonio Global <span className="text-indigo-300 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">Ver detalle</span></p>
-                <p className={`text-3xl font-black tracking-tight ${getAmountColor(stats.balance, 'BALANCE')}`}>
-                    {formatCurrency(stats.balance, 'BALANCE')}
+                <p className={`text-3xl font-black tracking-tight ${getAmountColor(stats.balance)}`}>
+                    {formatCurrency(stats.balance)}
                 </p>
             </div>
         </button>
@@ -295,8 +308,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
             <div className={`${stats.periodBalance >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'} w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-sm`}><Scale size={26}/></div>
             <div>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Ahorro del Periodo</p>
-                <p className={`text-3xl font-black tracking-tight ${getAmountColor(stats.periodBalance, 'BALANCE')}`}>
-                    {formatCurrency(stats.periodBalance, stats.periodBalance < 0 ? 'EXPENSE' : 'INCOME')}
+                <p className={`text-3xl font-black tracking-tight ${getAmountColor(stats.periodBalance)}`}>
+                    {formatCurrency(stats.periodBalance)}
                 </p>
             </div>
         </div>
@@ -311,7 +324,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                       <div className="bg-emerald-100 text-emerald-600 p-2.5 rounded-2xl"><ArrowUpCircle size={28}/></div>
                       <h3 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter">Ingresos</h3>
                   </div>
-                  <span className="text-2xl md:text-3xl font-black text-emerald-600 tracking-tighter">{formatCurrency(stats.income, 'INCOME')}</span>
+                  <span className={`text-2xl md:text-3xl font-black tracking-tighter ${getAmountColor(stats.income)}`}>{formatCurrency(stats.income)}</span>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -324,7 +337,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                   </div>
                                   <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.family.name}</span>
                               </div>
-                              <span className="text-lg font-black text-emerald-600">{formatCurrency(item.total, 'INCOME')}</span>
+                              <span className={`text-lg font-black ${getAmountColor(item.total)}`}>{formatCurrency(item.total)}</span>
                           </div>
                           <div className="space-y-2">
                               {item.categories.map(cat => (
@@ -337,8 +350,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                           <span className="text-lg group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
                                           <span className="text-sm font-bold text-slate-600 truncate">{cat.category.name}</span>
                                       </div>
-                                      <span className="text-sm font-black text-emerald-600 opacity-80 group-hover:opacity-100">
-                                          {formatCurrency(cat.total, 'INCOME')}
+                                      <span className={`text-sm font-black opacity-80 group-hover:opacity-100 ${getAmountColor(cat.total)}`}>
+                                          {formatCurrency(cat.total)}
                                       </span>
                                   </div>
                               ))}
@@ -357,7 +370,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                       <div className="bg-rose-100 text-rose-600 p-2.5 rounded-2xl"><ArrowDownCircle size={28}/></div>
                       <h3 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter">Gastos</h3>
                   </div>
-                  <span className={`text-2xl md:text-3xl font-black tracking-tighter ${getAmountColor(stats.expense, 'EXPENSE')}`}>{formatCurrency(stats.expense, 'EXPENSE')}</span>
+                  <span className={`text-2xl md:text-3xl font-black tracking-tighter ${getAmountColor(stats.expense)}`}>{formatCurrency(stats.expense)}</span>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -370,7 +383,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                   </div>
                                   <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.family.name}</span>
                               </div>
-                              <span className={`text-lg font-black ${getAmountColor(item.total, 'EXPENSE')}`}>{formatCurrency(item.total, 'EXPENSE')}</span>
+                              <span className={`text-lg font-black ${getAmountColor(item.total)}`}>{formatCurrency(item.total)}</span>
                           </div>
                           <div className="space-y-2">
                               {item.categories.map(cat => (
@@ -383,8 +396,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                           <span className="text-lg group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
                                           <span className="text-sm font-bold text-slate-600 truncate">{cat.category.name}</span>
                                       </div>
-                                      <span className={`text-sm font-black opacity-80 group-hover:opacity-100 ${getAmountColor(cat.total, 'EXPENSE')}`}>
-                                          {formatCurrency(cat.total, 'EXPENSE')}
+                                      <span className={`text-sm font-black opacity-80 group-hover:opacity-100 ${getAmountColor(cat.total)}`}>
+                                          {formatCurrency(cat.total)}
                                       </span>
                                   </div>
                               ))}
@@ -398,7 +411,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
       </div>
 
-      {/* Modales (Balance, Recurrentes) se mantienen igual... */}
+      {/* Modales */}
       {showBalanceDetail && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-8 sm:p-12 relative max-h-[90vh] overflow-y-auto custom-scrollbar border border-white/20">
@@ -415,7 +428,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                     <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden">{renderIcon(groupInfo.group.icon, "w-6 h-6")}</div>
                                     <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">{groupInfo.group.name}</h4>
                                 </div>
-                                <span className={`text-base font-black tracking-tighter ${getAmountColor(groupInfo.total, 'BALANCE')}`}>{formatCurrency(groupInfo.total, 'BALANCE')}</span>
+                                <span className={`text-base font-black tracking-tighter ${getAmountColor(groupInfo.total)}`}>{formatCurrency(groupInfo.total)}</span>
                             </div>
                             <div className="grid grid-cols-1 gap-3">
                                 {groupInfo.accounts.map(acc => (
@@ -424,7 +437,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                             <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-50 shadow-sm overflow-hidden group-hover/row:scale-110 transition-transform">{renderIcon(acc.icon, "w-6 h-6")}</div>
                                             <div><span className="text-[11px] font-bold text-slate-600 uppercase block">{acc.name}</span><span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest opacity-0 group-hover/row:opacity-100 transition-opacity">Ver movimientos</span></div>
                                         </div>
-                                        <div className="flex items-center gap-2"><span className={`text-xs font-black ${getAmountColor(acc.balance, 'BALANCE')}`}>{formatCurrency(acc.balance, 'BALANCE')}</span><ChevronRight size={14} className="text-slate-300 group-hover/row:text-indigo-400" /></div>
+                                        <div className="flex items-center gap-2"><span className={`text-xs font-black ${getAmountColor(acc.balance)}`}>{formatCurrency(acc.balance)}</span><ChevronRight size={14} className="text-slate-300 group-hover/row:text-indigo-400" /></div>
                                     </div>
                                 ))}
                             </div>
@@ -433,7 +446,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                 </div>
                 <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-center px-4">
                     <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Patrimonio Neto Total</span>
-                    <span className={`text-3xl font-black tracking-tighter ${getAmountColor(stats.balance, 'BALANCE')}`}>{formatCurrency(stats.balance, 'BALANCE')}</span>
+                    <span className={`text-3xl font-black tracking-tighter ${getAmountColor(stats.balance)}`}>{formatCurrency(stats.balance)}</span>
                 </div>
                 <button onClick={() => setShowBalanceDetail(false)} className="w-full mt-10 py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-600 transition-all active:scale-95">Entendido</button>
             </div>
@@ -453,7 +466,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                             <div key={r.id} className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4 animate-in slide-in-from-right-4">
                                 <div className="flex justify-between items-start">
                                     <div className="flex gap-3"><div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-200">{renderIcon(cat?.icon || '📅', "w-6 h-6")}</div><div><p className="text-sm font-black text-slate-900 uppercase tracking-tight">{r.description}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{acc?.name} • Venció el {formatDateDisplay(r.nextDueDate)}</p></div></div>
-                                    <span className={`text-base font-black ${getAmountColor(r.amount, r.type)}`}>{formatCurrency(r.amount, r.type)}</span>
+                                    <span className={`text-base font-black ${getAmountColor(r.amount)}`}>{formatCurrency(r.amount)}</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2">
                                     <button onClick={() => handleProcessRecurrent(r)} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-emerald-300 hover:bg-emerald-50 transition-all group active:scale-95"><Check className="text-slate-400 group-hover:text-emerald-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-emerald-600">Validar</span></button>

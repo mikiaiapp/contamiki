@@ -65,12 +65,15 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     return `${day}/${month}/${year.slice(-2)}`;
   };
 
-  // Helper para moneda con lógica de signos invertidos para gastos visuales
-  const formatCurrency = (amount: number, type: 'INCOME' | 'EXPENSE' | 'TRANSFER') => {
-    // Si es Gasto y positivo -> -50
-    // Si es Gasto y negativo (devolución) -> -(-10) = +10
-    const value = type === 'EXPENSE' ? -amount : amount;
-    return `${numberFormatter.format(value)} €`;
+  // Helper para moneda
+  const formatCurrency = (amount: number) => {
+    return `${numberFormatter.format(amount)} €`;
+  };
+
+  const getAmountColor = (amount: number) => {
+      if (amount > 0) return 'text-emerald-600';
+      if (amount < 0) return 'text-rose-600';
+      return 'text-slate-400';
   };
 
   useEffect(() => {
@@ -114,7 +117,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     if (t) {
       setEditingTx(t);
       setFType(t.type);
-      setFAmount(t.amount.toString());
+      setFAmount(t.amount.toString()); // Muestra el valor con su signo original
       setFDesc(t.description);
       setFDate(t.date); 
       setFAcc(t.accountId);
@@ -127,18 +130,38 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setIsModalOpen(true);
   };
 
+  const handleTypeChange = (newType: TransactionType) => {
+      setFType(newType);
+      // Invertir el signo del importe automáticamente para ayudar al usuario
+      if (fAmount) {
+          const current = parseFloat(fAmount);
+          if (!isNaN(current)) {
+              if (newType === 'EXPENSE' && current > 0) {
+                  setFAmount((-current).toString());
+              } else if (newType === 'INCOME' && current < 0) {
+                  setFAmount((-current).toString());
+              }
+          }
+      }
+  };
+
   const handleSave = () => {
     if (!fAmount || !fDesc || !fAcc || (fType !== 'TRANSFER' && !fCat)) {
       alert("Faltan datos obligatorios."); return;
     }
-    // PERMITIMOS VALORES NEGATIVOS (Para devoluciones de gastos)
-    // Ya no usamos Math.abs() ciegamente.
+    
+    // Guardamos el importe TAL CUAL lo ha escrito el usuario (con su signo).
+    // De esta forma permitimos:
+    // - Gastos normales (ej: -50)
+    // - Ingresos normales (ej: 1000)
+    // - Devoluciones de gastos (ej: +50 en categoría de Gasto)
+    // - Reintegros de ingresos (ej: -100 en categoría de Ingreso)
     const rawAmount = parseFloat(fAmount);
     
     const finalTx: Transaction = {
       id: editingTx ? editingTx.id : generateId(),
       date: fDate,
-      amount: rawAmount, // Se guarda tal cual (ej: -50 en gasto = devolución)
+      amount: rawAmount,
       description: fDesc,
       accountId: fAcc,
       type: fType,
@@ -478,11 +501,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 exitNode = <div className="flex items-center gap-2 text-slate-500 font-bold truncate">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
               }
 
-              // Color dinámico del importe: Si es Gasto y positivo -> Rojo. Si es Gasto y negativo (devolución) -> Verde.
-              let amountColor = 'text-indigo-400';
-              if (t.type === 'INCOME') amountColor = 'text-emerald-600';
-              else if (t.type === 'EXPENSE') amountColor = t.amount > 0 ? 'text-rose-600' : 'text-emerald-600';
-
               return (
                   <div key={t.id} className="group bg-white p-4 lg:p-5 lg:px-10 rounded-[1.5rem] lg:rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl hover:border-indigo-100 transition-all relative overflow-hidden animate-in fade-in slide-in-from-bottom-2 print:border-b print:border-slate-200 print:rounded-none print:shadow-none">
                       
@@ -521,8 +539,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         </div>
                         
                         <div className="flex flex-col items-end gap-3">
-                            <span className={`text-sm font-black tracking-tighter ${amountColor}`}>
-                                {formatCurrency(t.amount, t.type)}
+                            <span className={`text-sm font-black tracking-tighter ${getAmountColor(t.amount)}`}>
+                                {formatCurrency(t.amount)}
                             </span>
                             <div className="flex gap-1 print:hidden">
                                 <button onClick={() => openEditor(t)} className="p-1.5 bg-slate-50 text-slate-400 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 transition-all active:scale-90"><Edit3 size={14}/></button>
@@ -548,8 +566,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             )}
                         </div>
                         <div className="text-xs uppercase">{exitNode}</div>
-                        <div className={`text-right text-xl font-black tracking-tighter ${amountColor}`}>
-                            {formatCurrency(t.amount, t.type)}
+                        <div className={`text-right text-xl font-black tracking-tighter ${getAmountColor(t.amount)}`}>
+                            {formatCurrency(t.amount)}
                         </div>
                         <div className="flex justify-center gap-1 print:hidden">
                             <button onClick={() => openEditor(t)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all active:scale-90"><Edit3 size={18}/></button>
@@ -600,7 +618,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                           {id: 'INCOME', label: 'Ingreso', color: 'emerald'},
                           {id: 'TRANSFER', label: 'Traspaso', color: 'indigo'}
                         ].map(m => (
-                          <button key={m.id} type="button" onClick={() => setFType(m.id as any)} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${fType === m.id ? `bg-white text-${m.color}-600 shadow-xl` : 'text-slate-400 hover:text-slate-600'}`}>{m.label}</button>
+                          <button key={m.id} type="button" onClick={() => handleTypeChange(m.id as any)} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${fType === m.id ? `bg-white text-${m.color}-600 shadow-xl` : 'text-slate-400 hover:text-slate-600'}`}>{m.label}</button>
                         ))}
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -610,7 +628,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 font-bold">€</span>
                             <input type="number" step="0.01" className="w-full pl-12 pr-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-3xl font-black outline-none focus:border-indigo-500 transition-all shadow-inner" value={fAmount} onChange={e => setFAmount(e.target.value)} />
                           </div>
-                          <p className="text-[9px] text-slate-400 italic ml-2">Usar negativo (-) para devoluciones.</p>
+                          <p className="text-[9px] text-slate-400 italic ml-2">Gastos negativos (-), Ingresos positivos (+).</p>
                         </div>
                         <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha Operación</label>
