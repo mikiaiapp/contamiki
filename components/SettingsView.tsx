@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useMemo } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from '../types';
 import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar } from 'lucide-react';
@@ -80,8 +81,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   };
 
   const formatCurrency = (amount: number, type: 'INCOME' | 'EXPENSE' | 'TRANSFER' | 'NEUTRAL' = 'NEUTRAL') => {
-    const value = type === 'EXPENSE' ? -Math.abs(amount) : amount;
-    return `${numberFormatter.format(value)} €`;
+    return `${numberFormatter.format(amount)} €`;
   };
 
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
@@ -127,7 +127,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     const newRec: RecurrentMovement = {
       id: recId || generateId(),
       description: recDesc,
-      amount: Math.abs(parseFloat(recAmount)),
+      amount: parseFloat(recAmount), // Guardamos con signo
       type: recType,
       accountId: recAcc,
       familyId: data.categories.find(c => c.id === recCat)?.familyId || '',
@@ -135,7 +135,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       frequency: recFreq,
       interval: parseInt(recInterval) || 1,
       startDate: recStart,
-      nextDueDate: recStart, // Para simplificar, asumimos que vence en la fecha de inicio al crearlo
+      nextDueDate: recStart,
       active: true
     };
 
@@ -156,7 +156,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       id: favId || generateId(),
       name: favName,
       description: favDesc,
-      amount: Math.abs(parseFloat(favAmount)),
+      amount: parseFloat(favAmount), // Guardamos con signo
       type: favType,
       accountId: favAcc,
       familyId: data.categories.find(c => c.id === favCat)?.familyId || '',
@@ -233,8 +233,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             txCat = { id: generateId(), name: parts[1], familyId: localFamilies[0]?.id || 'f1', icon: '🏷️' };
             localCategories.push(txCat); txReport.newCategories.push(parts[1]);
           }
+          // Guardamos amountVal con su signo original.
+          // Inferimos tipo: Negativo -> EXPENSE, Positivo -> INCOME
           localTxs.push({ 
-            id: generateId(), date: fec, description: parts[3], amount: Math.abs(amountVal), 
+            id: generateId(), date: fec, description: parts[3], amount: amountVal, 
             type: amountVal < 0 ? 'EXPENSE' : 'INCOME', accountId: txAcc.id, 
             categoryId: txCat.id, familyId: txCat.familyId 
           });
@@ -242,7 +244,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           break;
         case 'TRANSFER':
           const tFec = parseDate(parts[0]);
-          const tAmount = Math.abs(parseFloat(parts[4].replace(',', '.')));
+          const tAmount = parseFloat(parts[4].replace(',', '.'));
           if (isNaN(tAmount)) return;
 
           let tSrc = localAccs.find(a => a.name.toLowerCase() === parts[1].toLowerCase());
@@ -266,6 +268,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       setImportReport(txReport);
       onUpdateData({ transactions: localTxs, accounts: localAccs, categories: localCategories });
     }
+
+    setPasteData(''); // Limpiamos el área de texto tras procesar
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -564,6 +568,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe Bruto (€)</label>
                                 <input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
+                                <p className="text-[9px] text-slate-400 italic ml-2">Para gastos usa números negativos (-).</p>
                             </div>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -621,7 +626,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                                 </div>
                                 <div className="flex items-center justify-between sm:justify-end gap-6">
                                     <div className="text-right">
-                                        <p className={`text-sm font-black ${r.type === 'EXPENSE' ? 'text-rose-500' : 'text-emerald-500'}`}>{formatCurrency(r.amount, r.type)}</p>
+                                        <p className={`text-sm font-black ${r.amount < 0 ? 'text-rose-500' : 'text-emerald-500'}`}>{formatCurrency(r.amount, r.type)}</p>
                                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center justify-end gap-1"><Calendar size={10}/> Prox: {formatDateDisplay(r.nextDueDate)}</p>
                                     </div>
                                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -660,6 +665,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe Predeterminado (€)</label>
                                 <input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favAmount} onChange={e => setFavAmount(e.target.value)} />
+                                <p className="text-[9px] text-slate-400 italic ml-2">Para gastos usa números negativos (-).</p>
                             </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cuenta</label>
