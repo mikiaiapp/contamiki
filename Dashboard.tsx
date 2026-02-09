@@ -12,8 +12,9 @@ interface DashboardProps {
   onNavigateToTransactions: (filters: any) => void;
 }
 
-// Formateador estricto para España (Punto para miles, coma para decimales)
-const numberFormatter = new Intl.NumberFormat('es-ES', {
+// Se utiliza 'de-DE' para forzar estrictamente el formato 1.000,00 (Punto miles, Coma decimales)
+// ya que 'es-ES' moderno puede usar espacios en algunos navegadores.
+const numberFormatter = new Intl.NumberFormat('de-DE', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
@@ -30,7 +31,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return `${day}/${month}/${year.slice(-2)}`;
   };
 
-  // Helper para moneda estilo español con signo forzado y colores
+  // Helper para moneda
   const formatCurrency = (amount: number, type: 'INCOME' | 'EXPENSE' | 'TRANSFER' | 'BALANCE' = 'BALANCE') => {
     const value = type === 'EXPENSE' ? -Math.abs(amount) : amount;
     return `${numberFormatter.format(value)} €`;
