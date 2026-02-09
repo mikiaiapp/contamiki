@@ -31,14 +31,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return `${day}/${month}/${year.slice(-2)}`;
   };
 
-  // Helper para moneda
+  // Helper para moneda: Respetamos el signo del input.
+  // Gasto (Positivo) -> Se muestra negativo visualmente.
+  // Gasto (Negativo/Devolución) -> Se muestra positivo visualmente (menos gasto).
   const formatCurrency = (amount: number, type: 'INCOME' | 'EXPENSE' | 'TRANSFER' | 'BALANCE' = 'BALANCE') => {
-    const value = type === 'EXPENSE' ? -Math.abs(amount) : amount;
+    let value = amount;
+    if (type === 'EXPENSE') {
+        // Si es gasto, invertimos el signo para visualización (Positivo es salida, Negativo es devolución)
+        value = -amount; 
+    }
     return `${numberFormatter.format(value)} €`;
   };
 
   const getAmountColor = (amount: number, type: 'INCOME' | 'EXPENSE' | 'TRANSFER' | 'BALANCE' = 'BALANCE') => {
-    if (type === 'EXPENSE') return 'text-rose-600';
+    // Para gastos, la lógica visual:
+    // Importe Total > 0 (Gasto neto) -> Rojo
+    // Importe Total < 0 (Devolución neta) -> Verde
+    if (type === 'EXPENSE') {
+        return amount > 0 ? 'text-rose-600' : 'text-emerald-600';
+    }
     if (type === 'INCOME') return 'text-emerald-600';
     if (type === 'BALANCE') {
         return amount < 0 ? 'text-rose-600' : 'text-emerald-600';
@@ -81,6 +92,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     let periodExpense = 0;
 
     transactions.forEach(t => {
+      // Cálculo de saldos globales (acumulado histórico hasta fin de periodo)
       if (t.date <= dateBounds.endStr) {
         if (t.type === 'INCOME') accTotals[t.accountId] = (accTotals[t.accountId] || 0) + t.amount;
         else if (t.type === 'EXPENSE') accTotals[t.accountId] = (accTotals[t.accountId] || 0) - t.amount;
@@ -90,10 +102,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         }
       }
 
+      // Cálculo del periodo actual
       const inPeriod = filter.timeRange === 'ALL' || (t.date >= dateBounds.startStr && t.date <= dateBounds.endStr);
       if (inPeriod) {
         if (t.type === 'INCOME') periodIncome += t.amount;
-        if (t.type === 'EXPENSE') periodExpense += t.amount;
+        if (t.type === 'EXPENSE') periodExpense += t.amount; // Suma algebraica (permite negativos)
       }
     });
 
@@ -197,19 +210,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return <span className="text-xl flex items-center justify-center">{iconStr || '📂'}</span>;
   };
 
-  // Manejo de clicks (Simple vs Doble)
   const handleCategoryClick = (categoryId: string) => {
     if (clickTimer) {
         clearTimeout(clickTimer);
         setClickTimer(null);
-        // Doble Click -> Filtrar listado
         onNavigateToTransactions({ filterCategory: categoryId });
     } else {
         const timer = setTimeout(() => {
-            // Click Simple -> Nuevo movimiento sugerido
             onNavigateToTransactions({ action: 'NEW', categoryId: categoryId });
             setClickTimer(null);
-        }, 250); // 250ms de espera para detectar doble clic
+        }, 250);
         setClickTimer(timer);
     }
   };
@@ -347,7 +357,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                       <div className="bg-rose-100 text-rose-600 p-2.5 rounded-2xl"><ArrowDownCircle size={28}/></div>
                       <h3 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter">Gastos</h3>
                   </div>
-                  <span className="text-2xl md:text-3xl font-black text-rose-600 tracking-tighter">{formatCurrency(stats.expense, 'EXPENSE')}</span>
+                  <span className={`text-2xl md:text-3xl font-black tracking-tighter ${getAmountColor(stats.expense, 'EXPENSE')}`}>{formatCurrency(stats.expense, 'EXPENSE')}</span>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -360,7 +370,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                   </div>
                                   <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.family.name}</span>
                               </div>
-                              <span className="text-lg font-black text-rose-600">{formatCurrency(item.total, 'EXPENSE')}</span>
+                              <span className={`text-lg font-black ${getAmountColor(item.total, 'EXPENSE')}`}>{formatCurrency(item.total, 'EXPENSE')}</span>
                           </div>
                           <div className="space-y-2">
                               {item.categories.map(cat => (
@@ -373,7 +383,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                           <span className="text-lg group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
                                           <span className="text-sm font-bold text-slate-600 truncate">{cat.category.name}</span>
                                       </div>
-                                      <span className="text-sm font-black text-rose-600 opacity-80 group-hover:opacity-100">
+                                      <span className={`text-sm font-black opacity-80 group-hover:opacity-100 ${getAmountColor(cat.total, 'EXPENSE')}`}>
                                           {formatCurrency(cat.total, 'EXPENSE')}
                                       </span>
                                   </div>
@@ -388,98 +398,53 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
       </div>
 
-      {/* Modal Desglose Patrimonio */}
+      {/* Modales (Balance, Recurrentes) se mantienen igual... */}
       {showBalanceDetail && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-8 sm:p-12 relative max-h-[90vh] overflow-y-auto custom-scrollbar border border-white/20">
                 <button onClick={() => setShowBalanceDetail(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
-                
                 <div className="flex items-center gap-4 mb-10">
                     <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Banknote size={28} /></div>
-                    <div>
-                      <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Desglose de Patrimonio</h3>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Situación al {formatDateDisplay(dateBounds.endStr)}</p>
-                    </div>
+                    <div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Desglose de Patrimonio</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Situación al {formatDateDisplay(dateBounds.endStr)}</p></div>
                 </div>
-
                 <div className="space-y-10">
                     {groupedBalances.map(groupInfo => (
                         <div key={groupInfo.group.id} className="space-y-4">
                             <div className="flex items-center justify-between px-2">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden">
-                                        {renderIcon(groupInfo.group.icon, "w-6 h-6")}
-                                    </div>
+                                    <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden">{renderIcon(groupInfo.group.icon, "w-6 h-6")}</div>
                                     <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">{groupInfo.group.name}</h4>
                                 </div>
-                                <span className={`text-base font-black tracking-tighter ${getAmountColor(groupInfo.total, 'BALANCE')}`}>
-                                    {formatCurrency(groupInfo.total, 'BALANCE')}
-                                </span>
+                                <span className={`text-base font-black tracking-tighter ${getAmountColor(groupInfo.total, 'BALANCE')}`}>{formatCurrency(groupInfo.total, 'BALANCE')}</span>
                             </div>
-                            
                             <div className="grid grid-cols-1 gap-3">
                                 {groupInfo.accounts.map(acc => (
-                                    <div 
-                                      key={acc.id} 
-                                      onClick={() => {
-                                          setShowBalanceDetail(false);
-                                          onNavigateToTransactions({ filterAccount: acc.id });
-                                      }}
-                                      className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:border-indigo-200 transition-all shadow-sm cursor-pointer group/row active:scale-[0.99]"
-                                    >
+                                    <div key={acc.id} onClick={() => { setShowBalanceDetail(false); onNavigateToTransactions({ filterAccount: acc.id }); }} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:border-indigo-200 transition-all shadow-sm cursor-pointer group/row active:scale-[0.99]">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-50 shadow-sm overflow-hidden group-hover/row:scale-110 transition-transform">
-                                                {renderIcon(acc.icon, "w-6 h-6")}
-                                            </div>
-                                            <div>
-                                              <span className="text-[11px] font-bold text-slate-600 uppercase block">{acc.name}</span>
-                                              <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest opacity-0 group-hover/row:opacity-100 transition-opacity">Ver movimientos</span>
-                                            </div>
+                                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-50 shadow-sm overflow-hidden group-hover/row:scale-110 transition-transform">{renderIcon(acc.icon, "w-6 h-6")}</div>
+                                            <div><span className="text-[11px] font-bold text-slate-600 uppercase block">{acc.name}</span><span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest opacity-0 group-hover/row:opacity-100 transition-opacity">Ver movimientos</span></div>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className={`text-xs font-black ${getAmountColor(acc.balance, 'BALANCE')}`}>
-                                                {formatCurrency(acc.balance, 'BALANCE')}
-                                            </span>
-                                            <ChevronRight size={14} className="text-slate-300 group-hover/row:text-indigo-400" />
-                                        </div>
+                                        <div className="flex items-center gap-2"><span className={`text-xs font-black ${getAmountColor(acc.balance, 'BALANCE')}`}>{formatCurrency(acc.balance, 'BALANCE')}</span><ChevronRight size={14} className="text-slate-300 group-hover/row:text-indigo-400" /></div>
                                     </div>
                                 ))}
                             </div>
                         </div>
                     ))}
                 </div>
-
                 <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-center px-4">
                     <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Patrimonio Neto Total</span>
-                    <span className={`text-3xl font-black tracking-tighter ${getAmountColor(stats.balance, 'BALANCE')}`}>
-                        {formatCurrency(stats.balance, 'BALANCE')}
-                    </span>
+                    <span className={`text-3xl font-black tracking-tighter ${getAmountColor(stats.balance, 'BALANCE')}`}>{formatCurrency(stats.balance, 'BALANCE')}</span>
                 </div>
-
-                <button 
-                  onClick={() => setShowBalanceDetail(false)} 
-                  className="w-full mt-10 py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-600 transition-all active:scale-95"
-                >
-                  Entendido
-                </button>
+                <button onClick={() => setShowBalanceDetail(false)} className="w-full mt-10 py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-600 transition-all active:scale-95">Entendido</button>
             </div>
         </div>
       )}
 
-      {/* Modal Notificaciones Recurrentes */}
       {showRecurrentsModal && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 sm:p-12 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
                 <button onClick={() => setShowRecurrentsModal(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
-                
-                <div className="flex items-center gap-4 mb-10">
-                    <div className="bg-rose-500 p-4 rounded-3xl text-white shadow-xl shadow-rose-500/20"><Bell size={28} /></div>
-                    <div>
-                      <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Vencimientos</h3>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Movimientos recurrentes pendientes</p>
-                    </div>
-                </div>
-
+                <div className="flex items-center gap-4 mb-10"><div className="bg-rose-500 p-4 rounded-3xl text-white shadow-xl shadow-rose-500/20"><Bell size={28} /></div><div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Vencimientos</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Movimientos recurrentes pendientes</p></div></div>
                 <div className="space-y-4">
                     {pendingRecurrents.map(r => {
                         const acc = accounts.find(a => a.id === r.accountId);
@@ -487,60 +452,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                         return (
                             <div key={r.id} className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4 animate-in slide-in-from-right-4">
                                 <div className="flex justify-between items-start">
-                                    <div className="flex gap-3">
-                                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-200">
-                                            {renderIcon(cat?.icon || '📅', "w-6 h-6")}
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-black text-slate-900 uppercase tracking-tight">{r.description}</p>
-                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{acc?.name} • Venció el {formatDateDisplay(r.nextDueDate)}</p>
-                                        </div>
-                                    </div>
-                                    <span className={`text-base font-black ${getAmountColor(r.amount, r.type)}`}>
-                                        {formatCurrency(r.amount, r.type)}
-                                    </span>
+                                    <div className="flex gap-3"><div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-200">{renderIcon(cat?.icon || '📅', "w-6 h-6")}</div><div><p className="text-sm font-black text-slate-900 uppercase tracking-tight">{r.description}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{acc?.name} • Venció el {formatDateDisplay(r.nextDueDate)}</p></div></div>
+                                    <span className={`text-base font-black ${getAmountColor(r.amount, r.type)}`}>{formatCurrency(r.amount, r.type)}</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2">
-                                    <button 
-                                        onClick={() => handleProcessRecurrent(r)}
-                                        className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-emerald-300 hover:bg-emerald-50 transition-all group active:scale-95"
-                                    >
-                                        <Check className="text-slate-400 group-hover:text-emerald-600" size={18} />
-                                        <span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-emerald-600">Validar</span>
-                                    </button>
-                                    <button 
-                                        onClick={() => handlePostponeRecurrent(r)}
-                                        className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-amber-300 hover:bg-amber-50 transition-all group active:scale-95"
-                                    >
-                                        <Clock className="text-slate-400 group-hover:text-amber-600" size={18} />
-                                        <span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-amber-600">Posponer</span>
-                                    </button>
-                                    <button 
-                                        onClick={() => handleDeactivateRecurrent(r)}
-                                        className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-rose-300 hover:bg-rose-50 transition-all group active:scale-95"
-                                    >
-                                        <AlertCircle className="text-slate-400 group-hover:text-rose-600" size={18} />
-                                        <span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-rose-600">Anular</span>
-                                    </button>
+                                    <button onClick={() => handleProcessRecurrent(r)} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-emerald-300 hover:bg-emerald-50 transition-all group active:scale-95"><Check className="text-slate-400 group-hover:text-emerald-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-emerald-600">Validar</span></button>
+                                    <button onClick={() => handlePostponeRecurrent(r)} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-amber-300 hover:bg-amber-50 transition-all group active:scale-95"><Clock className="text-slate-400 group-hover:text-amber-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-amber-600">Posponer</span></button>
+                                    <button onClick={() => handleDeactivateRecurrent(r)} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-rose-300 hover:bg-rose-50 transition-all group active:scale-95"><AlertCircle className="text-slate-400 group-hover:text-rose-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-rose-600">Anular</span></button>
                                 </div>
                             </div>
                         );
                     })}
-
-                    {pendingRecurrents.length === 0 && (
-                        <div className="py-12 text-center space-y-4">
-                            <div className="mx-auto bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center text-slate-300"><History size={32}/></div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No hay más vencimientos por hoy</p>
-                        </div>
-                    )}
+                    {pendingRecurrents.length === 0 && <div className="py-12 text-center space-y-4"><div className="mx-auto bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center text-slate-300"><History size={32}/></div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No hay más vencimientos por hoy</p></div>}
                 </div>
-
-                <button 
-                  onClick={() => setShowRecurrentsModal(false)} 
-                  className="w-full mt-10 py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-600 transition-all"
-                >
-                  Cerrar
-                </button>
+                <button onClick={() => setShowRecurrentsModal(false)} className="w-full mt-10 py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-600 transition-all">Cerrar</button>
             </div>
         </div>
       )}

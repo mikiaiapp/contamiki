@@ -1,7 +1,8 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
   data: AppState;
@@ -64,15 +65,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     return `${day}/${month}/${year.slice(-2)}`;
   };
 
-  // Helper para moneda estilo español con signo forzado para gastos
+  // Helper para moneda con lógica de signos invertidos para gastos visuales
   const formatCurrency = (amount: number, type: 'INCOME' | 'EXPENSE' | 'TRANSFER') => {
-    const value = type === 'EXPENSE' ? -Math.abs(amount) : amount;
+    // Si es Gasto y positivo -> -50
+    // Si es Gasto y negativo (devolución) -> -(-10) = +10
+    const value = type === 'EXPENSE' ? -amount : amount;
     return `${numberFormatter.format(value)} €`;
   };
 
   useEffect(() => {
     if (initialSpecificFilters) {
-      // Caso 1: Acción de NUEVO movimiento (Clic simple en Dashboard)
       if (initialSpecificFilters.action === 'NEW' && initialSpecificFilters.categoryId) {
          resetForm();
          const cat = data.categories.find(c => c.id === initialSpecificFilters.categoryId);
@@ -83,7 +85,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
          
          setIsModalOpen(true);
       } 
-      // Caso 2: Filtrado estándar (Doble clic en Dashboard)
       else {
           if (initialSpecificFilters.filterCategory) {
               setColFilterEntry(initialSpecificFilters.filterCategory);
@@ -130,10 +131,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     if (!fAmount || !fDesc || !fAcc || (fType !== 'TRANSFER' && !fCat)) {
       alert("Faltan datos obligatorios."); return;
     }
+    // PERMITIMOS VALORES NEGATIVOS (Para devoluciones de gastos)
+    // Ya no usamos Math.abs() ciegamente.
+    const rawAmount = parseFloat(fAmount);
+    
     const finalTx: Transaction = {
       id: editingTx ? editingTx.id : generateId(),
       date: fDate,
-      amount: Math.abs(parseFloat(fAmount)),
+      amount: rawAmount, // Se guarda tal cual (ej: -50 en gasto = devolución)
       description: fDesc,
       accountId: fAcc,
       type: fType,
@@ -251,6 +256,49 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     onUpdateFilter({ ...filter, referenceDate: newDate });
   };
 
+  const handleExport = (type: 'CSV' | 'EXCEL' | 'PDF') => {
+      if (type === 'PDF') {
+          window.print();
+          return;
+      }
+
+      const exportData = filteredTransactions.map(t => {
+          const srcAcc = data.accounts.find(a => a.id === t.accountId);
+          const dstAcc = data.accounts.find(a => a.id === t.transferAccountId);
+          const cat = data.categories.find(c => c.id === t.categoryId);
+          const fam = data.families.find(f => f.id === cat?.familyId);
+
+          return {
+              Fecha: t.date,
+              Tipo: t.type === 'EXPENSE' ? 'GASTO' : t.type === 'INCOME' ? 'INGRESO' : 'TRASPASO',
+              Importe: t.amount,
+              Concepto: t.description,
+              Cuenta: srcAcc?.name || '---',
+              'Cuenta Destino': dstAcc?.name || '',
+              Categoria: cat?.name || '---',
+              Familia: fam?.name || '---'
+          };
+      });
+
+      if (type === 'EXCEL') {
+          const ws = XLSX.utils.json_to_sheet(exportData);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+          XLSX.writeFile(wb, `contamiki_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+      } else if (type === 'CSV') {
+          const ws = XLSX.utils.json_to_sheet(exportData);
+          const csv = XLSX.utils.sheet_to_csv(ws);
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.setAttribute("href", url);
+          link.setAttribute("download", `contamiki_export_${new Date().toISOString().split('T')[0]}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+      }
+  };
+
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
@@ -277,7 +325,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   return (
     <div className="space-y-6 md:space-y-10 pb-24">
       {/* Cabecera Superior */}
-      <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8">
+      <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
         <div className="space-y-4 text-center md:text-left">
             <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
             <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
@@ -302,22 +350,29 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 </button>
             </div>
         </div>
-        <div className="bg-slate-100/80 p-1.5 rounded-2xl flex flex-wrap justify-center gap-1 shadow-inner border border-slate-200/50 w-full sm:w-fit mx-auto xl:mx-0">
-            {[
-                { id: 'ALL', label: 'Todo' },
-                { id: 'MONTH', label: 'Mes' },
-                { id: 'YEAR', label: 'Año' },
-                { id: 'CUSTOM', label: 'Pers' }
-            ].map((range) => (
-                <button key={range.id} onClick={() => onUpdateFilter({...filter, timeRange: range.id as any})} className={`flex-1 sm:flex-none px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === range.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                    {range.label}
-                </button>
-            ))}
+        <div className="flex flex-col items-end gap-2">
+            <div className="bg-slate-100/80 p-1.5 rounded-2xl flex flex-wrap justify-center gap-1 shadow-inner border border-slate-200/50 w-full sm:w-fit mx-auto xl:mx-0">
+                {[
+                    { id: 'ALL', label: 'Todo' },
+                    { id: 'MONTH', label: 'Mes' },
+                    { id: 'YEAR', label: 'Año' },
+                    { id: 'CUSTOM', label: 'Pers' }
+                ].map((range) => (
+                    <button key={range.id} onClick={() => onUpdateFilter({...filter, timeRange: range.id as any})} className={`flex-1 sm:flex-none px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === range.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                        {range.label}
+                    </button>
+                ))}
+            </div>
+            <div className="flex gap-2">
+                <button onClick={() => handleExport('EXCEL')} className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-[10px] hover:bg-emerald-100 transition-colors flex items-center gap-2"><FileSpreadsheet size={14}/> Excel</button>
+                <button onClick={() => handleExport('CSV')} className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl font-bold text-[10px] hover:bg-slate-100 transition-colors flex items-center gap-2"><FileDown size={14}/> CSV</button>
+                <button onClick={() => handleExport('PDF')} className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-[10px] hover:bg-indigo-100 transition-colors flex items-center gap-2"><Printer size={14}/> PDF</button>
+            </div>
         </div>
       </div>
 
       <div className="space-y-4">
-          <div className="hidden lg:grid grid-cols-[100px_180px_1fr_60px_180px_180px_100px] gap-4 px-10 py-6 items-start bg-white rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <div className="hidden lg:grid grid-cols-[100px_180px_1fr_60px_180px_180px_100px] gap-4 px-10 py-6 items-start bg-white rounded-[2.5rem] border border-slate-100 shadow-sm print:hidden">
             <div className="space-y-3">
                 <button onClick={() => handleSort('DATE')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors pt-2">
                     Fecha <SortIcon field="DATE" />
@@ -423,8 +478,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 exitNode = <div className="flex items-center gap-2 text-slate-500 font-bold truncate">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
               }
 
+              // Color dinámico del importe: Si es Gasto y positivo -> Rojo. Si es Gasto y negativo (devolución) -> Verde.
+              let amountColor = 'text-indigo-400';
+              if (t.type === 'INCOME') amountColor = 'text-emerald-600';
+              else if (t.type === 'EXPENSE') amountColor = t.amount > 0 ? 'text-rose-600' : 'text-emerald-600';
+
               return (
-                  <div key={t.id} className="group bg-white p-4 lg:p-5 lg:px-10 rounded-[1.5rem] lg:rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl hover:border-indigo-100 transition-all relative overflow-hidden animate-in fade-in slide-in-from-bottom-2">
+                  <div key={t.id} className="group bg-white p-4 lg:p-5 lg:px-10 rounded-[1.5rem] lg:rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl hover:border-indigo-100 transition-all relative overflow-hidden animate-in fade-in slide-in-from-bottom-2 print:border-b print:border-slate-200 print:rounded-none print:shadow-none">
                       
                       {/* Mobile View (Compact) */}
                       <div className="flex justify-between items-start lg:hidden">
@@ -461,10 +521,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         </div>
                         
                         <div className="flex flex-col items-end gap-3">
-                            <span className={`text-sm font-black tracking-tighter ${t.type === 'EXPENSE' ? 'text-rose-600' : t.type === 'INCOME' ? 'text-emerald-600' : 'text-indigo-400'}`}>
+                            <span className={`text-sm font-black tracking-tighter ${amountColor}`}>
                                 {formatCurrency(t.amount, t.type)}
                             </span>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 print:hidden">
                                 <button onClick={() => openEditor(t)} className="p-1.5 bg-slate-50 text-slate-400 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 transition-all active:scale-90"><Edit3 size={14}/></button>
                                 <button onClick={() => setDeleteConfirmId(t.id)} className="p-1.5 bg-slate-50 text-slate-400 rounded-lg hover:bg-rose-50 hover:text-rose-600 transition-all active:scale-90"><Trash2 size={14}/></button>
                             </div>
@@ -478,7 +538,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         </div>
                         <div className="text-xs uppercase">{entryNode}</div>
                         <div className="text-sm font-black text-slate-800 truncate uppercase tracking-tight">{t.description}</div>
-                        <div className="flex justify-center">
+                        <div className="flex justify-center print:hidden">
                             {t.attachment ? (
                                 <div className="bg-indigo-600 text-white p-2.5 rounded-xl shadow-lg shadow-indigo-100 group-hover:scale-110 transition-transform cursor-pointer" title="Ver adjunto">
                                     <Link2 size={18} />
@@ -488,17 +548,17 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             )}
                         </div>
                         <div className="text-xs uppercase">{exitNode}</div>
-                        <div className={`text-right text-xl font-black tracking-tighter ${t.type === 'EXPENSE' ? 'text-rose-600' : t.type === 'INCOME' ? 'text-emerald-600' : 'text-indigo-400'}`}>
+                        <div className={`text-right text-xl font-black tracking-tighter ${amountColor}`}>
                             {formatCurrency(t.amount, t.type)}
                         </div>
-                        <div className="flex justify-center gap-1">
+                        <div className="flex justify-center gap-1 print:hidden">
                             <button onClick={() => openEditor(t)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all active:scale-90"><Edit3 size={18}/></button>
                             <button onClick={() => setDeleteConfirmId(t.id)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all active:scale-90"><Trash2 size={18}/></button>
                         </div>
                       </div>
 
                       {deleteConfirmId === t.id && (
-                        <div className="absolute inset-0 bg-white/95 backdrop-blur-sm rounded-[1.5rem] lg:rounded-[2.5rem] z-10 flex flex-col lg:flex-row items-center justify-center gap-3 lg:gap-6 animate-in zoom-in-95 p-4 text-center">
+                        <div className="absolute inset-0 bg-white/95 backdrop-blur-sm rounded-[1.5rem] lg:rounded-[2.5rem] z-10 flex flex-col lg:flex-row items-center justify-center gap-3 lg:gap-6 animate-in zoom-in-95 p-4 text-center print:hidden">
                           <p className="text-xs font-black text-slate-900 uppercase tracking-widest">¿Confirmar borrado definitivo?</p>
                           <div className="flex gap-2">
                             <button onClick={() => { onDeleteTransaction(t.id); setDeleteConfirmId(null); }} className="bg-rose-600 text-white px-4 py-2 lg:px-8 lg:py-3 rounded-xl font-black text-[10px] uppercase shadow-xl active:scale-95 transition-all">Eliminar</button>
@@ -550,6 +610,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 font-bold">€</span>
                             <input type="number" step="0.01" className="w-full pl-12 pr-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-3xl font-black outline-none focus:border-indigo-500 transition-all shadow-inner" value={fAmount} onChange={e => setFAmount(e.target.value)} />
                           </div>
+                          <p className="text-[9px] text-slate-400 italic ml-2">Usar negativo (-) para devoluciones.</p>
                         </div>
                         <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha Operación</label>
