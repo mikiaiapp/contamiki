@@ -77,13 +77,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     let periodExpense = 0;
 
     transactions.forEach(t => {
-      // 1. Cálculo de Saldos de Cuentas (Acumulado histórico)
+      // 1. Cálculo de Saldos de Cuentas (Acumulado histórico algebraico)
       if (t.date <= dateBounds.endStr) {
-        // Sumamos el importe tal cual (ej: -50 reduce saldo, +100 aumenta)
         accTotals[t.accountId] = (accTotals[t.accountId] || 0) + t.amount;
         
-        // Si es traspaso, invertimos el signo para la cuenta destino
-        // Ej: Sale -50 de A. Entra -(-50) = +50 en B.
         if (t.type === 'TRANSFER' && t.transferAccountId) {
             accTotals[t.transferAccountId] = (accTotals[t.transferAccountId] || 0) - t.amount;
         }
@@ -92,9 +89,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       // 2. Cálculo del Periodo (Ingresos vs Gastos)
       const inPeriod = filter.timeRange === 'ALL' || (t.date >= dateBounds.startStr && t.date <= dateBounds.endStr);
       if (inPeriod) {
-        if (t.type === 'INCOME') periodIncome += t.amount;
-        // Sumamos algebraicamente. Si es gasto (-50), periodExpense disminuye (se hace más negativo).
-        else if (t.type === 'EXPENSE') periodExpense += t.amount;
+        // Determinamos el tipo de cálculo basado en la FAMILIA.
+        // Esto permite que una devolución (+50) en una familia de Gasto, cuente como "Menos Gasto" (se suma algebraicamente a periodExpense)
+        // Y un cargo negativo (-20) en una familia de Ingreso, cuente como "Menos Ingreso".
+        
+        let calculationType = t.type;
+        
+        if (t.type !== 'TRANSFER') {
+            // Intentamos resolver la familia para ver su naturaleza
+            const cat = categories.find(c => c.id === t.categoryId);
+            const fam = families.find(f => f.id === (t.familyId || cat?.familyId));
+            
+            if (fam) {
+                calculationType = fam.type; // 'INCOME' o 'EXPENSE'
+            }
+        }
+
+        if (calculationType === 'INCOME') periodIncome += t.amount;
+        else if (calculationType === 'EXPENSE') periodExpense += t.amount;
       }
     });
 
@@ -102,12 +114,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         income: periodIncome, 
         expense: periodExpense, 
         balance: Object.values(accTotals).reduce((a, b) => a + b, 0), 
-        // Ahorro del periodo: Suma de Ingresos + Gastos (siendo gastos negativos)
-        // Ej: 1000 + (-800) = 200 de ahorro.
+        // Ahorro: Ingresos (Positivos/Negativos) + Gastos (Negativos/Positivos)
         periodBalance: periodIncome + periodExpense,
         accTotals
     };
-  }, [transactions, accounts, dateBounds, filter.timeRange]);
+  }, [transactions, accounts, dateBounds, filter.timeRange, families, categories]);
 
   const groupedBalances = useMemo(() => {
     return accountGroups.map(group => {
@@ -131,7 +142,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
           return families
             .filter(f => f.type === type)
             .map(fam => {
-                const famTxs = periodTxs.filter(t => t.familyId === fam.id);
+                const famTxs = periodTxs.filter(t => t.familyId === fam.id || (categories.find(c => c.id === t.categoryId)?.familyId === fam.id));
                 // Suma directa algebraica
                 const totalFam = famTxs.reduce((sum, t) => sum + t.amount, 0);
                 
