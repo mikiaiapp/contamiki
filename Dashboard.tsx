@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
-import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement } from './types';
-import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle } from 'lucide-react';
+import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category } from './types';
+import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search } from 'lucide-react';
 
 interface DashboardProps {
   data: AppState;
@@ -22,7 +22,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const { transactions, accounts, families, categories, accountGroups, recurrents = [] } = data;
   const [showBalanceDetail, setShowBalanceDetail] = useState(false);
   const [showRecurrentsModal, setShowRecurrentsModal] = useState(false);
-  const [clickTimer, setClickTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Estado para el menú de acción de categoría
+  const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
 
   // Helper para formatear fecha dd/mm/aa
   const formatDateDisplay = (dateStr: string) => {
@@ -77,31 +79,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     let periodExpense = 0;
 
     transactions.forEach(t => {
+      // Normalizamos el importe para cálculos:
+      // Si es TRASPASO o GASTO, aseguramos que sea negativo para la lógica contable.
+      // Si es INGRESO, positivo.
+      let effectiveAmount = t.amount;
+      
+      if (t.type === 'TRANSFER' || t.type === 'EXPENSE') {
+          // Forzamos negativo por si acaso viene mal de la BD
+          effectiveAmount = -Math.abs(t.amount);
+      } else {
+          effectiveAmount = Math.abs(t.amount);
+      }
+
       // 1. Cálculo de Saldos de Cuentas (Acumulado histórico algebraico)
       if (t.date <= dateBounds.endStr) {
-        accTotals[t.accountId] = (accTotals[t.accountId] || 0) + t.amount;
+        // Cuenta Origen: Se suma el importe (si es negativo, resta)
+        accTotals[t.accountId] = (accTotals[t.accountId] || 0) + effectiveAmount;
         
+        // Cuenta Destino (solo en traspasos): Se resta el importe (si es negativo, suma -- menos por menos es más)
         if (t.type === 'TRANSFER' && t.transferAccountId) {
-            accTotals[t.transferAccountId] = (accTotals[t.transferAccountId] || 0) - t.amount;
+            accTotals[t.transferAccountId] = (accTotals[t.transferAccountId] || 0) - effectiveAmount;
         }
       }
 
       // 2. Cálculo del Periodo (Ingresos vs Gastos)
-      // La lógica aquí debe ser idéntica a la de 'flowData' para que coincidan los totales.
-      // Se basa en la FAMILIA asociada.
       const inPeriod = filter.timeRange === 'ALL' || (t.date >= dateBounds.startStr && t.date <= dateBounds.endStr);
       if (inPeriod && t.type !== 'TRANSFER') {
           // Buscamos la familia
           const cat = categories.find(c => c.id === t.categoryId);
           const fam = families.find(f => f.id === (t.familyId || cat?.familyId));
 
+          // Usamos el importe efectivo para sumarizar
           if (fam) {
-              if (fam.type === 'INCOME') periodIncome += t.amount;
-              else if (fam.type === 'EXPENSE') periodExpense += t.amount;
+              if (fam.type === 'INCOME') periodIncome += effectiveAmount;
+              else if (fam.type === 'EXPENSE') periodExpense += effectiveAmount;
           } else {
-              // Si no tiene familia (huérfano), usamos el tipo de transacción como fallback
-              if (t.type === 'INCOME') periodIncome += t.amount;
-              else if (t.type === 'EXPENSE') periodExpense += t.amount;
+              if (t.type === 'INCOME') periodIncome += effectiveAmount;
+              else if (t.type === 'EXPENSE') periodExpense += effectiveAmount;
           }
       }
     });
@@ -214,18 +228,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return <span className="text-xl flex items-center justify-center">{iconStr || '📂'}</span>;
   };
 
-  const handleCategoryClick = (categoryId: string) => {
-    if (clickTimer) {
-        clearTimeout(clickTimer);
-        setClickTimer(null);
-        onNavigateToTransactions({ filterCategory: categoryId });
-    } else {
-        const timer = setTimeout(() => {
-            onNavigateToTransactions({ action: 'NEW', categoryId: categoryId });
-            setClickTimer(null);
-        }, 250);
-        setClickTimer(timer);
-    }
+  const handleCategoryClick = (cat: Category) => {
+    setSelectedCategoryAction(cat);
   };
 
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
@@ -334,7 +338,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                               {item.categories.map(cat => (
                                   <div 
                                     key={cat.category.id} 
-                                    onClick={() => handleCategoryClick(cat.category.id)}
+                                    onClick={() => handleCategoryClick(cat.category)}
                                     className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-emerald-50 cursor-pointer group transition-colors"
                                   >
                                       <div className="flex items-center gap-3 overflow-hidden">
@@ -380,7 +384,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                               {item.categories.map(cat => (
                                   <div 
                                     key={cat.category.id} 
-                                    onClick={() => handleCategoryClick(cat.category.id)}
+                                    onClick={() => handleCategoryClick(cat.category)}
                                     className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-rose-50 cursor-pointer group transition-colors"
                                   >
                                       <div className="flex items-center gap-3 overflow-hidden">
@@ -401,6 +405,40 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
           </section>
 
       </div>
+
+      {/* Modal Acción Categoría */}
+      {selectedCategoryAction && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
+            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 text-center relative border border-white/20">
+                <button onClick={() => setSelectedCategoryAction(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button>
+                <div className="mx-auto w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 mb-6 shadow-sm text-3xl">
+                    {renderIcon(selectedCategoryAction.icon, "w-10 h-10")}
+                </div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-8">{selectedCategoryAction.name}</h3>
+                
+                <div className="space-y-4">
+                    <button 
+                        onClick={() => {
+                            setSelectedCategoryAction(null);
+                            onNavigateToTransactions({ filterCategory: selectedCategoryAction.id });
+                        }}
+                        className="w-full flex items-center justify-center gap-3 p-4 bg-slate-50 text-slate-700 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"
+                    >
+                        <Search size={18}/> Ver Movimientos
+                    </button>
+                    <button 
+                        onClick={() => {
+                            setSelectedCategoryAction(null);
+                            onNavigateToTransactions({ action: 'NEW', categoryId: selectedCategoryAction.id });
+                        }}
+                        className="w-full flex items-center justify-center gap-3 p-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 transition-all shadow-xl"
+                    >
+                        <PlusCircle size={18}/> Entrada de Movimiento
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* Modales (Sin cambios estructurales, solo visuales para usar getAmountColor) */}
       {showBalanceDetail && (

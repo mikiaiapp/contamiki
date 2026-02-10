@@ -84,6 +84,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
          const fam = data.families.find(f => f.id === cat?.familyId);
          
          setFCat(initialSpecificFilters.categoryId);
+         // Auto-detectar tipo basado en la familia de la categoría
          if (fam) setFType(fam.type === 'INCOME' ? 'INCOME' : 'EXPENSE');
          
          setIsModalOpen(true);
@@ -117,7 +118,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     if (t) {
       setEditingTx(t);
       setFType(t.type);
-      setFAmount(t.amount.toString()); // Muestra el valor con su signo original
+      setFAmount(Math.abs(t.amount).toString()); // Al editar, mostramos valor absoluto para facilitar edición
       setFDesc(t.description);
       setFDate(t.date); 
       setFAcc(t.accountId);
@@ -132,17 +133,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
   const handleTypeChange = (newType: TransactionType) => {
       setFType(newType);
-      if (fAmount) {
-          const val = parseFloat(fAmount);
-          if (!isNaN(val)) {
-              // Si cambia a Gasto y es positivo, lo hacemos negativo (Gasto estándar)
-              if (newType === 'EXPENSE' && val > 0) setFAmount((-val).toString());
-              // Si cambia a Ingreso y es negativo, lo hacemos positivo (Ingreso estándar)
-              else if (newType === 'INCOME' && val < 0) setFAmount((-val).toString());
-              // Si cambia a Traspaso y es positivo, lo hacemos negativo (Salida estándar)
-              else if (newType === 'TRANSFER' && val > 0) setFAmount((-val).toString());
-          }
-      }
+      // No modificamos el valor del input al cambiar tipo, dejamos que handleSave gestione el signo
   };
 
   const handleSave = () => {
@@ -150,13 +141,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       alert("Faltan datos obligatorios."); return;
     }
     
-    // Guardamos el importe TAL CUAL lo ha escrito el usuario (con su signo).
-    // De esta forma permitimos:
-    // - Gastos normales (ej: -50)
-    // - Ingresos normales (ej: 1000)
-    // - Devoluciones de gastos (ej: +50 en categoría de Gasto)
-    // - Reintegros de ingresos (ej: -100 en categoría de Ingreso)
-    const rawAmount = parseFloat(fAmount);
+    // Gestión inteligente del signo:
+    // Si es Gasto o Traspaso -> Forzamos Negativo
+    // Si es Ingreso -> Forzamos Positivo
+    // Esto permite al usuario escribir "50" y que el sistema lo interprete correctamente según el contexto.
+    let rawAmount = parseFloat(fAmount);
+    rawAmount = Math.abs(rawAmount); // Primero obtenemos magnitud absoluta
+
+    if (fType === 'EXPENSE' || fType === 'TRANSFER') {
+        rawAmount = -rawAmount;
+    } 
     
     const finalTx: Transaction = {
       id: editingTx ? editingTx.id : generateId(),
@@ -216,8 +210,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       if (colFilterClip === 'YES' && !t.attachment) return false;
       if (colFilterClip === 'NO' && t.attachment) return false;
 
-      // Exit Filter
-      if (colFilterExit !== 'ALL' && t.accountId !== colFilterExit) return false;
+      // Exit Filter (Cuenta)
+      // Ajuste: Ahora permite que aparezcan transacciones donde la cuenta es ORIGEN (accountId) 
+      // O DESTINO (transferAccountId)
+      if (colFilterExit !== 'ALL') {
+         const isSource = t.accountId === colFilterExit;
+         const isDest = t.type === 'TRANSFER' && t.transferAccountId === colFilterExit;
+         if (!isSource && !isDest) return false;
+      }
 
       // Amount Filter
       if (colFilterAmountOp !== 'ALL') {
@@ -617,12 +617,15 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe Bruto</label>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Importe (Sin signo)</label>
                           <div className="relative">
                             <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 font-bold">€</span>
-                            <input type="number" step="0.01" className="w-full pl-12 pr-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-3xl font-black outline-none focus:border-indigo-500 transition-all shadow-inner" value={fAmount} onChange={e => setFAmount(e.target.value)} />
+                            <span className={`absolute left-10 top-1/2 -translate-y-1/2 font-black text-xl ${(fType === 'EXPENSE' || fType === 'TRANSFER') ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                {(fType === 'EXPENSE' || fType === 'TRANSFER') ? '-' : '+'}
+                            </span>
+                            <input type="number" step="0.01" className="w-full pl-14 pr-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-3xl font-black outline-none focus:border-indigo-500 transition-all shadow-inner" value={fAmount} onChange={e => setFAmount(e.target.value)} />
                           </div>
-                          <p className="text-[9px] text-slate-400 italic ml-2">Gastos negativos (-), Ingresos positivos (+).</p>
+                          <p className="text-[9px] text-slate-400 italic ml-2">El signo se asignará automáticamente según el tipo.</p>
                         </div>
                         <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha Operación</label>

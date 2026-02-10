@@ -252,8 +252,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           let tDst = localAccs.find(a => a.name.toLowerCase() === parts[2].toLowerCase());
           if (!tDst) { tDst = { id: generateId(), name: parts[2], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: 'g1' }; localAccs.push(tDst); txReport.newAccounts.push(parts[2]); }
           
+          // IMPORTANTE: En la lógica de la app, el importe de un traspaso se guarda en NEGATIVO
+          // para representar la SALIDA de la cuenta origen (accountId).
+          // El Dashboard automáticamente lo invierte (resta el negativo = suma) para la cuenta destino (transferAccountId).
+          const finalTransferAmount = -Math.abs(tAmount);
+
           localTxs.push({ 
-            id: generateId(), date: tFec, description: parts[3], amount: tAmount, 
+            id: generateId(), date: tFec, description: parts[3], 
+            amount: finalTransferAmount, 
             type: 'TRANSFER', accountId: tSrc.id, transferAccountId: tDst.id, familyId: '', categoryId: '' 
           });
           txReport.added++;
