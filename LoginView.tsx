@@ -49,19 +49,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 <div className="bg-slate-950 p-10 sm:p-12 text-center relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-full bg-indigo-600/10 mix-blend-overlay"></div>
                     <div className="relative z-10">
-                        {/* Contenedor del Logo Mejorado - MUCHO MÁS GRANDE */}
-                        <div className="bg-white p-6 rounded-[2rem] shadow-2xl shadow-indigo-500/30 inline-block mb-6 hover:scale-105 transition-transform duration-500 border-4 border-white/50 relative z-20">
-                            <img 
-                                src="/logo.png" 
-                                alt="ContaMiki" 
-                                className="h-40 w-auto object-contain"
-                                onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                    e.currentTarget.parentElement!.innerHTML = '<span class="text-3xl font-black text-slate-800">ContaMiki</span>';
-                                }}
-                            />
+                        <div className="mx-auto bg-indigo-600 w-20 h-20 rounded-3xl flex items-center justify-center mb-6 shadow-2xl shadow-indigo-600/30 rotate-3">
+                            <Wallet className="text-white" size={36} />
                         </div>
-                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em] mt-2">Soberanía Financiera</p>
+                        <h1 className="text-3xl font-black text-white tracking-tighter">ContaMiki</h1>
+                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em] mt-3">Soberanía Financiera</p>
                     </div>
                 </div>
                 
@@ -158,7 +150,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     </button>
                     
                     <p className="text-center text-slate-300 text-[9px] font-bold uppercase tracking-widest mt-4">
-                        Sistema Seguro v1.3.1
+                        Sistema Seguro v1.3.0
                     </p>
                 </div>
             </div>

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer, ChevronsLeft, ChevronsRight, List, Heart, Star, Bot } from 'lucide-react';
+import { AppState, Transaction, TransactionType, GlobalFilter } from './types';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer, ChevronsLeft, ChevronsRight, List } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
@@ -14,7 +14,6 @@ interface TransactionViewProps {
   onUpdateFilter: (f: GlobalFilter) => void;
   initialSpecificFilters?: any;
   clearSpecificFilters?: () => void;
-  onNavigateToImport?: () => void;
 }
 
 type SortField = 'DATE' | 'DESCRIPTION' | 'AMOUNT' | 'ACCOUNT' | 'CATEGORY' | 'ATTACHMENT';
@@ -29,11 +28,9 @@ const numberFormatter = new Intl.NumberFormat('de-DE', {
   maximumFractionDigits: 2,
 });
 
-export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTransaction, onDeleteTransaction, onUpdateTransaction, filter, onUpdateFilter, initialSpecificFilters, clearSpecificFilters, onNavigateToImport }) => {
+export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTransaction, onDeleteTransaction, onUpdateTransaction, filter, onUpdateFilter, initialSpecificFilters, clearSpecificFilters }) => {
   // Editor State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [showFavoritesModal, setShowFavoritesModal] = useState(false);
-  
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [fType, setFType] = useState<TransactionType>('EXPENSE');
   const [fAmount, setFAmount] = useState('');
@@ -166,23 +163,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setIsModalOpen(true);
   };
 
-  // Lógica para cargar un favorito
-  const handleSelectFavorite = (fav: FavoriteMovement) => {
-      setEditingTx(null); // Es una nueva transacción basada en plantilla
-      setFType(fav.type);
-      setFAmount(Math.abs(fav.amount).toString()); // Usamos valor absoluto para el input
-      setFDesc(fav.description);
-      setFAcc(fav.accountId);
-      setFCat(fav.categoryId);
-      setFTransferDest(fav.transferAccountId || '');
-      // FECHA: Siempre hoy
-      setFDate(new Date().toISOString().split('T')[0]);
-      setFAttachment(undefined);
-
-      setShowFavoritesModal(false);
-      setIsModalOpen(true);
-  };
-
   const handleTypeChange = (newType: TransactionType) => {
       setFType(newType);
       // No modificamos el valor del input al cambiar tipo, dejamos que handleSave gestione el signo
@@ -206,7 +186,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     const cat = indices.cat.get(fCat);
     const finalTx: Transaction = {
       id: editingTx ? editingTx.id : generateId(),
-      ledgerId: editingTx ? editingTx.ledgerId : (data.activeLedgerId || 'l1'),
       date: fDate,
       amount: rawAmount,
       description: fDesc,
@@ -463,19 +442,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                     )}
                 </div>
 
-                <div className="flex gap-2 sm:ml-4">
-                  {onNavigateToImport && (
-                    <button onClick={onNavigateToImport} className="bg-white border border-slate-200 text-slate-500 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm hover:text-indigo-600 hover:border-indigo-200 transition-all flex items-center justify-center gap-2 active:scale-95 group">
-                      <Bot size={16} className="group-hover:animate-pulse" /> Importar
-                    </button>
-                  )}
-                  <button onClick={() => setShowFavoritesModal(true)} className="bg-white border border-slate-200 text-slate-500 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm hover:text-rose-500 hover:border-rose-200 transition-all flex items-center justify-center gap-2 active:scale-95">
-                    <Heart size={16} /> Favorito
-                  </button>
-                  <button onClick={() => openEditor()} className="bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 active:scale-95">
-                    <Plus size={16} /> Nuevo
-                  </button>
-                </div>
+                <button onClick={() => openEditor()} className="sm:ml-4 bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 active:scale-95">
+                  <Plus size={16} /> Nuevo
+                </button>
             </div>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -781,48 +750,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                   </div>
               </div>
           </div>
-      )}
-
-      {/* Modal Selección Favoritos */}
-      {showFavoritesModal && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
-            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-8 relative max-h-[85vh] overflow-y-auto custom-scrollbar border border-white/20">
-                <button onClick={() => setShowFavoritesModal(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
-                <div className="flex items-center gap-4 mb-8">
-                    <div className="bg-rose-100 p-4 rounded-3xl text-rose-500 shadow-xl shadow-rose-100/50"><Heart size={28} /></div>
-                    <div>
-                      <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">Favoritos</h3>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Plantillas rápidas</p>
-                    </div>
-                </div>
-                
-                <div className="grid gap-3">
-                    {(!data.favorites || data.favorites.length === 0) && (
-                        <div className="text-center py-12 text-slate-400 italic">
-                           <Star size={40} className="mx-auto mb-3 opacity-20"/>
-                           <p className="text-xs">No tienes favoritos configurados.</p>
-                           <p className="text-[10px] mt-1">Ve a Ajustes > Favoritos para crearlos.</p>
-                        </div>
-                    )}
-                    {data.favorites?.map(fav => (
-                        <button 
-                            key={fav.id}
-                            onClick={() => handleSelectFavorite(fav)}
-                            className="flex items-center gap-4 p-4 bg-slate-50 hover:bg-indigo-50 border border-slate-100 hover:border-indigo-200 rounded-3xl transition-all group text-left active:scale-[0.98]"
-                        >
-                            <div className="w-12 h-12 flex-shrink-0 bg-white rounded-2xl flex items-center justify-center border border-slate-200 group-hover:scale-110 transition-transform">{renderIcon(fav.icon || '⭐', "w-6 h-6")}</div>
-                            <div className="flex-1 min-w-0">
-                                <p className="font-black text-slate-800 uppercase text-xs truncate">{fav.name}</p>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{fav.description}</p>
-                            </div>
-                            <span className={`text-sm font-black ${getAmountColor(fav.amount)} whitespace-nowrap`}>
-                                {formatCurrency(fav.amount)}
-                            </span>
-                        </button>
-                    ))}
-                </div>
-            </div>
-        </div>
       )}
 
       {isModalOpen && (

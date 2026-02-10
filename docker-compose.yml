@@ -2,19 +2,25 @@ version: '3.8'
 
 services:
   contamiki:
-    container_name: contamiki
     build: .
+    container_name: contamiki
     restart: unless-stopped
     ports:
       - "4000:4000"
     environment:
       - NODE_ENV=production
       - PORT=4000
-      # Recuerda definir API_KEY y JWT_SECRET en la sección Environment variables de Portainer
       - API_KEY=${API_KEY}
-      - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-clave_secreta_por_defecto_123}
     volumes:
+      # Usamos un volumen nombrado para que Docker lo gestione automáticamente
       - contamiki_data:/app/data
+    networks:
+      - contamiki_network
 
 volumes:
   contamiki_data:
+
+networks:
+  contamiki_network:
+    driver: bridge
