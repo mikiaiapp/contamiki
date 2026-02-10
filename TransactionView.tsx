@@ -59,6 +59,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // --- OPTIMIZACIÓN: INDEXACIÓN ---
+  // Mapa de acceso rápido (O(1)) para evitar .find() en cada fila de la tabla
   const { accMap, catMap, famMap } = useMemo(() => {
     return {
       accMap: new Map(data.accounts.map(a => [a.id, a])),
@@ -362,17 +363,17 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 {/* Inputs de Filtro Personalizado añadidos */}
                 <div className="flex gap-2 items-center">
                     {filter.timeRange === 'CUSTOM' ? (
-                        <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in">
                             <input 
                                 type="date" 
-                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent"
+                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent cursor-pointer"
                                 value={filter.customStart}
                                 onChange={(e) => onUpdateFilter({...filter, customStart: e.target.value})}
                             />
                             <span className="text-slate-300 font-bold">-</span>
                             <input 
                                 type="date" 
-                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent"
+                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent cursor-pointer"
                                 value={filter.customEnd}
                                 onChange={(e) => onUpdateFilter({...filter, customEnd: e.target.value})}
                             />

@@ -25,9 +25,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   
   const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
 
-  // --- OPTIMIZACIÓN 1: INDEXACIÓN ---
-  // Convertimos los arrays en Mapas para acceso O(1) instantáneo.
-  // Esto evita hacer .find() miles de veces dentro de los bucles.
+  // --- OPTIMIZACIÓN 1: INDEXACIÓN (O(1) Access) ---
+  // Creamos mapas para evitar .find() dentro de los bucles intensivos
   const { accMap, famMap, catMap, grpMap } = useMemo(() => {
       return {
           accMap: new Map(accounts.map(a => [a.id, a])),
@@ -58,7 +57,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return recurrents.filter(r => r.active && r.nextDueDate <= today);
   }, [recurrents]);
 
-  // Cálculo de límites de fecha optimizado
+  // Cálculo de límites de fecha
   const dateBounds = useMemo(() => {
     const y = filter.referenceDate.getFullYear();
     const m = filter.referenceDate.getMonth();
@@ -81,61 +80,61 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return { startStr, endStr };
   }, [filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]);
 
-  // --- OPTIMIZACIÓN 2: SINGLE PASS LOOP (BUCLE ÚNICO) ---
-  // Calculamos Stats, Saldos y Flujos en una sola pasada sobre las transacciones.
+  // --- OPTIMIZACIÓN 2: SINGLE PASS LOOP (O(N)) ---
+  // Calculamos TODO (Saldos, KPIs y Flujos de Familias) en una sola pasada.
   const dashboardData = useMemo(() => {
     const accTotals = new Map<string, number>();
+    // Inicializar saldos con balance inicial
     accounts.forEach(a => accTotals.set(a.id, a.initialBalance));
 
-    let periodIncome = 0;
-    let periodExpense = 0;
-    
-    // Estructuras para agrupar flujos (Familias y Categorías)
-    // Map<FamilyID, { total: number, cats: Map<CatID, number> }>
+    // Estructuras para agrupar flujos
     const incomeFlow = new Map<string, { total: number, cats: Map<string, number> }>();
     const expenseFlow = new Map<string, { total: number, cats: Map<string, number> }>();
 
-    // Caché de fechas límite para comparar strings más rápido
+    let periodIncome = 0;
+    let periodExpense = 0;
+
     const start = dateBounds.startStr;
     const end = dateBounds.endStr;
     const isAllTime = filter.timeRange === 'ALL';
 
     // Iteramos transacciones UNA SOLA VEZ
     for (const t of transactions) {
-      // Normalización de importe (Traspaso/Gasto -> Negativo)
+      // Normalización de importe
       let effectiveAmount = t.amount;
+      // Gasto y Traspaso siempre restan en origen (negativo), Ingreso suma (positivo)
       if (t.type === 'TRANSFER' || t.type === 'EXPENSE') {
           effectiveAmount = -Math.abs(t.amount);
       } else {
           effectiveAmount = Math.abs(t.amount);
       }
 
-      // 1. Cálculo de Saldos (Histórico hasta el final del periodo seleccionado)
+      // 1. Cálculo de Saldos Históricos (Hasta el final del periodo seleccionado)
       if (t.date <= end) {
         const currentSrc = accTotals.get(t.accountId) || 0;
         accTotals.set(t.accountId, currentSrc + effectiveAmount);
 
         if (t.type === 'TRANSFER' && t.transferAccountId) {
             const currentDst = accTotals.get(t.transferAccountId) || 0;
+            // En destino suma (restar el negativo)
             accTotals.set(t.transferAccountId, currentDst - effectiveAmount);
         }
       }
 
-      // 2. Cálculo del Periodo (KPIs y Flujos)
+      // 2. Cálculo del Periodo Actual (KPIs y Familias)
       const inPeriod = isAllTime || (t.date >= start && t.date <= end);
       
       if (inPeriod && t.type !== 'TRANSFER') {
-          // KPIs Globales
-          if (t.type === 'INCOME') periodIncome += effectiveAmount;
-          else if (t.type === 'EXPENSE') periodExpense += effectiveAmount;
-
-          // Agrupación por Familias y Categorías
           const cat = catMap.get(t.categoryId);
-          // Si no hay familia en la tx, usamos la de la categoría, y si no, 'Sin Familia'
-          const familyId = t.familyId || cat?.familyId || 'unknown';
-          const fam = famMap.get(familyId); 
+          const familyId = t.familyId || cat?.familyId;
+          const fam = familyId ? famMap.get(familyId) : null;
           
           if (fam) {
+              // Sumamos al KPI global basado en la FAMILIA (para consistencia visual)
+              if (fam.type === 'INCOME') periodIncome += effectiveAmount;
+              else periodExpense += effectiveAmount;
+
+              // Agregamos al desglose visual
               const targetFlow = fam.type === 'INCOME' ? incomeFlow : expenseFlow;
               
               if (!targetFlow.has(fam.id)) {
@@ -149,13 +148,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                   famEntry.cats.set(cat.id, currentCatTotal + effectiveAmount);
               }
           } else {
-              // Manejo de huérfanos si es necesario, o basarse en t.type
-              // Por simplicidad, si no hay familia, se suma al KPI pero no al desglose visual
+             // Si no tiene familia (huérfano), lo sumamos al KPI general por tipo de transacción
+             // para que el "Ahorro del periodo" sea real, aunque no salga en los círculos de familias.
+             if (t.type === 'INCOME') periodIncome += effectiveAmount;
+             else periodExpense += effectiveAmount;
           }
       }
     }
 
-    // 3. Transformación final a estructuras de visualización (Arrays ordenados)
+    // Transformación a Arrays ordenados para renderizado
     const buildHierarchy = (flowMap: Map<string, { total: number, cats: Map<string, number> }>) => {
         return Array.from(flowMap.entries())
             .map(([famId, data]) => {
@@ -175,7 +176,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     categories: catsArray
                 };
             })
-            .filter(Boolean) // Eliminar nulos
+            .filter(Boolean)
             .sort((a, b) => Math.abs(b!.total) - Math.abs(a!.total)) as { family: Family, total: number, categories: {category: Category, total: number}[] }[];
     };
 
@@ -195,7 +196,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         }
     };
 
-  }, [transactions, accounts, dateBounds, filter.timeRange, isAllTime => filter.timeRange === 'ALL', accMap, famMap, catMap]); // Dependencias optimizadas
+  }, [transactions, accounts, dateBounds, filter.timeRange, accMap, famMap, catMap]);
 
   const groupedBalances = useMemo(() => {
     return accountGroups.map(group => {
@@ -297,20 +298,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     <button onClick={() => navigatePeriod('next')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={20} /></button>
                 </div>
                 
-                {/* Lógica de Filtro Personalizado añadida aquí */}
+                {/* Inputs de Filtro Personalizado */}
                 <div className="flex gap-2 items-center">
                     {filter.timeRange === 'CUSTOM' ? (
-                        <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in">
                             <input 
                                 type="date" 
-                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent"
+                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent cursor-pointer"
                                 value={filter.customStart}
                                 onChange={(e) => onUpdateFilter({...filter, customStart: e.target.value})}
                             />
                             <span className="text-slate-300 font-bold">-</span>
                             <input 
                                 type="date" 
-                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent"
+                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent cursor-pointer"
                                 value={filter.customEnd}
                                 onChange={(e) => onUpdateFilter({...filter, customEnd: e.target.value})}
                             />
