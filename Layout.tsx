@@ -1,7 +1,7 @@
 
-import React, { useMemo } from 'react';
-import { LayoutDashboard, Receipt, Settings, BrainCircuit, Wallet, LogOut } from 'lucide-react';
-import { View, AppState } from './types';
+import React, { useMemo, useState } from 'react';
+import { LayoutDashboard, Receipt, Settings, BrainCircuit, Wallet, LogOut, ChevronDown, Plus, Edit2, Check } from 'lucide-react';
+import { View, AppState, BookMetadata } from './types';
 import { logout } from './services/authService';
 
 interface LayoutProps {
@@ -9,13 +9,44 @@ interface LayoutProps {
   setCurrentView: (view: View) => void;
   children: React.ReactNode;
   data: AppState;
+  // Nuevas props para Multi-Contabilidad
+  books: BookMetadata[];
+  currentBook: BookMetadata;
+  onSwitchBook: (bookId: string) => void;
+  onCreateBook: () => void;
+  onEditBook: () => void;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data }) => {
+// Mapeo de colores a clases Tailwind
+const THEME_COLORS: Record<string, string> = {
+    BLACK: 'bg-slate-950',
+    BLUE: 'bg-blue-600',
+    ROSE: 'bg-rose-500',
+    EMERALD: 'bg-emerald-500',
+    AMBER: 'bg-amber-500',
+    VIOLET: 'bg-violet-600',
+};
+
+// Mapeo para bordes y acentos ligeros
+const THEME_ACCENTS: Record<string, string> = {
+    BLACK: 'text-slate-400 hover:bg-white/10',
+    BLUE: 'text-blue-200 hover:bg-white/10',
+    ROSE: 'text-rose-200 hover:bg-white/10',
+    EMERALD: 'text-emerald-200 hover:bg-white/10',
+    AMBER: 'text-amber-200 hover:bg-white/10',
+    VIOLET: 'text-violet-200 hover:bg-white/10',
+};
+
+export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook }) => {
+  const [isBookMenuOpen, setIsBookMenuOpen] = useState(false);
+
   const pendingRecurrentsCount = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return data.recurrents?.filter(r => r.active && r.nextDueDate <= today).length || 0;
   }, [data.recurrents]);
+
+  const bgClass = THEME_COLORS[currentBook.color] || THEME_COLORS.BLACK;
+  const accentClass = THEME_ACCENTS[currentBook.color] || THEME_ACCENTS.BLACK;
 
   const mainNavItems: { id: View; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'RESUMEN', label: 'Resumen', icon: <LayoutDashboard size={22} />, badge: pendingRecurrentsCount },
@@ -31,44 +62,101 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       onClick={() => setCurrentView(item.id)}
       className={`w-full flex items-center gap-4 px-6 py-4 rounded-[1.25rem] transition-all duration-300 group relative ${
         currentView === item.id
-          ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20 translate-x-1'
-          : 'text-slate-400 hover:bg-white/5 hover:text-white'
+          ? 'bg-white text-slate-900 shadow-xl translate-x-1 font-bold'
+          : `${accentClass} text-white/70 hover:text-white`
       } ${isMobile ? 'flex-col gap-1 p-3' : ''}`}
     >
-      <div className={currentView === item.id ? 'scale-110' : 'group-hover:scale-110 transition-transform'}>
+      <div className={currentView === item.id ? 'scale-110 text-indigo-600' : 'group-hover:scale-110 transition-transform'}>
         {item.icon}
       </div>
-      <span className={`font-bold uppercase tracking-[0.2em] ${isMobile ? 'text-[8px]' : 'text-[11px]'}`}>{item.label}</span>
+      <span className={`uppercase tracking-[0.2em] ${isMobile ? 'text-[8px]' : 'text-[11px]'} ${currentView === item.id ? 'font-black' : 'font-medium'}`}>{item.label}</span>
       
       {item.badge !== undefined && item.badge > 0 && (
-        <span className="absolute top-3 right-5 bg-rose-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-lg border-2 border-slate-950 animate-bounce">
+        <span className="absolute top-3 right-5 bg-rose-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-lg border-2 border-white animate-bounce">
           {item.badge}
         </span>
       )}
     </button>
   );
 
+  const BookSelector = () => (
+    <div className="relative z-[60]">
+        <button 
+            onClick={() => setIsBookMenuOpen(!isBookMenuOpen)}
+            className="flex items-center gap-3 px-3 py-2 rounded-2xl hover:bg-black/10 transition-all active:scale-95"
+        >
+            <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm">
+                <Wallet className="text-white" size={20} />
+            </div>
+            <div className="text-left hidden sm:block">
+                <span className="block text-[10px] uppercase tracking-widest text-white/60">Contabilidad</span>
+                <span className="block text-sm font-black text-white leading-none tracking-tight">{currentBook.name}</span>
+            </div>
+            <ChevronDown size={16} className={`text-white/60 transition-transform ${isBookMenuOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {isBookMenuOpen && (
+            <>
+                <div className="fixed inset-0 z-10" onClick={() => setIsBookMenuOpen(false)}></div>
+                <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-20 animate-in fade-in slide-in-from-top-2">
+                    <div className="p-2 space-y-1">
+                        <div className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Mis Libros</div>
+                        {books.map(book => (
+                            <button 
+                                key={book.id}
+                                onClick={() => { onSwitchBook(book.id); setIsBookMenuOpen(false); }}
+                                className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all ${book.id === currentBook.id ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-3 h-3 rounded-full ${THEME_COLORS[book.color].replace('bg-', 'bg-')}`}></div>
+                                    <span className="text-xs font-bold">{book.name}</span>
+                                </div>
+                                {book.id === currentBook.id && <Check size={14} />}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="bg-slate-50 p-2 border-t border-slate-100 flex gap-1">
+                        <button 
+                            onClick={() => { onCreateBook(); setIsBookMenuOpen(false); }}
+                            className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-all"
+                        >
+                            <Plus size={14} /> Crear
+                        </button>
+                        <button 
+                            onClick={() => { onEditBook(); setIsBookMenuOpen(false); }}
+                            className="px-3 py-3 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-indigo-600 hover:border-indigo-300 transition-all"
+                            title="Editar libro actual"
+                        >
+                            <Edit2 size={14} />
+                        </button>
+                    </div>
+                </div>
+            </>
+        )}
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 flex-col lg:flex-row overflow-hidden font-sans">
-      <aside className="hidden lg:flex w-72 xl:w-80 bg-slate-950 text-white flex-col shadow-2xl z-50">
-        <div className="p-10 flex items-center gap-4">
-          <div className="bg-indigo-600 p-2.5 rounded-2xl shadow-lg shadow-indigo-500/20">
-            <Wallet className="text-white" size={28} />
-          </div>
-          <h1 className="text-2xl font-black tracking-tighter">ContaMiki</h1>
+      {/* SIDEBAR DESKTOP */}
+      <aside className={`hidden lg:flex w-72 xl:w-80 ${bgClass} text-white flex-col shadow-2xl z-50 transition-colors duration-500`}>
+        <div className="p-8 pb-4">
+            <BookSelector />
         </div>
         
+        <div className="h-px bg-white/10 mx-6 mb-6" />
+
         <nav className="flex-1 px-6 space-y-2">
           {mainNavItems.map((item) => renderNavItem(item))}
         </nav>
 
-        <div className="px-6 pb-4 space-y-2">
-          <div className="h-px bg-white/5 mx-4 mb-4" />
+        <div className="px-6 pb-6 space-y-2">
+          <div className="h-px bg-white/10 mx-4 mb-4" />
           {renderNavItem(aiNavItem)}
           
           <button 
               onClick={logout}
-              className="w-full flex items-center gap-4 px-6 py-4 rounded-[1.25rem] text-rose-400 hover:bg-rose-500/10 transition-all font-black text-[10px] uppercase tracking-widest group"
+              className="w-full flex items-center gap-4 px-6 py-4 rounded-[1.25rem] text-white/50 hover:bg-white/10 hover:text-white transition-all font-black text-[10px] uppercase tracking-widest group"
           >
               <div className="group-hover:rotate-12 transition-transform">
                 <LogOut size={20} />
@@ -78,24 +166,22 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         </div>
       </aside>
 
-      <header className="lg:hidden bg-slate-950 text-white px-6 py-4 flex justify-between items-center shadow-xl z-50">
-        <div className="flex items-center gap-3">
-          <div className="bg-indigo-600 p-2 rounded-xl">
-            <Wallet size={20} />
-          </div>
-          <span className="font-black text-lg tracking-tighter uppercase">ContaMiki</span>
-        </div>
-        <button onClick={logout} className="bg-rose-500/10 text-rose-400 p-2 rounded-xl border border-rose-500/20">
+      {/* HEADER MOBILE */}
+      <header className={`lg:hidden ${bgClass} text-white px-6 py-4 flex justify-between items-center shadow-xl z-50 transition-colors duration-500`}>
+        <BookSelector />
+        <button onClick={logout} className="bg-white/10 text-white/70 p-2 rounded-xl border border-white/10">
           <LogOut size={18} />
         </button>
       </header>
 
+      {/* CONTENIDO PRINCIPAL */}
       <main className="flex-1 overflow-y-auto relative bg-slate-50 custom-scrollbar">
         <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-8 md:px-12 py-8 md:py-12 lg:py-16 pb-36 lg:pb-16">
           {children}
         </div>
       </main>
 
+      {/* NAVBAR MOBILE BOTTOM */}
       <nav className="lg:hidden fixed bottom-6 left-4 right-4 bg-slate-900/95 backdrop-blur-xl border border-white/10 flex justify-around items-center p-2 z-50 rounded-[2.5rem] shadow-2xl">
         {mainNavItems.map((item) => (
           <button

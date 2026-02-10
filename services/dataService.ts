@@ -1,5 +1,5 @@
 
-import { AppState, Account, Family, Category, AccountGroup } from "../types";
+import { AppState, Account, Family, Category, AccountGroup, MultiBookState, BookMetadata } from "../types";
 import { getToken, getUsername } from "./authService";
 
 const DATA_KEY_PREFIX = 'contamiki_data_';
@@ -35,18 +35,53 @@ const defaultAccounts: Account[] = [
   { id: 'a2', groupId: 'g2', name: 'Cartera / Efectivo', initialBalance: 150, currency: 'EUR', icon: '👛' },
 ];
 
-const defaultState: AppState = {
+export const defaultAppState: AppState = {
     accountGroups: defaultAccountGroups,
     accounts: defaultAccounts,
     families: defaultFamilies,
     categories: defaultCategories,
     transactions: [],
+    recurrents: [],
+    favorites: []
 };
 
-export const loadData = async (): Promise<AppState> => {
+const createInitialMultiBookState = (initialData?: AppState): MultiBookState => {
+    const defaultBookId = 'default_book_1';
+    return {
+        booksMetadata: [
+            { id: defaultBookId, name: 'Mi Contabilidad', color: 'BLACK', currency: 'EUR' }
+        ],
+        currentBookId: defaultBookId,
+        booksData: {
+            [defaultBookId]: initialData || defaultAppState
+        }
+    };
+};
+
+// Helper para asegurar que un AppState tenga todas las propiedades necesarias
+const sanitizeAppState = (data: any): AppState => {
+    if (!data) return defaultAppState;
+    const sanitized = { ...data };
+    if (!sanitized.accountGroups) sanitized.accountGroups = defaultAccountGroups;
+    if (!sanitized.accounts) sanitized.accounts = defaultAccounts;
+    // Asegurar grupos en cuentas antiguas
+    sanitized.accounts = sanitized.accounts.map((a: Account) => ({ ...a, groupId: a.groupId || 'g1' }));
+    
+    if (!sanitized.families) sanitized.families = defaultFamilies;
+    if (!sanitized.categories) sanitized.categories = defaultCategories;
+    if (!sanitized.transactions) sanitized.transactions = [];
+    if (!sanitized.recurrents) sanitized.recurrents = [];
+    if (!sanitized.favorites) sanitized.favorites = [];
+    
+    return sanitized;
+};
+
+export const loadData = async (): Promise<MultiBookState> => {
   const token = getToken();
   const username = getUsername();
   if (!token) throw new Error("No hay token de sesión (401)");
+
+  let rawData: any = null;
 
   try {
       const response = await fetch('/api/data', {
@@ -58,37 +93,32 @@ export const loadData = async (): Promise<AppState> => {
       }
 
       if (response.ok) {
-          const data = await response.json();
-          if (!data || Object.keys(data).length === 0 || !data.families) {
-              return defaultState;
-          }
-          // Asegurar que existan grupos de cuenta si vienen de una versión anterior
-          if (!data.accountGroups) {
-              data.accountGroups = defaultAccountGroups;
-              // Asignar grupo por defecto si no tienen
-              data.accounts = data.accounts.map((a: Account) => ({ ...a, groupId: a.groupId || 'g1' }));
-          }
-          return data;
+          rawData = await response.json();
+      } else {
+          throw new Error("SERVER_UNAVAILABLE");
       }
-      
-      // Si el servidor devuelve error pero no es de autenticación, usamos local
-      throw new Error("SERVER_UNAVAILABLE");
   } catch (err) {
-      // Carga desde localStorage si el servidor falla o no existe
-      const localData = localStorage.getItem(DATA_KEY_PREFIX + username);
-      if (localData) {
-          const parsed = JSON.parse(localData);
-          if (!parsed.accountGroups) {
-              parsed.accountGroups = defaultAccountGroups;
-              parsed.accounts = parsed.accounts.map((a: Account) => ({ ...a, groupId: a.groupId || 'g1' }));
-          }
-          return parsed;
-      }
-      return defaultState;
+      // Fallback a localStorage
+      const local = localStorage.getItem(DATA_KEY_PREFIX + username);
+      if (local) rawData = JSON.parse(local);
   }
+
+  // --- Lógica de Migración ---
+  if (!rawData || Object.keys(rawData).length === 0) {
+      return createInitialMultiBookState();
+  }
+
+  // Detectar si es el formato nuevo (tiene booksMetadata)
+  if (rawData.booksMetadata && Array.isArray(rawData.booksMetadata)) {
+      return rawData as MultiBookState;
+  } 
+  
+  // Es formato antiguo (AppState plano), lo migramos
+  console.log("Migrando datos antiguos a estructura Multi-Libro...");
+  return createInitialMultiBookState(sanitizeAppState(rawData));
 };
 
-export const saveData = async (state: AppState) => {
+export const saveData = async (state: MultiBookState) => {
   const token = getToken();
   const username = getUsername();
   if (!token || !username) return;
@@ -106,7 +136,7 @@ export const saveData = async (state: AppState) => {
       
       if (!response.ok) throw new Error("Server error");
   } catch (e) {
-      // Guardar siempre en local como respaldo o si no hay servidor
+      // Guardar siempre en local como respaldo
       localStorage.setItem(DATA_KEY_PREFIX + username, JSON.stringify(state));
   }
 };

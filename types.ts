@@ -85,6 +85,22 @@ export interface AppState {
   favorites?: FavoriteMovement[];
 }
 
+// NUEVAS INTERFACES PARA MULTI-CONTABILIDAD
+export type BookColor = 'BLACK' | 'BLUE' | 'ROSE' | 'EMERALD' | 'AMBER' | 'VIOLET';
+
+export interface BookMetadata {
+  id: string;
+  name: string;
+  color: BookColor;
+  currency: string;
+}
+
+export interface MultiBookState {
+  booksMetadata: BookMetadata[];
+  currentBookId: string;
+  booksData: Record<string, AppState>; // Mapa: bookId -> Datos
+}
+
 export interface ImportReport {
   added: number;
   newAccounts: string[];

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { AppState, Transaction, TransactionType, GlobalFilter } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer } from 'lucide-react';
+import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement } from './types';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer, ChevronsLeft, ChevronsRight, ListFilter, Heart, Star } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
@@ -42,6 +42,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [fAttachment, setFAttachment] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Favorites State
+  const [showFavoritesMenu, setShowFavoritesMenu] = useState(false);
+
   // Filters State
   const [colFilterEntry, setColFilterEntry] = useState('ALL');
   const [colFilterDesc, setColFilterDesc] = useState('');
@@ -53,10 +56,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [colFilterAmountVal1, setColFilterAmountVal1] = useState('');
   const [colFilterAmountVal2, setColFilterAmountVal2] = useState('');
 
-  // Sorting
+  // Sorting & Pagination
   const [sortField, setSortField] = useState<SortField>('DATE');
   const [sortDirection, setSortDirection] = useState<SortDirection>('DESC');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   // --- CAPA 1: ÍNDICES (Memoized) ---
   const indices = useMemo(() => {
@@ -114,6 +120,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     }
   }, [initialSpecificFilters, indices]);
 
+  // RESET PAGE ON FILTER CHANGE
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2, sortField, sortDirection]);
+
   const resetForm = () => {
     setEditingTx(null);
     setFType('EXPENSE');
@@ -125,6 +136,20 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setFCat('');
     setFTransferDest('');
     setFAttachment(undefined);
+  };
+
+  const loadFavorite = (fav: FavoriteMovement) => {
+    resetForm();
+    setFType(fav.type);
+    setFAmount(Math.abs(fav.amount).toString());
+    setFDesc(fav.description);
+    // Mantenemos la fecha de hoy que pone resetForm() por defecto
+    setFAcc(fav.accountId);
+    setFCat(fav.categoryId);
+    if(fav.transferAccountId) setFTransferDest(fav.transferAccountId);
+    
+    setShowFavoritesMenu(false);
+    setIsModalOpen(true);
   };
 
   const openEditor = (t?: Transaction) => {
@@ -172,7 +197,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   };
 
   // --- CAPA 3: FILTRADO ---
-  // Separamos el filtrado de la ordenación para no re-filtrar si solo cambia el orden
   const filteredList = useMemo(() => {
     const y = filter.referenceDate.getFullYear();
     const m = filter.referenceDate.getMonth();
@@ -262,6 +286,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       return 0;
     });
   }, [filteredList, sortField, sortDirection, indices]);
+
+  // --- CAPA 5: PAGINACIÓN ---
+  const totalItems = sortedTransactions.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  
+  const paginatedTransactions = useMemo(() => {
+    if (itemsPerPage === -1) return sortedTransactions;
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return sortedTransactions.slice(startIndex, startIndex + itemsPerPage);
+  }, [sortedTransactions, currentPage, itemsPerPage]);
 
   const handleSort = (field: SortField) => {
       if (sortField === field) setSortDirection(sortDirection === 'ASC' ? 'DESC' : 'ASC');
@@ -384,9 +418,44 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                     )}
                 </div>
 
-                <button onClick={() => openEditor()} className="sm:ml-4 bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 active:scale-95">
-                  <Plus size={16} /> Nuevo
-                </button>
+                <div className="flex gap-2 sm:ml-4 relative">
+                    <div className="relative">
+                        <button onClick={() => setShowFavoritesMenu(!showFavoritesMenu)} className="bg-white text-indigo-600 border border-slate-200 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2 active:scale-95 h-full">
+                            <Heart size={16} className={showFavoritesMenu ? 'fill-indigo-600' : ''} /> <span className="hidden sm:inline">Favoritos</span>
+                        </button>
+                        
+                        {showFavoritesMenu && (
+                            <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 z-50 animate-in fade-in slide-in-from-top-2 max-h-80 overflow-y-auto custom-scrollbar">
+                                {data.favorites && data.favorites.length > 0 ? (
+                                    data.favorites.map(fav => (
+                                        <button 
+                                            key={fav.id}
+                                            onClick={() => loadFavorite(fav)}
+                                            className="w-full text-left p-3 hover:bg-slate-50 rounded-xl flex items-center gap-3 transition-colors group"
+                                        >
+                                            <div className="w-8 h-8 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-lg group-hover:scale-110 transition-transform">
+                                                {renderIcon(fav.icon || '⭐', "w-5 h-5")}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-[10px] font-black uppercase text-slate-800 truncate">{fav.name}</p>
+                                                <p className="text-[9px] text-slate-400 truncate">{formatCurrency(fav.amount)}</p>
+                                            </div>
+                                        </button>
+                                    ))
+                                ) : (
+                                    <div className="p-4 text-center text-slate-400 text-[10px]">
+                                        <p>No tienes favoritos configurados.</p>
+                                        <p className="text-[9px] mt-1">Ve a Ajustes {'>'} Favoritos para crearlos.</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <button onClick={() => openEditor()} className="bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 active:scale-95">
+                      <Plus size={16} /> Nuevo
+                    </button>
+                </div>
             </div>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -511,7 +580,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             </div>
           </div>
 
-          {sortedTransactions.map(t => {
+          {paginatedTransactions.map(t => {
               const srcAcc = indices.acc.get(t.accountId);
               const dstAcc = t.transferAccountId ? indices.acc.get(t.transferAccountId) : null;
               const cat = indices.cat.get(t.categoryId);
@@ -626,6 +695,39 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 </div>
                 <button onClick={clearAllFilters} className="px-6 py-3 bg-indigo-50 text-indigo-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all">Limpiar filtros</button>
             </div>
+          )}
+
+          {/* CONTROL DE PAGINACIÓN */}
+          {sortedTransactions.length > 0 && (
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8 pt-6 border-t border-slate-200 px-4 print:hidden">
+                  <div className="flex items-center gap-3 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                        {[25, 50, 100, -1].map(limit => (
+                            <button 
+                                key={limit} 
+                                onClick={() => { setItemsPerPage(limit); setCurrentPage(1); }}
+                                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${itemsPerPage === limit ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+                            >
+                                {limit === -1 ? 'Todo' : limit}
+                            </button>
+                        ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                      <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-indigo-50 hover:text-indigo-600 transition-all"><ChevronsLeft size={16}/></button>
+                      <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-indigo-50 hover:text-indigo-600 transition-all"><ChevronLeft size={16}/></button>
+                      
+                      <div className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-slate-600 tracking-widest min-w-[100px] text-center">
+                          {itemsPerPage === -1 ? 'Vista Completa' : `Pág ${currentPage} / ${totalPages}`}
+                      </div>
+
+                      <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || itemsPerPage === -1} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-indigo-50 hover:text-indigo-600 transition-all"><ChevronRight size={16}/></button>
+                      <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages || itemsPerPage === -1} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-indigo-50 hover:text-indigo-600 transition-all"><ChevronsRight size={16}/></button>
+                  </div>
+
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:block">
+                      {totalItems} Registros
+                  </div>
+              </div>
           )}
       </div>
 
