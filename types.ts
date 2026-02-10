@@ -108,7 +108,7 @@ export interface ImportReport {
   errors: { fila: number; error: string }[];
 }
 
-export type View = 'RESUMEN' | 'TRANSACTIONS' | 'SETTINGS' | 'AI_INSIGHTS';
+export type View = 'RESUMEN' | 'TRANSACTIONS' | 'SETTINGS';
 
 export type TimeRange = 'ALL' | 'MONTH' | 'YEAR' | 'CUSTOM';
 
