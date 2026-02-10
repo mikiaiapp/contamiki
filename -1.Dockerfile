@@ -29,5 +29,3 @@ ENV PORT=4000
 
 # Comando de inicio
 CMD ["npm", "start"]
-
-CMD ["npm", "start"]
