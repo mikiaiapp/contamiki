@@ -10,13 +10,15 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4000
-      # Pasa tu API KEY de Google aquí
-      - API_KEY=${API_KEY}
-      # Secreto para tokens (opcional, tiene valor por defecto)
-      - JWT_SECRET=${JWT_SECRET:-clave_secreta_por_defecto_123}
+      # Es vital pasar la API Key para que funcionen las características de IA (Gemini)
+      # Asegúrate de tener exportada la variable en tu terminal o en un archivo .env
+      - API_KEY=AIzaSyByt2qp5UYhL-bhf1me82AM81PEJ7MJyYE
+      # Clave secreta para las sesiones (Cámbiala por seguridad)
+      - JWT_SECRET=nasMAJU1505
     volumes:
-      # Volumen persistente para no perder los datos al reiniciar
-      - contamiki_data:/app/data
+      # Persistencia de la carpeta /data donde se guardan los JSON de usuarios
+      # Esto evita que pierdas los datos al reiniciar el contenedor
+      - /volume1/docker/contamiki/data:/app/data
 
 volumes:
   contamiki_data:
