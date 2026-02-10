@@ -12,13 +12,12 @@ services:
       - PORT=4000
       # Es vital pasar la API Key para que funcionen las características de IA (Gemini)
       # Asegúrate de tener exportada la variable en tu terminal o en un archivo .env
-      - API_KEY=AIzaSyByt2qp5UYhL-bhf1me82AM81PEJ7MJyYE
-      # Clave secreta para las sesiones (Cámbiala por seguridad)
-      - JWT_SECRET=nasMAJU1505
+      - API_KEY=${API_KEY}
+      # Secreto para firmar tokens JWT
+      - JWT_SECRET=${JWT_SECRET:-clave_secreta_por_defecto_123}
     volumes:
       # Persistencia de la carpeta /data donde se guardan los JSON de usuarios
-      # Esto evita que pierdas los datos al reiniciar el contenedor
-      - /volume1/docker/contamiki/data:/app/data
+      - contamiki_data:/app/data
 
 volumes:
   contamiki_data:

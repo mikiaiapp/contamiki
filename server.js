@@ -1,4 +1,3 @@
-
 import express from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -16,7 +15,8 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_master_key_conta_miki';
 
 // Middleware
-app.use(express.json({ limit: '10mb' }));
+// AUMENTADO A 50mb para permitir logos e imágenes en Base64
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static(__dirname));
 
 // Initialize System Files
