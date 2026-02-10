@@ -2,14 +2,24 @@
 export type TransactionType = 'EXPENSE' | 'INCOME' | 'TRANSFER';
 export type RecurrenceFrequency = 'DAYS' | 'WEEKS' | 'MONTHLY' | 'YEARS';
 
+export interface Ledger {
+  id: string;
+  name: string;
+  color: string; // Hex color code or Tailwind class representative
+  currency: string;
+  createdAt: string;
+}
+
 export interface AccountGroup {
   id: string;
+  ledgerId: string;
   name: string;
   icon: string;
 }
 
 export interface Account {
   id: string;
+  ledgerId: string;
   name: string;
   initialBalance: number;
   currency: string;
@@ -19,6 +29,7 @@ export interface Account {
 
 export interface Family {
   id: string;
+  ledgerId: string;
   name: string;
   type: 'EXPENSE' | 'INCOME'; 
   icon: string;
@@ -26,6 +37,7 @@ export interface Family {
 
 export interface Category {
   id: string;
+  ledgerId: string;
   name: string;
   familyId: string;
   icon: string;
@@ -33,6 +45,7 @@ export interface Category {
 
 export interface Transaction {
   id: string;
+  ledgerId: string;
   date: string;
   amount: number;
   description: string;
@@ -48,6 +61,7 @@ export interface Transaction {
 
 export interface RecurrentMovement {
   id: string;
+  ledgerId: string;
   description: string;
   amount: number;
   type: TransactionType;
@@ -64,6 +78,7 @@ export interface RecurrentMovement {
 
 export interface FavoriteMovement {
   id: string;
+  ledgerId: string;
   name: string;
   description: string;
   amount: number;
@@ -76,6 +91,9 @@ export interface FavoriteMovement {
 }
 
 export interface AppState {
+  ledgers?: Ledger[]; // Optional for backward compatibility init
+  activeLedgerId?: string;
+  
   accountGroups: AccountGroup[];
   accounts: Account[];
   families: Family[];

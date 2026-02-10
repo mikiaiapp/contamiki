@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar, Database, List, RefreshCw, X } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import * as XLSX from 'xlsx';
 
@@ -25,11 +25,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [structureReport, setStructureReport] = useState<{ added: number, type: string } | null>(null);
   const [massDeleteYear, setMassDeleteYear] = useState('');
+  const [showExportModal, setShowExportModal] = useState(false);
   
   const [webLogos, setWebLogos] = useState<{url: string, source: string}[]>([]);
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
   const iconUploadRef = useRef<HTMLInputElement>(null);
 
   // Form States
@@ -126,6 +128,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     }
     const newRec: RecurrentMovement = {
       id: recId || generateId(),
+      ledgerId: data.activeLedgerId || 'l1',
       description: recDesc,
       amount: parseFloat(recAmount), // Guardamos con signo
       type: recType,
@@ -154,6 +157,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     }
     const newFav: FavoriteMovement = {
       id: favId || generateId(),
+      ledgerId: data.activeLedgerId || 'l1',
       name: favName,
       description: favDesc,
       amount: parseFloat(favAmount), // Guardamos con signo
@@ -193,28 +197,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
       switch (importType) {
         case 'GROUPS':
           if (!localGroups.find(g => g.name.toLowerCase() === parts[0].toLowerCase())) {
-            localGroups.push({ id: generateId(), name: parts[0], icon: parts[1] || '🗂️' });
+            localGroups.push({ id: generateId(), ledgerId: data.activeLedgerId || 'l1', name: parts[0], icon: parts[1] || '🗂️' });
             addedCount++;
           }
           break;
         case 'ACCOUNTS':
           const accGrp = localGroups.find(g => g.name.toLowerCase() === parts[1]?.toLowerCase()) || localGroups[0];
           if (!localAccs.find(a => a.name.toLowerCase() === parts[0].toLowerCase())) {
-            localAccs.push({ id: generateId(), name: parts[0], initialBalance: parseFloat(parts[2]) || 0, currency: 'EUR', icon: parts[3] || '🏦', groupId: accGrp?.id || 'g1' });
+            localAccs.push({ id: generateId(), ledgerId: data.activeLedgerId || 'l1', name: parts[0], initialBalance: parseFloat(parts[2]) || 0, currency: 'EUR', icon: parts[3] || '🏦', groupId: accGrp?.id || 'g1' });
             addedCount++;
           }
           break;
         case 'FAMILIES':
           const fType = parts[1]?.toUpperCase() === 'INCOME' ? 'INCOME' : 'EXPENSE';
           if (!localFamilies.find(f => f.name.toLowerCase() === parts[0].toLowerCase())) {
-            localFamilies.push({ id: generateId(), name: parts[0], type: fType, icon: parts[2] || '📂' });
+            localFamilies.push({ id: generateId(), ledgerId: data.activeLedgerId || 'l1', name: parts[0], type: fType, icon: parts[2] || '📂' });
             addedCount++;
           }
           break;
         case 'CATEGORIES':
           const fParent = localFamilies.find(f => f.name.toLowerCase() === parts[1]?.toLowerCase()) || localFamilies[0];
           if (!localCategories.find(c => c.name.toLowerCase() === parts[0].toLowerCase())) {
-            localCategories.push({ id: generateId(), name: parts[0], familyId: fParent?.id || 'f1', icon: parts[2] || '🏷️' });
+            localCategories.push({ id: generateId(), ledgerId: data.activeLedgerId || 'l1', name: parts[0], familyId: fParent?.id || 'f1', icon: parts[2] || '🏷️' });
             addedCount++;
           }
           break;
@@ -225,18 +229,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
           let txAcc = localAccs.find(a => a.name.toLowerCase() === parts[2].toLowerCase());
           if (!txAcc) {
-            txAcc = { id: generateId(), name: parts[2], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: localGroups[0]?.id || 'g1' };
+            txAcc = { id: generateId(), ledgerId: data.activeLedgerId || 'l1', name: parts[2], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: localGroups[0]?.id || 'g1' };
             localAccs.push(txAcc); txReport.newAccounts.push(parts[2]);
           }
           let txCat = localCategories.find(c => c.name.toLowerCase() === parts[1].toLowerCase());
           if (!txCat) {
-            txCat = { id: generateId(), name: parts[1], familyId: localFamilies[0]?.id || 'f1', icon: '🏷️' };
+            txCat = { id: generateId(), ledgerId: data.activeLedgerId || 'l1', name: parts[1], familyId: localFamilies[0]?.id || 'f1', icon: '🏷️' };
             localCategories.push(txCat); txReport.newCategories.push(parts[1]);
           }
           // Guardamos amountVal con su signo original.
           // Inferimos tipo: Negativo -> EXPENSE, Positivo -> INCOME
           localTxs.push({ 
-            id: generateId(), date: fec, description: parts[3], amount: amountVal, 
+            id: generateId(), ledgerId: data.activeLedgerId || 'l1', date: fec, description: parts[3], amount: amountVal, 
             type: amountVal < 0 ? 'EXPENSE' : 'INCOME', accountId: txAcc.id, 
             categoryId: txCat.id, familyId: txCat.familyId 
           });
@@ -248,9 +252,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           if (isNaN(tAmount)) return;
 
           let tSrc = localAccs.find(a => a.name.toLowerCase() === parts[1].toLowerCase());
-          if (!tSrc) { tSrc = { id: generateId(), name: parts[1], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: 'g1' }; localAccs.push(tSrc); txReport.newAccounts.push(parts[1]); }
+          if (!tSrc) { tSrc = { id: generateId(), ledgerId: data.activeLedgerId || 'l1', name: parts[1], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: 'g1' }; localAccs.push(tSrc); txReport.newAccounts.push(parts[1]); }
           let tDst = localAccs.find(a => a.name.toLowerCase() === parts[2].toLowerCase());
-          if (!tDst) { tDst = { id: generateId(), name: parts[2], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: 'g1' }; localAccs.push(tDst); txReport.newAccounts.push(parts[2]); }
+          if (!tDst) { tDst = { id: generateId(), ledgerId: data.activeLedgerId || 'l1', name: parts[2], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: 'g1' }; localAccs.push(tDst); txReport.newAccounts.push(parts[2]); }
           
           // IMPORTANTE: En la lógica de la app, el importe de un traspaso se guarda en NEGATIVO
           // para representar la SALIDA de la cuenta origen (accountId).
@@ -258,7 +262,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
           const finalTransferAmount = -Math.abs(tAmount);
 
           localTxs.push({ 
-            id: generateId(), date: tFec, description: parts[3], 
+            id: generateId(), ledgerId: data.activeLedgerId || 'l1', date: tFec, description: parts[3], 
             amount: finalTransferAmount, 
             type: 'TRANSFER', accountId: tSrc.id, transferAccountId: tDst.id, familyId: '', categoryId: '' 
           });
@@ -312,14 +316,59 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     }
   };
 
-  const exportBackup = () => {
-    const backupData = JSON.stringify(data, null, 2);
-    const blob = new Blob([backupData], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `contamiki_backup_${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
+  const handleExportOption = (mode: 'MASTERS' | 'TRANSACTIONS' | 'FULL') => {
+      let exportData: Partial<AppState> = {};
+      
+      if (mode === 'MASTERS' || mode === 'FULL') {
+          exportData = {
+              ...exportData,
+              ledgers: data.ledgers,
+              activeLedgerId: data.activeLedgerId,
+              accountGroups: data.accountGroups,
+              accounts: data.accounts,
+              families: data.families,
+              categories: data.categories,
+              recurrents: data.recurrents,
+              favorites: data.favorites
+          };
+      }
+
+      if (mode === 'TRANSACTIONS' || mode === 'FULL') {
+          exportData = {
+              ...exportData,
+              transactions: data.transactions
+          };
+      }
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `contamiki_backup_${mode}_${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+      setShowExportModal(false);
+  };
+
+  const handleRestoreFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+          try {
+              const importedData = JSON.parse(ev.target?.result as string);
+              if (typeof importedData !== 'object') throw new Error("Formato inválido");
+              
+              // Validación simple y merge
+              onUpdateData(importedData);
+              alert("Restauración completada. Los datos se han fusionado/actualizado.");
+          } catch (err) {
+              alert("Error al leer el archivo de copia de seguridad. Asegúrate de que es un JSON válido.");
+          }
+          // Limpiar input para permitir re-subir el mismo archivo si es necesario
+          if (restoreInputRef.current) restoreInputRef.current.value = '';
+      };
+      reader.readAsText(file);
   };
 
   const handleLocalIconUpload = (e: React.ChangeEvent<HTMLInputElement>, setIcon: (s: string) => void) => {
@@ -417,7 +466,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             <input type="text" placeholder="Ej: Bancos, Efectivo..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={grpName} onChange={e => setGrpName(e.target.value)} />
                         </div>
                         {renderIconInput(grpIcon, setGrpIcon, grpName)}
-                        <button onClick={() => { if(!grpName) return; if(grpId) onUpdateData({accountGroups: data.accountGroups.map(g=>g.id===grpId?{...g,name:grpName,icon:grpIcon}:g)}); else onUpdateData({accountGroups: [...data.accountGroups, {id:generateId(),name:grpName,icon:grpIcon}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all shadow-xl">Guardar Grupo</button>
+                        <button onClick={() => { if(!grpName) return; if(grpId) onUpdateData({accountGroups: data.accountGroups.map(g=>g.id===grpId?{...g,name:grpName,icon:grpIcon}:g)}); else onUpdateData({accountGroups: [...data.accountGroups, {id:generateId(), ledgerId: data.activeLedgerId || 'l1', name:grpName,icon:grpIcon}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all shadow-xl">Guardar Grupo</button>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -457,7 +506,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Saldo de Apertura (€)</label>
                             <input type="number" step="0.01" placeholder="0.00" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
                         </div>
-                        <button onClick={() => { if(!accName) return; const balanceVal = parseFloat(accBalance) || 0; if (accId) onUpdateData({ accounts: data.accounts.map(a => a.id === accId ? { ...a, name: accName, initialBalance: balanceVal, icon: accIcon, groupId: accGroupId } : a) }); else onUpdateData({ accounts: [...data.accounts, { id: generateId(), name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon, groupId: accGroupId || (data.accountGroups[0]?.id || 'g1') }] }); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all shadow-xl">Confirmar Cuenta</button>
+                        <button onClick={() => { if(!accName) return; const balanceVal = parseFloat(accBalance) || 0; if (accId) onUpdateData({ accounts: data.accounts.map(a => a.id === accId ? { ...a, name: accName, initialBalance: balanceVal, icon: accIcon, groupId: accGroupId } : a) }); else onUpdateData({ accounts: [...data.accounts, { id: generateId(), ledgerId: data.activeLedgerId || 'l1', name: accName, initialBalance: balanceVal, currency: 'EUR', icon: accIcon, groupId: accGroupId || (data.accountGroups[0]?.id || 'g1') }] }); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all shadow-xl">Confirmar Cuenta</button>
                     </div>
                 </div>
                 <div className="space-y-3">
@@ -500,7 +549,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             </div>
                         </div>
                         {renderIconInput(famIcon, setFamIcon, famName)}
-                        <button onClick={() => { if(!famName) return; if(famId) onUpdateData({families: data.families.map(f=>f.id===famId?{...f,name:famName,type:famType,icon:famIcon}:f)}); else onUpdateData({families: [...data.families, {id:generateId(),name:famName,type:famType,icon:famIcon}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all">Guardar Familia</button>
+                        <button onClick={() => { if(!famName) return; if(famId) onUpdateData({families: data.families.map(f=>f.id===famId?{...f,name:famName,type:famType,icon:famIcon}:f)}); else onUpdateData({families: [...data.families, {id:generateId(), ledgerId: data.activeLedgerId || 'l1', name:famName,type:famType,icon:famIcon}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all">Guardar Familia</button>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -536,7 +585,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                             </div>
                         </div>
                         {renderIconInput(catIcon, setCatIcon, catName)}
-                        <button onClick={() => { if(!catName || !catParent) return; if(catId) onUpdateData({categories: data.categories.map(c=>c.id===catId?{...c,name:catName,familyId:catParent,icon:catIcon}:c)}); else onUpdateData({categories: [...data.categories, {id:generateId(),name:catName,familyId:catParent,icon:catIcon}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all shadow-xl">Guardar Categoría</button>
+                        <button onClick={() => { if(!catName || !catParent) return; if(catId) onUpdateData({categories: data.categories.map(c=>c.id===catId?{...c,name:catName,familyId:catParent,icon:catIcon}:c)}); else onUpdateData({categories: [...data.categories, {id:generateId(), ledgerId: data.activeLedgerId || 'l1', name:catName,familyId:catParent,icon:catIcon}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 transition-all shadow-xl">Guardar Categoría</button>
                     </div>
                 </div>
                 <div className="space-y-3">
@@ -817,9 +866,59 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
                 <div className="bg-slate-900 p-10 rounded-[3rem] text-center space-y-6 shadow-2xl overflow-hidden relative group border-t-4 border-indigo-500">
                     <div className="mx-auto bg-indigo-600 text-white w-16 h-16 rounded-3xl flex items-center justify-center shadow-2xl rotate-3 group-hover:rotate-12 transition-transform duration-500"><DatabaseZap size={32} /></div>
-                    <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Copia de Seguridad</h3>
-                    <button onClick={exportBackup} className="flex items-center justify-center gap-3 w-full p-5 bg-white text-slate-900 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-xl active:scale-95"><FileJson size={20} /> Exportar JSON completo</button>
+                    <div>
+                        <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Copia de Seguridad</h3>
+                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-2">Exporta tus datos o restaura una versión anterior</p>
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                        <button onClick={() => setShowExportModal(true)} className="flex-1 flex items-center justify-center gap-3 p-5 bg-white text-slate-900 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-xl active:scale-95">
+                            <Download size={18} /> Exportar JSON
+                        </button>
+                        <button onClick={() => restoreInputRef.current?.click()} className="flex-1 flex items-center justify-center gap-3 p-5 bg-white/10 text-white border border-white/20 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-white/20 transition-all shadow-xl active:scale-95">
+                            <RefreshCw size={18} /> Restaurar Copia
+                        </button>
+                        <input type="file" ref={restoreInputRef} className="hidden" accept=".json" onChange={handleRestoreFile} />
+                    </div>
                 </div>
+                
+                {/* Modal de Selección de Exportación */}
+                {showExportModal && (
+                    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
+                        <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-8 relative border border-white/20">
+                            <button onClick={() => setShowExportModal(false)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 transition-colors"><X size={20}/></button>
+                            <div className="text-center mb-8">
+                                <div className="mx-auto bg-indigo-50 w-16 h-16 rounded-3xl flex items-center justify-center text-indigo-600 mb-4 shadow-inner"><Download size={28}/></div>
+                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Opciones de Exportación</h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Selecciona qué datos deseas guardar</p>
+                            </div>
+                            
+                            <div className="space-y-3">
+                                <button onClick={() => handleExportOption('MASTERS')} className="w-full flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50 rounded-2xl transition-all group text-left">
+                                    <div className="bg-white p-3 rounded-xl shadow-sm text-slate-400 group-hover:text-indigo-600 transition-colors"><Database size={20}/></div>
+                                    <div>
+                                        <span className="block font-black text-slate-800 text-xs uppercase group-hover:text-indigo-700">Solo Maestros</span>
+                                        <span className="block text-[10px] text-slate-400 font-bold">Cuentas, Categorías, Grupos, Config...</span>
+                                    </div>
+                                </button>
+                                <button onClick={() => handleExportOption('TRANSACTIONS')} className="w-full flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50 rounded-2xl transition-all group text-left">
+                                    <div className="bg-white p-3 rounded-xl shadow-sm text-slate-400 group-hover:text-indigo-600 transition-colors"><List size={20}/></div>
+                                    <div>
+                                        <span className="block font-black text-slate-800 text-xs uppercase group-hover:text-indigo-700">Solo Movimientos</span>
+                                        <span className="block text-[10px] text-slate-400 font-bold">Historial de transacciones sin configuración</span>
+                                    </div>
+                                </button>
+                                <button onClick={() => handleExportOption('FULL')} className="w-full flex items-center gap-4 p-4 bg-slate-900 text-white rounded-2xl transition-all group text-left hover:bg-black shadow-xl">
+                                    <div className="bg-white/10 p-3 rounded-xl shadow-sm"><DatabaseZap size={20}/></div>
+                                    <div>
+                                        <span className="block font-black text-xs uppercase">Copia Completa</span>
+                                        <span className="block text-[10px] text-slate-400 font-bold">Todos los datos del sistema</span>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )}
       </div>
