@@ -143,7 +143,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   }, [filter, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2, sortField, sortDirection]);
 
   // --- PASO 1: FILTRADO TEMPORAL ---
-  // Primero obtenemos las transacciones que entran en el rango de fechas
   const timeFilteredList = useMemo(() => {
     const y = filter.referenceDate.getFullYear();
     const m = filter.referenceDate.getMonth();
@@ -165,28 +164,25 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     });
   }, [data.transactions, filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]);
 
-  // --- PASO 2: CALCULAR OPCIONES DE FILTRO ACTIVAS (Basadas en TimeFilteredList) ---
-  // Esto asegura que los desplegables solo muestren lo que existe en el rango de fechas seleccionado
+  // --- PASO 2: CALCULAR OPCIONES DE FILTRO ACTIVAS ---
   const activeFilterOptions = useMemo(() => {
-      const activeEntryIds = new Set<string>(); // IDs para columna "Entrada/Cat"
-      const activeExitIds = new Set<string>();  // IDs para columna "Cuenta"
+      const activeEntryIds = new Set<string>(); 
+      const activeExitIds = new Set<string>();
 
       timeFilteredList.forEach(t => {
-          // Lógica Columna IZQUIERDA (Entrada/Cat)
-          if (t.type === 'EXPENSE') activeEntryIds.add(t.categoryId); // Gasto -> Categoría
-          else if (t.type === 'INCOME') activeEntryIds.add(t.accountId); // Ingreso -> Cuenta (Destino)
-          else if (t.type === 'TRANSFER') { if(t.transferAccountId) activeEntryIds.add(t.transferAccountId); } // Traspaso -> Cuenta Destino
+          if (t.type === 'EXPENSE') activeEntryIds.add(t.categoryId); 
+          else if (t.type === 'INCOME') activeEntryIds.add(t.accountId); 
+          else if (t.type === 'TRANSFER') { if(t.transferAccountId) activeEntryIds.add(t.transferAccountId); }
 
-          // Lógica Columna DERECHA (Cuenta/Salida)
-          if (t.type === 'EXPENSE') activeExitIds.add(t.accountId); // Gasto -> Cuenta (Origen)
-          else if (t.type === 'INCOME') activeExitIds.add(t.categoryId); // Ingreso -> Categoría (Origen)
-          else if (t.type === 'TRANSFER') activeExitIds.add(t.accountId); // Traspaso -> Cuenta Origen
+          if (t.type === 'EXPENSE') activeExitIds.add(t.accountId); 
+          else if (t.type === 'INCOME') activeExitIds.add(t.categoryId); 
+          else if (t.type === 'TRANSFER') activeExitIds.add(t.accountId); 
       });
 
       return { activeEntryIds, activeExitIds };
   }, [timeFilteredList]);
 
-  // --- PASO 3: FILTRADO COMPLETO (Aplica filtros de columna sobre la lista temporal) ---
+  // --- PASO 3: FILTRADO COMPLETO (Mejorado para Justificar Saldo) ---
   const filteredList = useMemo(() => {
     const hasDescFilter = colFilterDesc && colFilterDesc.trim() !== '';
     const descPattern = hasDescFilter ? colFilterDesc.trim().toLowerCase() : '';
@@ -203,20 +199,32 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
     return timeFilteredList.filter(t => {
       // 1. Filtro Columna IZQUIERDA (Entrada/Cat)
-      // Debe coincidir EXACTAMENTE con lo que se muestra visualmente en esa columna
       if (colFilterEntry !== 'ALL') {
-          const val = t.type === 'EXPENSE' ? t.categoryId :
-                      t.type === 'INCOME' ? t.accountId :
-                      t.type === 'TRANSFER' ? (t.transferAccountId || '') : '';
-          if (val !== colFilterEntry) return false;
+          // Si el filtro es una CUENTA (viene del dashboard o dropdown), mostramos todo lo que entre/vaya a esa cuenta
+          if (indices.acc.has(colFilterEntry)) {
+              if (t.accountId !== colFilterEntry && t.transferAccountId !== colFilterEntry) return false;
+          } else {
+              // Si es categoría
+              const val = t.type === 'EXPENSE' ? t.categoryId :
+                          t.type === 'INCOME' ? t.accountId :
+                          t.type === 'TRANSFER' ? (t.transferAccountId || '') : '';
+              if (val !== colFilterEntry) return false;
+          }
       }
 
       // 2. Filtro Columna DERECHA (Cuenta/Salida)
+      // Ajuste crucial: si filtramos por cuenta, queremos ver todo lo que "justifica" el saldo (origen o destino)
       if (colFilterExit !== 'ALL') {
-          const val = t.type === 'EXPENSE' ? t.accountId :
-                      t.type === 'INCOME' ? t.categoryId :
-                      t.type === 'TRANSFER' ? t.accountId : '';
-          if (val !== colFilterExit) return false;
+          if (indices.acc.has(colFilterExit)) {
+              // Si seleccionamos una cuenta en el filtro de "Cuenta", mostramos cualquier movimiento que la toque
+              if (t.accountId !== colFilterExit && t.transferAccountId !== colFilterExit) return false;
+          } else {
+              // Si es una categoría (ej: origen de un ingreso)
+              const val = t.type === 'EXPENSE' ? t.accountId :
+                          t.type === 'INCOME' ? t.categoryId :
+                          t.type === 'TRANSFER' ? t.accountId : '';
+              if (val !== colFilterExit) return false;
+          }
       }
 
       // 3. Filtro Descripción
@@ -242,7 +250,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       }
       return true;
     });
-  }, [timeFilteredList, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2]);
+  }, [timeFilteredList, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2, indices]);
 
   // --- CAPA 4: ORDENACIÓN ---
   const sortedTransactions = useMemo(() => {
@@ -252,7 +260,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       else if (sortField === 'DESCRIPTION') { vA = a.description.toLowerCase(); vB = b.description.toLowerCase(); }
       else if (sortField === 'AMOUNT') { vA = a.amount; vB = b.amount; }
       else if (sortField === 'CATEGORY') { 
-          // Ordenar por lo que se ve en la columna "Entrada/Cat"
           const getText = (tx: Transaction) => {
               if (tx.type === 'INCOME') return indices.acc.get(tx.accountId)?.name.toLowerCase() || '';
               if (tx.type === 'TRANSFER') return indices.acc.get(tx.transferAccountId || '')?.name.toLowerCase() || '';
@@ -262,7 +269,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
           vB = getText(b);
       }
       else if (sortField === 'ACCOUNT') { 
-          // Ordenar por lo que se ve en la columna "Cuenta" (Derecha)
           const getText = (tx: Transaction) => {
               if (tx.type === 'INCOME') return indices.cat.get(tx.categoryId)?.name.toLowerCase() || '';
               return indices.acc.get(tx.accountId)?.name.toLowerCase() || '';
@@ -278,7 +284,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     });
   }, [filteredList, sortField, sortDirection, indices]);
 
-  // ... (Reset Form, Load Favorite, Open Editor, Handle Save remain identical)
   const resetForm = () => {
     setEditingTx(null);
     setFType('EXPENSE');
@@ -348,7 +353,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     resetForm();
   };
 
-  // ... (Smart Import Logic remains identical)
   const parseDateSmart = (dateStr: string) => {
     if (!dateStr) return new Date().toISOString().split('T')[0];
     const s = dateStr.trim();
@@ -567,7 +571,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
   return (
     <div className="space-y-6 md:space-y-10 pb-24">
-      {/* ... (Cabecera Superior igual) ... */}
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
         <div className="space-y-4 text-center md:text-left w-full xl:w-auto">
             <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
@@ -701,7 +704,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                     onChange={e => setColFilterEntry(e.target.value)}
                 >
                     <option value="ALL">TODAS</option>
-                    {/* Generación dinámica de opciones basadas en lo visible actualmente en la columna izquierda */}
                     <optgroup label="Categorías (Gastos)">
                         {groupedLists.categories.map(group => {
                             const visibleItems = group.items.filter(c => activeFilterOptions.activeEntryIds.has(c.id));
@@ -840,8 +842,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
               return (
                   <div key={t.id} className="group bg-white p-4 lg:p-5 lg:px-10 rounded-[1.5rem] lg:rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl hover:border-indigo-100 transition-all relative overflow-hidden animate-in fade-in slide-in-from-bottom-2 print:border-b print:border-slate-200 print:rounded-none print:shadow-none">
-                      
-                      {/* Mobile View (Compact) */}
                       <div className="flex justify-between items-start lg:hidden">
                         <div className="flex-1 min-w-0 pr-3">
                             <div className="flex items-center gap-2 mb-1">
@@ -874,7 +874,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                                 )}
                             </div>
                         </div>
-                        
                         <div className="flex flex-col items-end gap-3">
                             <span className={`text-sm font-black tracking-tighter ${getAmountColor(t.amount)}`}>
                                 {formatCurrency(t.amount)}
@@ -885,12 +884,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             </div>
                         </div>
                       </div>
-
-                      {/* Desktop View (Full Grid) */}
                       <div className="hidden lg:grid grid-cols-[100px_180px_1fr_60px_180px_180px_100px] items-center gap-4 lg:gap-6">
-                        <div className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">
-                            {formatDateDisplay(t.date)}
-                        </div>
+                        <div className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">{formatDateDisplay(t.date)}</div>
                         <div className="text-xs uppercase">{entryNode}</div>
                         <div className="text-sm font-black text-slate-800 truncate uppercase tracking-tight">{t.description}</div>
                         <div className="flex justify-center print:hidden">
@@ -911,7 +906,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             <button onClick={() => setDeleteConfirmId(t.id)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all active:scale-90"><Trash2 size={18}/></button>
                         </div>
                       </div>
-
                       {deleteConfirmId === t.id && (
                         <div className="absolute inset-0 bg-white/95 backdrop-blur-sm rounded-[1.5rem] lg:rounded-[2.5rem] z-10 flex flex-col lg:flex-row items-center justify-center gap-3 lg:gap-6 animate-in zoom-in-95 p-4 text-center print:hidden">
                           <p className="text-xs font-black text-slate-900 uppercase tracking-widest">¿Confirmar borrado definitivo?</p>
@@ -935,42 +929,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 <button onClick={clearAllFilters} className="px-6 py-3 bg-indigo-50 text-indigo-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all">Limpiar filtros</button>
             </div>
           )}
-
-          {/* CONTROL DE PAGINACIÓN */}
-          {sortedTransactions.length > 0 && (
-              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8 pt-6 border-t border-slate-200 px-4 print:hidden">
-                  <div className="flex items-center gap-3 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-                        {[25, 50, 100, -1].map(limit => (
-                            <button 
-                                key={limit} 
-                                onClick={() => { setItemsPerPage(limit); setCurrentPage(1); }}
-                                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${itemsPerPage === limit ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
-                            >
-                                {limit === -1 ? 'Todo' : limit}
-                            </button>
-                        ))}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                      <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-indigo-50 hover:text-indigo-600 transition-all"><ChevronsLeft size={16}/></button>
-                      <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-indigo-50 hover:text-indigo-600 transition-all"><ChevronLeft size={16}/></button>
-                      
-                      <div className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-slate-600 tracking-widest min-w-[100px] text-center">
-                          {itemsPerPage === -1 ? 'Vista Completa' : `Pág ${currentPage} / ${totalPages}`}
-                      </div>
-
-                      <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || itemsPerPage === -1} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-indigo-50 hover:text-indigo-600 transition-all"><ChevronRight size={16}/></button>
-                      <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages || itemsPerPage === -1} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-indigo-50 hover:text-indigo-600 transition-all"><ChevronsRight size={16}/></button>
-                  </div>
-
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:block">
-                      {totalItems} Registros
-                  </div>
-              </div>
-          )}
       </div>
 
-      {/* ... (Resto de modales se mantienen idénticos: Editor, Importador) ... */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-white/20">
@@ -1002,7 +962,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             </span>
                             <input type="number" step="0.01" className="w-full pl-14 pr-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-3xl font-black outline-none focus:border-indigo-500 transition-all shadow-inner" value={fAmount} onChange={e => setFAmount(e.target.value)} />
                           </div>
-                          <p className="text-[9px] text-slate-400 italic ml-2">El signo se asignará automáticamente según el tipo.</p>
                         </div>
                         <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha Operación</label>
@@ -1136,7 +1095,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
                         <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 p-2">
                             {pendingImports.map((item) => {
-                                const cat = indices.cat.get(item.categoryId);
                                 const isIncome = parseFloat(item.amount) >= 0;
                                 return (
                                     <div key={item.tempId} className="bg-white border border-slate-100 rounded-3xl p-4 flex flex-col lg:flex-row items-center gap-4 shadow-sm hover:border-indigo-200 transition-colors group">

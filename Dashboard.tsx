@@ -26,8 +26,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
 
-  // --- CAPA 1: INDEXACIÓN ESTRUCTURAL (Solo se recalcula si cambia la configuración base) ---
-  // Creamos mapas de acceso O(1) para evitar .find() dentro de bucles
+  // --- CAPA 1: INDEXACIÓN ESTRUCTURAL ---
   const indices = useMemo(() => {
       const acc = new Map(accounts.map(a => [a.id, a]));
       const fam = new Map(families.map(f => [f.id, f]));
@@ -55,7 +54,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return recurrents.filter(r => r.active && r.nextDueDate <= today);
   }, [recurrents]);
 
-  // --- CAPA 2: LÍMITES TEMPORALES (Muy ligero) ---
+  // --- CAPA 2: LÍMITES TEMPORALES ---
   const dateBounds = useMemo(() => {
     const y = filter.referenceDate.getFullYear();
     const m = filter.referenceDate.getMonth();
@@ -69,7 +68,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       startStr = `${y}-01-01`; 
       endStr = `${y}-12-31`;
     } else if (filter.timeRange === 'CUSTOM') {
-      // Fallback a fechas amplias si están vacías para no romper lógica
       startStr = filter.customStart || '1900-01-01';
       endStr = filter.customEnd || '2100-12-31';
     } else {
@@ -79,14 +77,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return { startStr, endStr };
   }, [filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]);
 
-  // --- CAPA 3: MOTOR DE CÁLCULO (Single Pass Loop optimizado) ---
-  // Este es el único bloque pesado. Se ejecuta solo si cambian transacciones o fechas.
+  // --- CAPA 3: MOTOR DE CÁLCULO ---
   const dashboardData = useMemo(() => {
-    // 1. Inicialización rápida
     const accTotals = new Map<string, number>();
     accounts.forEach(a => accTotals.set(a.id, a.initialBalance));
 
-    // Estructuras de agregación (Map es más rápido que Object para inserciones frecuentes)
     const incomeFlow = new Map<string, { total: number, cats: Map<string, number> }>();
     const expenseFlow = new Map<string, { total: number, cats: Map<string, number> }>();
 
@@ -94,13 +89,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     const end = dateBounds.endStr;
     const isAllTime = filter.timeRange === 'ALL';
 
-    // 2. Iteración Única (Hot Path)
     for (const t of transactions) {
-      // A) Cálculo de Saldos (Acumulativo hasta fecha fin)
-      // Si la transacción es posterior al rango, no afecta al saldo "a fecha de hoy" en lógica contable estricta
+      // A) Cálculo de Saldos (Acumulativo hasta fecha fin del filtro)
       if (t.date <= end) {
         let effectiveAmount = t.amount;
-        // Normalización de signo para la cuenta
         if (t.type === 'EXPENSE' || t.type === 'TRANSFER') effectiveAmount = -Math.abs(t.amount);
         else effectiveAmount = Math.abs(t.amount);
 
@@ -109,21 +101,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
         if (t.type === 'TRANSFER' && t.transferAccountId) {
             const currentDst = accTotals.get(t.transferAccountId) || 0;
-            // En destino suma (restamos el negativo = suma)
             accTotals.set(t.transferAccountId, currentDst - effectiveAmount);
         }
       }
 
-      // B) Cálculo de Flujos del Periodo (Estrictamente dentro del rango)
+      // B) Cálculo de Flujos del Periodo
       const inPeriod = isAllTime || (t.date >= start && t.date <= end);
-      
       if (inPeriod && t.type !== 'TRANSFER') {
-          // Usamos índices O(1)
           const cat = indices.cat.get(t.categoryId);
           const familyId = t.familyId || cat?.familyId;
           const fam = familyId ? indices.fam.get(familyId) : null;
           
-          // Importe con signo correcto para flujo (Ingreso +, Gasto -)
           let flowAmount = t.amount; 
           if (t.type === 'EXPENSE') flowAmount = -Math.abs(t.amount);
           else flowAmount = Math.abs(t.amount);
@@ -145,7 +133,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       }
     }
 
-    // 3. Transformación a Arrays Ordenados (Solo al final)
     const buildHierarchy = (flowMap: Map<string, { total: number, cats: Map<string, number> }>) => {
         return Array.from(flowMap.entries())
             .map(([famId, data]) => {
@@ -163,10 +150,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     const finalIncomes = buildHierarchy(incomeFlow);
     const finalExpenses = buildHierarchy(expenseFlow);
     
-    // CÁLCULO DE TOTALES: Sumamos EXCLUSIVAMENTE lo que hay en las familias mostradas
     const totalIncomeFromFamilies = finalIncomes.reduce((acc, item) => acc + item.total, 0);
     const totalExpenseFromFamilies = finalExpenses.reduce((acc, item) => acc + item.total, 0);
-
     const globalBalance = Array.from(accTotals.values()).reduce((a, b) => a + b, 0);
 
     return {
@@ -184,27 +169,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     };
   }, [transactions, accounts, dateBounds, indices]);
 
-  // --- CAPA 4: DATOS DE UI (Patrimonio) ---
+  // --- CAPA 4: DATOS DE UI (Patrimonio Global corregido con filtros y orden) ---
   const groupedBalances = useMemo(() => {
-    const sortedGroups = [...accountGroups].sort((a, b) => a.name.localeCompare(b.name));
-    return sortedGroups.map(group => {
+    return accountGroups.map(group => {
         const groupAccounts = accounts
             .filter(a => a.groupId === group.id)
-            .sort((a, b) => a.name.localeCompare(b.name));
+            .map(acc => ({
+                ...acc,
+                balance: dashboardData.stats.accTotals.get(acc.id) || 0
+            }))
+            .filter(acc => Math.abs(acc.balance) >= 0.01) // Ocultar cuentas con saldo 0
+            .sort((a, b) => b.balance - a.balance); // Ordenar cuentas de mayor a menor saldo
         
-        // Usamos el mapa de totales pre-calculado
-        const groupTotal = groupAccounts.reduce((sum, acc) => sum + (dashboardData.stats.accTotals.get(acc.id) || 0), 0);
+        const groupTotal = groupAccounts.reduce((sum, acc) => sum + acc.balance, 0);
         
         return {
             group,
             total: groupTotal,
-            accounts: groupAccounts.map(acc => ({
-                ...acc,
-                balance: dashboardData.stats.accTotals.get(acc.id) || 0
-            }))
+            accounts: groupAccounts
         };
-    }).filter(g => g.accounts.length > 0);
-  }, [accountGroups, accounts, dashboardData.stats.accTotals]); // Dependencia ligera
+    })
+    .filter(g => Math.abs(g.total) >= 0.01) // Ocultar agrupaciones con saldo total 0
+    .sort((a, b) => b.total - a.total); // Ordenar agrupaciones de mayor a menor saldo total
+  }, [accountGroups, accounts, dashboardData.stats.accTotals]);
 
   // Handlers
   const navigatePeriod = (direction: 'prev' | 'next') => {
@@ -273,7 +260,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     <button onClick={() => navigatePeriod('next')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={20} /></button>
                 </div>
                 
-                {/* SELECTORES DE FECHA - Visualización Condicional Optimizada */}
                 <div className="flex gap-2 items-center flex-wrap justify-center">
                     {filter.timeRange === 'CUSTOM' ? (
                         <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border-2 border-indigo-100 shadow-sm animate-in fade-in zoom-in duration-200">
@@ -354,8 +340,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       </div>
 
       <div className="space-y-16">
-          
-          {/* BLOQUE HORIZONTAL: INGRESOS */}
           <section className="space-y-6">
               <div className="flex items-center justify-between border-b-2 border-emerald-100 pb-4">
                   <div className="flex items-center gap-3">
@@ -364,7 +348,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                   </div>
                   <span className={`text-2xl md:text-3xl font-black tracking-tighter ${getAmountColor(dashboardData.stats.income)}`}>{formatCurrency(dashboardData.stats.income)}</span>
               </div>
-              
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                   {dashboardData.flows.incomes.map(item => (
                       <div key={item.family.id} className={`bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all ${item.total === 0 ? 'opacity-60' : ''}`}>
@@ -379,11 +362,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                           </div>
                           <div className="space-y-2">
                               {item.categories.map(cat => (
-                                  <div 
-                                    key={cat.category.id} 
-                                    onClick={() => setSelectedCategoryAction(cat.category)}
-                                    className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-emerald-50 cursor-pointer group transition-colors"
-                                  >
+                                  <div key={cat.category.id} onClick={() => setSelectedCategoryAction(cat.category)} className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-emerald-50 cursor-pointer group transition-colors">
                                       <div className="flex items-center gap-3 overflow-hidden">
                                           <span className="text-lg group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
                                           <span className="text-sm font-bold text-slate-600 truncate">{cat.category.name}</span>
@@ -393,15 +372,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                       </span>
                                   </div>
                               ))}
-                              {item.categories.length === 0 && <p className="text-xs text-slate-400 italic text-center py-2">Sin categorías</p>}
                           </div>
                       </div>
                   ))}
-                  {dashboardData.flows.incomes.length === 0 && <p className="col-span-full text-center text-slate-400 font-bold py-10 uppercase text-sm">No hay familias de ingresos configuradas</p>}
               </div>
           </section>
 
-          {/* BLOQUE HORIZONTAL: GASTOS */}
           <section className="space-y-6">
               <div className="flex items-center justify-between border-b-2 border-rose-100 pb-4">
                   <div className="flex items-center gap-3">
@@ -410,7 +386,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                   </div>
                   <span className={`text-2xl md:text-3xl font-black tracking-tighter ${getAmountColor(dashboardData.stats.expense)}`}>{formatCurrency(dashboardData.stats.expense)}</span>
               </div>
-              
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                   {dashboardData.flows.expenses.map(item => (
                       <div key={item.family.id} className={`bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all ${item.total === 0 ? 'opacity-60' : ''}`}>
@@ -425,11 +400,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                           </div>
                           <div className="space-y-2">
                               {item.categories.map(cat => (
-                                  <div 
-                                    key={cat.category.id} 
-                                    onClick={() => { setSelectedCategoryAction(cat.category); }}
-                                    className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-rose-50 cursor-pointer group transition-colors"
-                                  >
+                                  <div key={cat.category.id} onClick={() => setSelectedCategoryAction(cat.category)} className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-rose-50 cursor-pointer group transition-colors">
                                       <div className="flex items-center gap-3 overflow-hidden">
                                           <span className="text-lg group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
                                           <span className="text-sm font-bold text-slate-600 truncate">{cat.category.name}</span>
@@ -439,17 +410,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                       </span>
                                   </div>
                               ))}
-                              {item.categories.length === 0 && <p className="text-xs text-slate-400 italic text-center py-2">Sin categorías</p>}
                           </div>
                       </div>
                   ))}
-                   {dashboardData.flows.expenses.length === 0 && <p className="col-span-full text-center text-slate-400 font-bold py-10 uppercase text-sm">No hay familias de gastos configuradas</p>}
               </div>
           </section>
-
       </div>
 
-      {/* MODALES - No afectan al renderizado del resto del dashboard gracias a la separación de lógica */}
+      {/* MODALES */}
       {selectedCategoryAction && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 text-center relative border border-white/20">
@@ -458,26 +426,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     {renderIcon(selectedCategoryAction.icon, "w-10 h-10")}
                 </div>
                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-8">{selectedCategoryAction.name}</h3>
-                
                 <div className="space-y-4">
-                    <button 
-                        onClick={() => {
-                            setSelectedCategoryAction(null);
-                            onNavigateToTransactions({ filterCategory: selectedCategoryAction.id });
-                        }}
-                        className="w-full flex items-center justify-center gap-3 p-4 bg-slate-50 text-slate-700 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"
-                    >
-                        <Search size={18}/> Ver Movimientos
-                    </button>
-                    <button 
-                        onClick={() => {
-                            setSelectedCategoryAction(null);
-                            onNavigateToTransactions({ action: 'NEW', categoryId: selectedCategoryAction.id });
-                        }}
-                        className="w-full flex items-center justify-center gap-3 p-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 transition-all shadow-xl"
-                    >
-                        <PlusCircle size={18}/> Entrada de Movimiento
-                    </button>
+                    <button onClick={() => { setSelectedCategoryAction(null); onNavigateToTransactions({ filterCategory: selectedCategoryAction.id }); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-50 text-slate-700 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"><Search size={18}/> Ver Movimientos</button>
+                    <button onClick={() => { setSelectedCategoryAction(null); onNavigateToTransactions({ action: 'NEW', categoryId: selectedCategoryAction.id }); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 transition-all shadow-xl"><PlusCircle size={18}/> Entrada de Movimiento</button>
                 </div>
             </div>
         </div>
@@ -493,22 +444,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                         <div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Desglose de Patrimonio</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Situación al {formatDateDisplay(dateBounds.endStr)}</p></div>
                     </div>
                 </div>
-                
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-8 sm:p-12 pt-6">
                     <div className="space-y-6">
                         {groupedBalances.map(groupInfo => {
                             const isExpanded = expandedGroups.has(groupInfo.group.id);
                             return (
                                 <div key={groupInfo.group.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm transition-all">
-                                    <button 
-                                        onClick={() => {
-                                            const newSet = new Set(expandedGroups);
-                                            if (newSet.has(groupInfo.group.id)) newSet.delete(groupInfo.group.id);
-                                            else newSet.add(groupInfo.group.id);
-                                            setExpandedGroups(newSet);
-                                        }}
-                                        className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors"
-                                    >
+                                    <button onClick={() => { const newSet = new Set(expandedGroups); if (newSet.has(groupInfo.group.id)) newSet.delete(groupInfo.group.id); else newSet.add(groupInfo.group.id); setExpandedGroups(newSet); }} className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors">
                                         <div className="flex items-center gap-4">
                                             <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">{renderIcon(groupInfo.group.icon, "w-6 h-6")}</div>
                                             <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight text-left">{groupInfo.group.name}</h4>
@@ -518,7 +460,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                             <ChevronDown className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} size={20} />
                                         </div>
                                     </button>
-
                                     {isExpanded && (
                                         <div className="border-t border-slate-50 bg-slate-50/50 p-3 space-y-2 animate-in slide-in-from-top-2 duration-200">
                                             {groupInfo.accounts.map(acc => (
@@ -543,7 +484,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                         <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Patrimonio Neto Total</span>
                         <span className={`text-3xl font-black tracking-tighter ${getAmountColor(dashboardData.stats.balance)}`}>{formatCurrency(dashboardData.stats.balance)}</span>
                     </div>
-                    <button onClick={() => setShowBalanceDetail(false)} className="w-full mt-10 py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-600 transition-all active:scale-95">Entendido</button>
                 </div>
             </div>
         </div>
@@ -572,9 +512,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                             </div>
                         );
                     })}
-                    {pendingRecurrents.length === 0 && <div className="py-12 text-center space-y-4"><div className="mx-auto bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center text-slate-300"><History size={32}/></div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No hay más vencimientos por hoy</p></div>}
                 </div>
-                <button onClick={() => setShowRecurrentsModal(false)} className="w-full mt-10 py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-600 transition-all">Cerrar</button>
             </div>
         </div>
       )}
