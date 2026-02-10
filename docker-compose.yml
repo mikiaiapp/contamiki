@@ -7,7 +7,7 @@ services:
     ports:
       - "4000:4000"
     environment:
-      - NODE_ENV=production
+      #- NODE_ENV=production
       - PORT=4000
       # Es vital pasar la API Key para que funcionen las características de IA (Gemini)
       # Asegúrate de tener exportada la variable en tu terminal o en un archivo .env
