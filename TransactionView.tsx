@@ -144,6 +144,15 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setCurrentPage(1);
   }, [filter, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2, sortField, sortDirection]);
 
+  // --- LOGIC: RESETEAR FILTROS DE COLUMNA SI CAMBIA EL TIEMPO ---
+  // Opcional: Si el usuario cambia de año, es probable que quiera ver todo, o al menos
+  // recalcular las opciones disponibles.
+  /* useEffect(() => {
+      setColFilterEntry('ALL');
+      setColFilterExit('ALL');
+  }, [filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]); */
+
+  // ... (Reset Form, Load Favorite, Open Editor, Handle Save remain same) ...
   const resetForm = () => {
     setEditingTx(null);
     setFType('EXPENSE');
@@ -213,7 +222,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     resetForm();
   };
 
-  // --- SMART IMPORT LOGIC ---
+  // ... (Smart Import Logic remains same) ...
   const parseDateSmart = (dateStr: string) => {
     if (!dateStr) return new Date().toISOString().split('T')[0];
     const s = dateStr.trim();
@@ -351,8 +360,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       setImportStep(1);
   };
 
-  // --- CAPA 3: FILTRADO ---
-  const filteredList = useMemo(() => {
+  // --- PASO 1: FILTRADO TEMPORAL ---
+  // Primero obtenemos las transacciones que entran en el rango de fechas
+  const timeFilteredList = useMemo(() => {
     const y = filter.referenceDate.getFullYear();
     const m = filter.referenceDate.getMonth();
     let start = ''; let end = '';
@@ -367,6 +377,35 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       end = filter.customEnd || '2100-12-31';
     }
 
+    return data.transactions.filter(t => {
+      if (filter.timeRange !== 'ALL' && (t.date < start || t.date > end)) return false;
+      return true;
+    });
+  }, [data.transactions, filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]);
+
+  // --- PASO 2: CALCULAR OPCIONES DE FILTRO ACTIVAS ---
+  // Basándonos en la lista temporal, determinamos qué cuentas y categorías están "activas" en las columnas
+  const activeFilterOptions = useMemo(() => {
+      const activeEntryIds = new Set<string>();
+      const activeExitIds = new Set<string>();
+
+      timeFilteredList.forEach(t => {
+          // Columna IZQUIERDA (Entrada)
+          if (t.type === 'EXPENSE') activeEntryIds.add(t.categoryId); // Categoría de gasto
+          else if (t.type === 'INCOME') activeEntryIds.add(t.accountId); // Cuenta de cobro
+          else if (t.type === 'TRANSFER') { if(t.transferAccountId) activeEntryIds.add(t.transferAccountId); } // Cuenta destino
+
+          // Columna DERECHA (Salida)
+          if (t.type === 'EXPENSE') activeExitIds.add(t.accountId); // Cuenta de pago
+          else if (t.type === 'INCOME') activeExitIds.add(t.categoryId); // Categoría de ingreso
+          else if (t.type === 'TRANSFER') activeExitIds.add(t.accountId); // Cuenta origen
+      });
+
+      return { activeEntryIds, activeExitIds };
+  }, [timeFilteredList]);
+
+  // --- PASO 3: FILTRADO COMPLETO (Columnas, Texto, Importe) ---
+  const filteredList = useMemo(() => {
     const hasDescFilter = colFilterDesc && colFilterDesc.trim() !== '';
     const descPattern = hasDescFilter ? colFilterDesc.trim().toLowerCase() : '';
     const descIsRegex = hasDescFilter && (descPattern.includes('*') || descPattern.includes('?'));
@@ -380,23 +419,21 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     const v2 = parseFloat(colFilterAmountVal2);
     const hasAmountFilter = colFilterAmountOp !== 'ALL' && !isNaN(v1);
 
-    return data.transactions.filter(t => {
-      // 1. Filtro Fecha
-      if (filter.timeRange !== 'ALL' && (t.date < start || t.date > end)) return false;
-
-      // 2. Filtro Categoría/Entrada (Columna Izquierda Visual)
-      // Esta columna muestra:
-      // - Gastos: La Categoría
-      // - Ingresos: La Cuenta de Origen
-      // - Traspasos: La Cuenta de Destino
+    return timeFilteredList.filter(t => {
+      // 1. Filtro Columna IZQUIERDA (Entrada/Cat)
       if (colFilterEntry !== 'ALL') {
-          // Si el filtro seleccionado es una categoría, debe coincidir con un Gasto.
-          // Si es una cuenta, debe coincidir con un Ingreso en esa cuenta o un Traspaso hacia esa cuenta.
-          const isExpenseCategoryMatch = t.type === 'EXPENSE' && t.categoryId === colFilterEntry;
-          const isIncomeAccountMatch = t.type === 'INCOME' && t.accountId === colFilterEntry;
-          const isTransferDestMatch = t.type === 'TRANSFER' && t.transferAccountId === colFilterEntry;
+          const val = t.type === 'EXPENSE' ? t.categoryId :
+                      t.type === 'INCOME' ? t.accountId :
+                      t.type === 'TRANSFER' ? t.transferAccountId : '';
+          if (val !== colFilterEntry) return false;
+      }
 
-          if (!isExpenseCategoryMatch && !isIncomeAccountMatch && !isTransferDestMatch) return false;
+      // 2. Filtro Columna DERECHA (Cuenta/Salida)
+      if (colFilterExit !== 'ALL') {
+          const val = t.type === 'EXPENSE' ? t.accountId :
+                      t.type === 'INCOME' ? t.categoryId :
+                      t.type === 'TRANSFER' ? t.accountId : '';
+          if (val !== colFilterExit) return false;
       }
 
       // 3. Filtro Descripción
@@ -409,20 +446,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       if (colFilterClip === 'YES' && !t.attachment) return false;
       if (colFilterClip === 'NO' && t.attachment) return false;
 
-      // 5. Filtro Cuenta Salida (Columna Derecha Visual)
-      // Esta columna muestra:
-      // - Gastos: La Cuenta de Origen
-      // - Ingresos: La Categoría (o S/C)
-      // - Traspasos: La Cuenta de Origen
-      if (colFilterExit !== 'ALL') {
-         const isExpenseAccountMatch = t.type === 'EXPENSE' && t.accountId === colFilterExit;
-         const isIncomeCategoryMatch = t.type === 'INCOME' && t.categoryId === colFilterExit;
-         const isTransferSourceMatch = t.type === 'TRANSFER' && t.accountId === colFilterExit;
-
-         if (!isExpenseAccountMatch && !isIncomeCategoryMatch && !isTransferSourceMatch) return false;
-      }
-
-      // 6. Filtro Importe
+      // 5. Filtro Importe
       if (hasAmountFilter) {
           const val = t.amount;
           if (colFilterAmountOp === 'GT' && val <= v1) return false;
@@ -435,7 +459,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       }
       return true;
     });
-  }, [data.transactions, filter, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2]);
+  }, [timeFilteredList, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2]);
 
   // --- CAPA 4: ORDENACIÓN ---
   const sortedTransactions = useMemo(() => {
@@ -471,7 +495,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     });
   }, [filteredList, sortField, sortDirection, indices]);
 
-  // --- CAPA 5: PAGINACIÓN ---
+  // ... (Pagination and Export Logic remains same) ...
   const totalItems = sortedTransactions.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   
@@ -552,7 +576,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
   return (
     <div className="space-y-6 md:space-y-10 pb-24">
-      {/* Cabecera Superior */}
+      {/* ... (Header Section remains same) ... */}
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
         <div className="space-y-4 text-center md:text-left w-full xl:w-auto">
             <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
@@ -562,7 +586,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                     <button onClick={() => navigatePeriod('next')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={20} /></button>
                 </div>
                 
-                {/* Inputs de Filtro Personalizado - CORREGIDO */}
                 <div className="flex gap-2 items-center flex-wrap justify-center">
                     {filter.timeRange === 'CUSTOM' ? (
                         <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border-2 border-indigo-100 shadow-sm animate-in fade-in zoom-in duration-200">
@@ -681,21 +704,35 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 <button onClick={() => handleSort('CATEGORY')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
                     Entrada/Cat <SortIcon field="CATEGORY" />
                 </button>
-                <select className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none cursor-pointer focus:border-indigo-300 transition-all" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)}>
+                <select 
+                    className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none cursor-pointer focus:border-indigo-300 transition-all" 
+                    value={colFilterEntry} 
+                    onChange={e => setColFilterEntry(e.target.value)}
+                >
                     <option value="ALL">TODAS</option>
-                    <optgroup label="Categorías">
-                        {groupedLists.categories.map(group => (
-                            <optgroup key={group.family.id} label={group.family.name}>
-                                {group.items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </optgroup>
-                        ))}
+                    {/* Generación dinámica de opciones basadas en lo visible actualmente */}
+                    <optgroup label="Categorías (Gastos)">
+                        {groupedLists.categories.map(group => {
+                            // Filtramos items que existan en activeFilterOptions
+                            const visibleItems = group.items.filter(c => activeFilterOptions.activeEntryIds.has(c.id));
+                            if (visibleItems.length === 0) return null;
+                            return (
+                                <optgroup key={group.family.id} label={group.family.name}>
+                                    {visibleItems.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </optgroup>
+                            );
+                        })}
                     </optgroup>
-                    <optgroup label="Cuentas (Traspasos/Ingresos)">
-                        {groupedLists.accounts.map(group => (
-                            <optgroup key={group.group.id} label={group.group.name}>
-                                {group.items.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                            </optgroup>
-                        ))}
+                    <optgroup label="Cuentas (Ingresos/Traspasos)">
+                        {groupedLists.accounts.map(group => {
+                            const visibleItems = group.items.filter(a => activeFilterOptions.activeEntryIds.has(a.id));
+                            if (visibleItems.length === 0) return null;
+                            return (
+                                <optgroup key={group.group.id} label={group.group.name}>
+                                    {visibleItems.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </optgroup>
+                            );
+                        })}
                     </optgroup>
                 </select>
             </div>
@@ -731,21 +768,33 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 <button onClick={() => handleSort('ACCOUNT')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
                     Cuenta <SortIcon field="ACCOUNT" />
                 </button>
-                <select className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none cursor-pointer focus:border-indigo-300 transition-all" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}>
+                <select 
+                    className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none cursor-pointer focus:border-indigo-300 transition-all" 
+                    value={colFilterExit} 
+                    onChange={e => setColFilterExit(e.target.value)}
+                >
                     <option value="ALL">TODAS</option>
-                    <optgroup label="Cuentas">
-                        {groupedLists.accounts.map(group => (
-                            <optgroup key={group.group.id} label={group.group.name}>
-                                {group.items.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                            </optgroup>
-                        ))}
+                    <optgroup label="Cuentas (Pagos/Traspasos)">
+                        {groupedLists.accounts.map(group => {
+                            const visibleItems = group.items.filter(a => activeFilterOptions.activeExitIds.has(a.id));
+                            if (visibleItems.length === 0) return null;
+                            return (
+                                <optgroup key={group.group.id} label={group.group.name}>
+                                    {visibleItems.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </optgroup>
+                            );
+                        })}
                     </optgroup>
                     <optgroup label="Categorías (Ingresos)">
-                        {groupedLists.categories.map(group => (
-                            <optgroup key={group.family.id} label={group.family.name}>
-                                {group.items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </optgroup>
-                        ))}
+                        {groupedLists.categories.map(group => {
+                            const visibleItems = group.items.filter(c => activeFilterOptions.activeExitIds.has(c.id));
+                            if (visibleItems.length === 0) return null;
+                            return (
+                                <optgroup key={group.family.id} label={group.family.name}>
+                                    {visibleItems.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </optgroup>
+                            );
+                        })}
                     </optgroup>
                 </select>
             </div>
@@ -781,6 +830,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
           </div>
 
           {paginatedTransactions.map(t => {
+              // ... (Transaction Row remains identical) ...
               const srcAcc = indices.acc.get(t.accountId);
               const dstAcc = t.transferAccountId ? indices.acc.get(t.transferAccountId) : null;
               const cat = indices.cat.get(t.categoryId);
@@ -898,6 +948,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
           )}
 
           {/* CONTROL DE PAGINACIÓN */}
+          {/* ... (Same as before) ... */}
           {sortedTransactions.length > 0 && (
               <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8 pt-6 border-t border-slate-200 px-4 print:hidden">
                   <div className="flex items-center gap-3 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
@@ -931,9 +982,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
           )}
       </div>
 
+      {/* ... (Modals remain identical) ... */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-white/20">
+                {/* ... (Modal content) ... */}
                 <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
                 <div className="flex items-center gap-4 mb-10">
                     <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20">< Receipt size={28} /></div>
@@ -1029,10 +1082,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         </div>
       )}
 
-      {/* MODAL IMPORTADOR INTELIGENTE */}
+      {/* ... (Import Modal remains identical) ... */}
       {isImportModalOpen && (
         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
             <div className={`bg-white rounded-[3rem] shadow-2xl w-full ${importStep === 2 ? 'max-w-6xl h-[90vh]' : 'max-w-xl'} p-8 sm:p-12 relative flex flex-col border border-white/20 transition-all duration-500`}>
+                {/* ... (Content of Smart Import) ... */}
                 <button onClick={() => { setIsImportModalOpen(false); setPendingImports([]); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all z-10"><X size={24}/></button>
                 
                 <div className="flex items-center gap-4 mb-8 flex-none">
