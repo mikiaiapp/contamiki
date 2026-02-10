@@ -205,7 +205,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     const cat = indices.cat.get(fCat);
     const finalTx: Transaction = {
       id: editingTx ? editingTx.id : generateId(),
-      ledgerId: editingTx ? editingTx.ledgerId : (data.activeLedgerId || 'l1'),
       date: fDate,
       amount: rawAmount,
       description: fDesc,
