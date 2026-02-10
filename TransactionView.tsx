@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer, ChevronsLeft, ChevronsRight, List } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
@@ -57,6 +57,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [sortField, setSortField] = useState<SortField>('DATE');
   const [sortDirection, setSortDirection] = useState<SortDirection>('DESC');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   // --- CAPA 1: INDEXACIÓN ESTRUCTURAL ---
   const indices = useMemo(() => {
@@ -299,6 +303,20 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       return 0;
     });
   }, [data.transactions, filter, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2, sortField, sortDirection, indices]); // 'indices' es estable
+
+  // --- CAPA 4: PAGINACIÓN ---
+  // Resetear página cuando cambian los filtros
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filteredTransactions]);
+
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredTransactions.slice(startIndex, endIndex);
+  }, [filteredTransactions, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
 
   const handleSort = (field: SortField) => {
       if (sortField === field) {
@@ -551,7 +569,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             </div>
           </div>
 
-          {filteredTransactions.map(t => {
+          {paginatedData.map(t => {
               // Uso de Mapas para O(1)
               const srcAcc = indices.acc.get(t.accountId);
               const dstAcc = t.transferAccountId ? indices.acc.get(t.transferAccountId) : null;
@@ -669,6 +687,70 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             </div>
           )}
       </div>
+
+      {/* FOOTER DE PAGINACIÓN */}
+      {filteredTransactions.length > 0 && (
+          <div className="sticky bottom-4 z-10 flex justify-center print:hidden">
+              <div className="bg-white/95 backdrop-blur-md border border-slate-200 shadow-2xl p-2 rounded-2xl flex items-center gap-2 sm:gap-4 animate-in slide-in-from-bottom-6">
+                  <div className="flex items-center gap-2 px-2 border-r border-slate-100 pr-4">
+                      <List size={16} className="text-slate-400"/>
+                      <select 
+                          className="bg-transparent text-[10px] font-black uppercase text-slate-600 outline-none cursor-pointer"
+                          value={itemsPerPage}
+                          onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                      >
+                          <option value="10">10 / pág</option>
+                          <option value="25">25 / pág</option>
+                          <option value="50">50 / pág</option>
+                          <option value="100">100 / pág</option>
+                          <option value="999999">Todo</option>
+                      </select>
+                  </div>
+                  
+                  <div className="flex items-center gap-1">
+                      <button 
+                          onClick={() => setCurrentPage(1)} 
+                          disabled={currentPage === 1}
+                          className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                      >
+                          <ChevronsLeft size={18} />
+                      </button>
+                      <button 
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} 
+                          disabled={currentPage === 1}
+                          className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                      >
+                          <ChevronLeft size={18} />
+                      </button>
+                      
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
+                          Página <span className="text-indigo-600">{currentPage}</span> de {totalPages}
+                      </span>
+
+                      <button 
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} 
+                          disabled={currentPage === totalPages}
+                          className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                      >
+                          <ChevronRight size={18} />
+                      </button>
+                       <button 
+                          onClick={() => setCurrentPage(totalPages)} 
+                          disabled={currentPage === totalPages}
+                          className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                      >
+                          <ChevronsRight size={18} />
+                      </button>
+                  </div>
+
+                  <div className="hidden sm:block border-l border-slate-100 pl-4 px-2">
+                      <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                          {filteredTransactions.length} items
+                      </span>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500">
