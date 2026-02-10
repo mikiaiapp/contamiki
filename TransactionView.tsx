@@ -162,11 +162,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setFType(fav.type);
     setFAmount(Math.abs(fav.amount).toString());
     setFDesc(fav.description);
-    // Mantenemos la fecha de hoy que pone resetForm() por defecto
     setFAcc(fav.accountId);
     setFCat(fav.categoryId);
     if(fav.transferAccountId) setFTransferDest(fav.transferAccountId);
-    
     setShowFavoritesMenu(false);
     setIsModalOpen(true);
   };
@@ -219,26 +217,21 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const parseDateSmart = (dateStr: string) => {
     if (!dateStr) return new Date().toISOString().split('T')[0];
     const s = dateStr.trim();
-    // Try DD/MM/YYYY or DD-MM-YYYY
     const parts = s.split(/[\/\-]/);
     if (parts.length === 3) {
-       // Asumimos DD/MM/YYYY si el primer numero es <= 31
        if (parts[0].length <= 2 && parseInt(parts[0]) <= 31) {
            let y = parts[2];
            if (y.length === 2) y = '20' + y;
            return `${y}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
        }
-       // Asumimos YYYY/MM/DD
        return `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
     }
-    return new Date().toISOString().split('T')[0]; // Fallback today
+    return new Date().toISOString().split('T')[0];
   };
 
   const predictCategory = (desc: string): string => {
       if (!desc) return '';
       const lowerDesc = desc.toLowerCase();
-      // Búsqueda simple por contención de cadena en historial
-      // Recorremos transacciones recientes primero
       const match = data.transactions.find(t => 
           t.description.toLowerCase().includes(lowerDesc) || 
           lowerDesc.includes(t.description.toLowerCase())
@@ -254,29 +247,20 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       const newPending: PendingImport[] = [];
 
       lines.forEach(line => {
-          // Intentamos separar por tabulador, punto y coma, o coma
-          // Prioridad: Tab > Semicolon > Comma
           let parts: string[] = [];
           if (line.includes('\t')) parts = line.split('\t');
           else if (line.includes(';')) parts = line.split(';');
           else parts = line.split(',');
 
-          // Limpieza básica
           parts = parts.map(p => p.trim().replace(/"/g, ''));
 
-          // Estructura esperada: Fecha | Concepto | Importe
-          // Puede haber más columnas, intentamos coger las 3 primeras lógicas
-          // Si hay 3 columnas, asumimos orden estándar.
           if (parts.length >= 3) {
               const dateStr = parts[0];
               const descStr = parts[1];
-              const amountStr = parts[parts.length - 1]; // Importe suele estar al final o col 2
+              const amountStr = parts[parts.length - 1];
 
               const parsedDate = parseDateSmart(dateStr);
-              // Limpiar importe (quitar simbolos moneda, convertir coma a punto)
               const cleanAmount = amountStr.replace(/[^0-9.,-]/g, '').replace(',', '.');
-              
-              // Predecir categoría
               const predictedCat = predictCategory(descStr);
 
               newPending.push({
@@ -308,9 +292,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
           const wb = XLSX.read(bstr, { type: 'binary' });
           const wsname = wb.SheetNames[0];
           const ws = wb.Sheets[wsname];
-          // Convertir a array de arrays
           const dataJson = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-          // Convertir a texto plano separado por ;
           const lines = dataJson.map(row => row.join(';')).join('\n');
           setImportRawData(lines);
       };
@@ -326,10 +308,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
           alert("Revisa el importe y concepto."); return;
       }
 
-      // Determinar tipo basado en signo
       const type: TransactionType = amountVal >= 0 ? 'INCOME' : 'EXPENSE';
-      
-      // Buscar familia si hay categoría
       const cat = indices.cat.get(row.categoryId);
       const famId = cat ? cat.familyId : '';
 
@@ -337,7 +316,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
           id: generateId(),
           date: row.date,
           description: row.description,
-          amount: amountVal, // Mantenemos el signo original del importe
+          amount: amountVal,
           type: type,
           accountId: row.accountId,
           categoryId: row.categoryId,
@@ -345,14 +324,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       };
 
       onAddTransaction(newTx);
-      // Eliminar de pendientes
       setPendingImports(prev => prev.filter(p => p.tempId !== tempId));
   };
 
   const validateAllImports = () => {
-      // Validar todas las que tengan datos mínimos
       const validOnes = pendingImports.filter(p => !isNaN(parseFloat(p.amount)) && p.description.trim() !== '');
-      
       validOnes.forEach(row => {
           const amountVal = parseFloat(row.amount);
           const type: TransactionType = amountVal >= 0 ? 'INCOME' : 'EXPENSE';
@@ -374,7 +350,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       setImportRawData('');
       setImportStep(1);
   };
-  // -------------------------
 
   // --- CAPA 3: FILTRADO ---
   const filteredList = useMemo(() => {
@@ -406,12 +381,22 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     const hasAmountFilter = colFilterAmountOp !== 'ALL' && !isNaN(v1);
 
     return data.transactions.filter(t => {
-      // 1. Filtro Fecha (O(1) comparison)
+      // 1. Filtro Fecha
       if (filter.timeRange !== 'ALL' && (t.date < start || t.date > end)) return false;
 
-      // 2. Filtro Categoría/Entrada
+      // 2. Filtro Categoría/Entrada (Columna Izquierda Visual)
+      // Esta columna muestra:
+      // - Gastos: La Categoría
+      // - Ingresos: La Cuenta de Origen
+      // - Traspasos: La Cuenta de Destino
       if (colFilterEntry !== 'ALL') {
-          if (t.categoryId !== colFilterEntry && t.transferAccountId !== colFilterEntry) return false;
+          // Si el filtro seleccionado es una categoría, debe coincidir con un Gasto.
+          // Si es una cuenta, debe coincidir con un Ingreso en esa cuenta o un Traspaso hacia esa cuenta.
+          const isExpenseCategoryMatch = t.type === 'EXPENSE' && t.categoryId === colFilterEntry;
+          const isIncomeAccountMatch = t.type === 'INCOME' && t.accountId === colFilterEntry;
+          const isTransferDestMatch = t.type === 'TRANSFER' && t.transferAccountId === colFilterEntry;
+
+          if (!isExpenseCategoryMatch && !isIncomeAccountMatch && !isTransferDestMatch) return false;
       }
 
       // 3. Filtro Descripción
@@ -424,9 +409,17 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       if (colFilterClip === 'YES' && !t.attachment) return false;
       if (colFilterClip === 'NO' && t.attachment) return false;
 
-      // 5. Filtro Cuenta Salida
+      // 5. Filtro Cuenta Salida (Columna Derecha Visual)
+      // Esta columna muestra:
+      // - Gastos: La Cuenta de Origen
+      // - Ingresos: La Categoría (o S/C)
+      // - Traspasos: La Cuenta de Origen
       if (colFilterExit !== 'ALL') {
-         if (t.accountId !== colFilterExit && t.transferAccountId !== colFilterExit) return false;
+         const isExpenseAccountMatch = t.type === 'EXPENSE' && t.accountId === colFilterExit;
+         const isIncomeCategoryMatch = t.type === 'INCOME' && t.categoryId === colFilterExit;
+         const isTransferSourceMatch = t.type === 'TRANSFER' && t.accountId === colFilterExit;
+
+         if (!isExpenseAccountMatch && !isIncomeCategoryMatch && !isTransferSourceMatch) return false;
       }
 
       // 6. Filtro Importe
@@ -451,13 +444,24 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       if (sortField === 'DATE') { vA = a.date; vB = b.date; }
       else if (sortField === 'DESCRIPTION') { vA = a.description.toLowerCase(); vB = b.description.toLowerCase(); }
       else if (sortField === 'AMOUNT') { vA = a.amount; vB = b.amount; }
-      else if (sortField === 'ACCOUNT') { 
-          vA = indices.acc.get(a.accountId)?.name.toLowerCase() || ''; 
-          vB = indices.acc.get(b.accountId)?.name.toLowerCase() || ''; 
-      }
       else if (sortField === 'CATEGORY') { 
-          vA = indices.cat.get(a.categoryId)?.name.toLowerCase() || '';
-          vB = indices.cat.get(b.categoryId)?.name.toLowerCase() || '';
+          // Ordenar por lo que se ve en la columna "Entrada/Cat"
+          const getText = (tx: Transaction) => {
+              if (tx.type === 'INCOME') return indices.acc.get(tx.accountId)?.name.toLowerCase() || '';
+              if (tx.type === 'TRANSFER') return indices.acc.get(tx.transferAccountId || '')?.name.toLowerCase() || '';
+              return indices.cat.get(tx.categoryId)?.name.toLowerCase() || '';
+          };
+          vA = getText(a);
+          vB = getText(b);
+      }
+      else if (sortField === 'ACCOUNT') { 
+          // Ordenar por lo que se ve en la columna "Cuenta" (Derecha)
+          const getText = (tx: Transaction) => {
+              if (tx.type === 'INCOME') return indices.cat.get(tx.categoryId)?.name.toLowerCase() || '';
+              return indices.acc.get(tx.accountId)?.name.toLowerCase() || '';
+          };
+          vA = getText(a);
+          vB = getText(b);
       }
       else if (sortField === 'ATTACHMENT') { vA = a.attachment ? 1 : 0; vB = b.attachment ? 1 : 0; }
       
@@ -686,7 +690,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             </optgroup>
                         ))}
                     </optgroup>
-                    <optgroup label="Cuentas (Traspasos)">
+                    <optgroup label="Cuentas (Traspasos/Ingresos)">
                         {groupedLists.accounts.map(group => (
                             <optgroup key={group.group.id} label={group.group.name}>
                                 {group.items.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -729,11 +733,20 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 </button>
                 <select className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none cursor-pointer focus:border-indigo-300 transition-all" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}>
                     <option value="ALL">TODAS</option>
-                    {groupedLists.accounts.map(group => (
-                        <optgroup key={group.group.id} label={group.group.name}>
-                            {group.items.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                        </optgroup>
-                    ))}
+                    <optgroup label="Cuentas">
+                        {groupedLists.accounts.map(group => (
+                            <optgroup key={group.group.id} label={group.group.name}>
+                                {group.items.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </optgroup>
+                        ))}
+                    </optgroup>
+                    <optgroup label="Categorías (Ingresos)">
+                        {groupedLists.categories.map(group => (
+                            <optgroup key={group.family.id} label={group.family.name}>
+                                {group.items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </optgroup>
+                        ))}
+                    </optgroup>
                 </select>
             </div>
 
@@ -776,11 +789,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
               let exitNode: React.ReactNode;
 
               if (t.type === 'TRANSFER') {
-                entryNode = <div onClick={(e) => { e.stopPropagation(); setColFilterExit(dstAcc?.id || ''); }} className="flex items-center gap-2 text-indigo-600 font-bold truncate cursor-pointer hover:underline decoration-2 underline-offset-4 decoration-indigo-200" title="Filtrar por esta cuenta">{renderIcon(dstAcc?.icon || '🏦', "w-6 h-6")} {dstAcc?.name}</div>;
+                entryNode = <div onClick={(e) => { e.stopPropagation(); setColFilterEntry(dstAcc?.id || ''); }} className="flex items-center gap-2 text-indigo-600 font-bold truncate cursor-pointer hover:underline decoration-2 underline-offset-4 decoration-indigo-200" title="Filtrar por esta cuenta">{renderIcon(dstAcc?.icon || '🏦', "w-6 h-6")} {dstAcc?.name}</div>;
                 exitNode = <div onClick={(e) => { e.stopPropagation(); setColFilterExit(srcAcc?.id || ''); }} className="flex items-center gap-2 text-slate-500 font-bold truncate cursor-pointer hover:underline decoration-2 underline-offset-4 decoration-slate-200" title="Filtrar por esta cuenta">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
               } else if (t.type === 'INCOME') {
-                entryNode = <div onClick={(e) => { e.stopPropagation(); setColFilterExit(srcAcc?.id || ''); }} className="flex items-center gap-2 text-emerald-600 font-bold truncate cursor-pointer hover:underline decoration-2 underline-offset-4 decoration-emerald-200" title="Filtrar por esta cuenta">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
-                exitNode = <div onClick={(e) => { e.stopPropagation(); setColFilterEntry(cat?.id || ''); }} className="flex items-center gap-2 text-slate-300 italic truncate cursor-pointer hover:text-emerald-500 transition-colors" title="Filtrar por esta categoría">{cat ? renderIcon(cat.icon, "w-5 h-5") : <Tag size={14}/>} {cat?.name || 'S/C'}</div>;
+                entryNode = <div onClick={(e) => { e.stopPropagation(); setColFilterEntry(srcAcc?.id || ''); }} className="flex items-center gap-2 text-emerald-600 font-bold truncate cursor-pointer hover:underline decoration-2 underline-offset-4 decoration-emerald-200" title="Filtrar por esta cuenta">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
+                exitNode = <div onClick={(e) => { e.stopPropagation(); setColFilterExit(cat?.id || ''); }} className="flex items-center gap-2 text-slate-300 italic truncate cursor-pointer hover:text-emerald-500 transition-colors" title="Filtrar por esta categoría">{cat ? renderIcon(cat.icon, "w-5 h-5") : <Tag size={14}/>} {cat?.name || 'S/C'}</div>;
               } else {
                 entryNode = <div onClick={(e) => { e.stopPropagation(); setColFilterEntry(cat?.id || ''); }} className="flex items-center gap-2 text-rose-500 font-bold truncate cursor-pointer hover:underline decoration-2 underline-offset-4 decoration-rose-200" title="Filtrar por esta categoría">{renderIcon(cat?.icon || '🏷️', "w-6 h-6")} {cat?.name}</div>;
                 exitNode = <div onClick={(e) => { e.stopPropagation(); setColFilterExit(srcAcc?.id || ''); }} className="flex items-center gap-2 text-slate-500 font-bold truncate cursor-pointer hover:underline decoration-2 underline-offset-4 decoration-slate-200" title="Filtrar por esta cuenta">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
@@ -804,7 +817,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                                             {renderIcon(srcAcc?.icon, "w-3 h-3")} <span className="truncate max-w-[80px]">{srcAcc?.name}</span>
                                         </span>
                                         <ArrowRightLeft size={10} className="text-slate-300" />
-                                        <span onClick={(e) => { e.stopPropagation(); setColFilterExit(dstAcc?.id || ''); }} className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-[0.4rem] cursor-pointer active:scale-95">
+                                        <span onClick={(e) => { e.stopPropagation(); setColFilterEntry(dstAcc?.id || ''); }} className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-[0.4rem] cursor-pointer active:scale-95">
                                             {renderIcon(dstAcc?.icon, "w-3 h-3")} <span className="truncate max-w-[80px]">{dstAcc?.name}</span>
                                         </span>
                                     </>
