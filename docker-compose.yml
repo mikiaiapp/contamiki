@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   contamiki:
     container_name: contamiki
@@ -20,5 +19,5 @@ services:
       # Esto evita que pierdas los datos al reiniciar el contenedor
       - /volume1/docker/contamiki/data:/app/data
 
-volumes:
-  contamiki_data:
+#volumes:
+#  contamiki_data:
