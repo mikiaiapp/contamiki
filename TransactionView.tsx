@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer, ChevronsLeft, ChevronsRight, List, Heart, Star } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer, ChevronsLeft, ChevronsRight, List, Heart, Star, Bot } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
@@ -14,6 +14,7 @@ interface TransactionViewProps {
   onUpdateFilter: (f: GlobalFilter) => void;
   initialSpecificFilters?: any;
   clearSpecificFilters?: () => void;
+  onNavigateToImport?: () => void;
 }
 
 type SortField = 'DATE' | 'DESCRIPTION' | 'AMOUNT' | 'ACCOUNT' | 'CATEGORY' | 'ATTACHMENT';
@@ -28,7 +29,7 @@ const numberFormatter = new Intl.NumberFormat('de-DE', {
   maximumFractionDigits: 2,
 });
 
-export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTransaction, onDeleteTransaction, onUpdateTransaction, filter, onUpdateFilter, initialSpecificFilters, clearSpecificFilters }) => {
+export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTransaction, onDeleteTransaction, onUpdateTransaction, filter, onUpdateFilter, initialSpecificFilters, clearSpecificFilters, onNavigateToImport }) => {
   // Editor State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showFavoritesModal, setShowFavoritesModal] = useState(false);
@@ -205,6 +206,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     const cat = indices.cat.get(fCat);
     const finalTx: Transaction = {
       id: editingTx ? editingTx.id : generateId(),
+      ledgerId: editingTx ? editingTx.ledgerId : (data.activeLedgerId || 'l1'),
       date: fDate,
       amount: rawAmount,
       description: fDesc,
@@ -462,6 +464,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 </div>
 
                 <div className="flex gap-2 sm:ml-4">
+                  {onNavigateToImport && (
+                    <button onClick={onNavigateToImport} className="bg-white border border-slate-200 text-slate-500 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm hover:text-indigo-600 hover:border-indigo-200 transition-all flex items-center justify-center gap-2 active:scale-95 group">
+                      <Bot size={16} className="group-hover:animate-pulse" /> Importar
+                    </button>
+                  )}
                   <button onClick={() => setShowFavoritesModal(true)} className="bg-white border border-slate-200 text-slate-500 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm hover:text-rose-500 hover:border-rose-200 transition-all flex items-center justify-center gap-2 active:scale-95">
                     <Heart size={16} /> Favorito
                   </button>

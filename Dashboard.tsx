@@ -263,6 +263,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const handleProcessRecurrent = (r: RecurrentMovement) => {
     const newTx: Transaction = {
         id: Math.random().toString(36).substring(2, 15),
+        ledgerId: r.ledgerId,
         date: r.nextDueDate,
         description: r.description,
         amount: r.amount,
