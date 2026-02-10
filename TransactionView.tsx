@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer, ChevronsLeft, ChevronsRight, ListFilter, Heart, Star } from 'lucide-react';
+import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, Category } from './types';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer, ChevronsLeft, ChevronsRight, ListFilter, Heart, Star, Bot, FileText, Check, AlertTriangle, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
@@ -19,6 +19,17 @@ interface TransactionViewProps {
 type SortField = 'DATE' | 'DESCRIPTION' | 'AMOUNT' | 'ACCOUNT' | 'CATEGORY' | 'ATTACHMENT';
 type SortDirection = 'ASC' | 'DESC';
 type AmountOperator = 'ALL' | 'GT' | 'LT' | 'EQ' | 'BETWEEN';
+
+// Estructura para la previsualización de importación
+interface PendingImport {
+    tempId: string;
+    date: string;
+    description: string;
+    amount: string; // String para edición fácil
+    categoryId: string;
+    accountId: string; // La cuenta seleccionada para importar
+    isValid: boolean;
+}
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
@@ -41,6 +52,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [fTransferDest, setFTransferDest] = useState('');
   const [fAttachment, setFAttachment] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // SMART IMPORT STATE
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importStep, setImportStep] = useState<1 | 2>(1); // 1: Config, 2: Preview
+  const [importAccount, setImportAccount] = useState('');
+  const [importRawData, setImportRawData] = useState('');
+  const [pendingImports, setPendingImports] = useState<PendingImport[]>([]);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   // Favorites State
   const [showFavoritesMenu, setShowFavoritesMenu] = useState(false);
@@ -195,6 +214,167 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setIsModalOpen(false);
     resetForm();
   };
+
+  // --- SMART IMPORT LOGIC ---
+  const parseDateSmart = (dateStr: string) => {
+    if (!dateStr) return new Date().toISOString().split('T')[0];
+    const s = dateStr.trim();
+    // Try DD/MM/YYYY or DD-MM-YYYY
+    const parts = s.split(/[\/\-]/);
+    if (parts.length === 3) {
+       // Asumimos DD/MM/YYYY si el primer numero es <= 31
+       if (parts[0].length <= 2 && parseInt(parts[0]) <= 31) {
+           let y = parts[2];
+           if (y.length === 2) y = '20' + y;
+           return `${y}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+       }
+       // Asumimos YYYY/MM/DD
+       return `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+    }
+    return new Date().toISOString().split('T')[0]; // Fallback today
+  };
+
+  const predictCategory = (desc: string): string => {
+      if (!desc) return '';
+      const lowerDesc = desc.toLowerCase();
+      // Búsqueda simple por contención de cadena en historial
+      // Recorremos transacciones recientes primero
+      const match = data.transactions.find(t => 
+          t.description.toLowerCase().includes(lowerDesc) || 
+          lowerDesc.includes(t.description.toLowerCase())
+      );
+      return match ? match.categoryId : '';
+  };
+
+  const handleProcessSmartImport = () => {
+      if (!importAccount) { alert("Selecciona primero la cuenta asociada."); return; }
+      if (!importRawData.trim()) { alert("No hay datos para procesar."); return; }
+
+      const lines = importRawData.split('\n').filter(l => l.trim().length > 0);
+      const newPending: PendingImport[] = [];
+
+      lines.forEach(line => {
+          // Intentamos separar por tabulador, punto y coma, o coma
+          // Prioridad: Tab > Semicolon > Comma
+          let parts: string[] = [];
+          if (line.includes('\t')) parts = line.split('\t');
+          else if (line.includes(';')) parts = line.split(';');
+          else parts = line.split(',');
+
+          // Limpieza básica
+          parts = parts.map(p => p.trim().replace(/"/g, ''));
+
+          // Estructura esperada: Fecha | Concepto | Importe
+          // Puede haber más columnas, intentamos coger las 3 primeras lógicas
+          // Si hay 3 columnas, asumimos orden estándar.
+          if (parts.length >= 3) {
+              const dateStr = parts[0];
+              const descStr = parts[1];
+              const amountStr = parts[parts.length - 1]; // Importe suele estar al final o col 2
+
+              const parsedDate = parseDateSmart(dateStr);
+              // Limpiar importe (quitar simbolos moneda, convertir coma a punto)
+              const cleanAmount = amountStr.replace(/[^0-9.,-]/g, '').replace(',', '.');
+              
+              // Predecir categoría
+              const predictedCat = predictCategory(descStr);
+
+              newPending.push({
+                  tempId: generateId(),
+                  date: parsedDate,
+                  description: descStr,
+                  amount: cleanAmount,
+                  categoryId: predictedCat,
+                  accountId: importAccount,
+                  isValid: true
+              });
+          }
+      });
+
+      if (newPending.length > 0) {
+          setPendingImports(newPending);
+          setImportStep(2);
+      } else {
+          alert("No se pudieron interpretar las líneas. Asegúrate del formato: Fecha ; Concepto ; Importe");
+      }
+  };
+
+  const handleImportFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+          const bstr = evt.target?.result;
+          const wb = XLSX.read(bstr, { type: 'binary' });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          // Convertir a array de arrays
+          const dataJson = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+          // Convertir a texto plano separado por ;
+          const lines = dataJson.map(row => row.join(';')).join('\n');
+          setImportRawData(lines);
+      };
+      reader.readAsBinaryString(file);
+  };
+
+  const validateImportRow = (tempId: string) => {
+      const row = pendingImports.find(p => p.tempId === tempId);
+      if (!row) return;
+
+      const amountVal = parseFloat(row.amount);
+      if (isNaN(amountVal) || !row.description) {
+          alert("Revisa el importe y concepto."); return;
+      }
+
+      // Determinar tipo basado en signo
+      const type: TransactionType = amountVal >= 0 ? 'INCOME' : 'EXPENSE';
+      
+      // Buscar familia si hay categoría
+      const cat = indices.cat.get(row.categoryId);
+      const famId = cat ? cat.familyId : '';
+
+      const newTx: Transaction = {
+          id: generateId(),
+          date: row.date,
+          description: row.description,
+          amount: amountVal, // Mantenemos el signo original del importe
+          type: type,
+          accountId: row.accountId,
+          categoryId: row.categoryId,
+          familyId: famId,
+      };
+
+      onAddTransaction(newTx);
+      // Eliminar de pendientes
+      setPendingImports(prev => prev.filter(p => p.tempId !== tempId));
+  };
+
+  const validateAllImports = () => {
+      // Validar todas las que tengan datos mínimos
+      const validOnes = pendingImports.filter(p => !isNaN(parseFloat(p.amount)) && p.description.trim() !== '');
+      
+      validOnes.forEach(row => {
+          const amountVal = parseFloat(row.amount);
+          const type: TransactionType = amountVal >= 0 ? 'INCOME' : 'EXPENSE';
+          const cat = indices.cat.get(row.categoryId);
+          const newTx: Transaction = {
+              id: generateId(),
+              date: row.date,
+              description: row.description,
+              amount: amountVal,
+              type: type,
+              accountId: row.accountId,
+              categoryId: row.categoryId,
+              familyId: cat?.familyId || ''
+          };
+          onAddTransaction(newTx);
+      });
+      setPendingImports([]);
+      setIsImportModalOpen(false);
+      setImportRawData('');
+      setImportStep(1);
+  };
+  // -------------------------
 
   // --- CAPA 3: FILTRADO ---
   const filteredList = useMemo(() => {
@@ -451,6 +631,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             </div>
                         )}
                     </div>
+
+                    <button 
+                        onClick={() => { setIsImportModalOpen(true); setImportStep(1); setPendingImports([]); setImportRawData(''); setImportAccount(''); }}
+                        className="bg-white text-indigo-600 border border-slate-200 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2 active:scale-95 h-full"
+                    >
+                        <Bot size={16} /> <span className="hidden sm:inline">Importar</span>
+                    </button>
 
                     <button onClick={() => openEditor()} className="bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 active:scale-95">
                       <Plus size={16} /> Nuevo
@@ -825,6 +1012,115 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                       {editingTx ? 'Guardar Cambios' : 'Confirmar y Registrar'}
                     </button>
                 </div>
+            </div>
+        </div>
+      )}
+
+      {/* MODAL IMPORTADOR INTELIGENTE */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
+            <div className={`bg-white rounded-[3rem] shadow-2xl w-full ${importStep === 2 ? 'max-w-6xl h-[90vh]' : 'max-w-xl'} p-8 sm:p-12 relative flex flex-col border border-white/20 transition-all duration-500`}>
+                <button onClick={() => { setIsImportModalOpen(false); setPendingImports([]); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all z-10"><X size={24}/></button>
+                
+                <div className="flex items-center gap-4 mb-8 flex-none">
+                    <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Bot size={28} /></div>
+                    <div>
+                      <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Importador Inteligente</h3>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Carga masiva de extractos bancarios</p>
+                    </div>
+                </div>
+
+                {importStep === 1 ? (
+                    <div className="space-y-8">
+                        <div className="bg-indigo-50/50 p-6 rounded-3xl border border-indigo-100 space-y-2">
+                            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2"><AlertTriangle size={14}/> Instrucciones</p>
+                            <p className="text-[11px] font-medium text-slate-600 italic leading-relaxed">
+                                1. Selecciona la cuenta bancaria de origen.<br/>
+                                2. Pega las líneas del extracto o sube un Excel/CSV.<br/>
+                                3. Formato esperado: <strong>Fecha | Concepto | Importe</strong><br/>
+                                4. El sistema detectará automáticamente las categorías basándose en tu historial.
+                            </p>
+                        </div>
+                        
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cuenta Bancaria (Obligatorio)</label>
+                            <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all shadow-inner" value={importAccount} onChange={e => setImportAccount(e.target.value)}>
+                                <option value="">Seleccionar cuenta...</option>
+                                {groupedLists.accounts.map(group => (
+                                    <optgroup key={group.group.id} label={group.group.name}>
+                                        {group.items.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                    </optgroup>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div onClick={() => importFileRef.current?.click()} className="group border-2 border-dashed border-slate-200 rounded-[2rem] p-8 text-center hover:border-indigo-500 hover:bg-indigo-50/30 transition-all cursor-pointer bg-slate-50/30 flex flex-col items-center justify-center gap-2">
+                                <FileSpreadsheet className="text-slate-300 group-hover:text-indigo-500" size={32} />
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Subir Excel / CSV</span>
+                                <input type="file" ref={importFileRef} className="hidden" accept=".csv, .xlsx, .xls" onChange={handleImportFileUpload} />
+                            </div>
+                             <textarea 
+                                className="w-full h-32 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-[10px] outline-none shadow-inner placeholder:text-slate-300 focus:border-indigo-500 transition-all resize-none" 
+                                placeholder="O pega aquí las filas:&#10;01/01/2024; Mercadona; -50.00" 
+                                value={importRawData} 
+                                onChange={e => setImportRawData(e.target.value)} 
+                            />
+                        </div>
+
+                        <button onClick={handleProcessSmartImport} className="w-full py-6 bg-slate-950 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-widest shadow-2xl hover:bg-indigo-600 transition-all active:scale-95 flex items-center justify-center gap-2">
+                           <RefreshCw size={16}/> Analizar y Previsualizar
+                        </button>
+                    </div>
+                ) : (
+                    <div className="flex-1 flex flex-col min-h-0">
+                        <div className="flex justify-between items-center mb-4 px-2">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{pendingImports.length} Movimientos detectados</span>
+                            <div className="flex gap-2">
+                                <button onClick={() => setImportStep(1)} className="px-4 py-2 text-slate-400 hover:text-slate-600 text-[10px] font-bold uppercase tracking-widest">Volver</button>
+                                <button onClick={validateAllImports} className="px-6 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg flex items-center gap-2"><CheckCircle2 size={14}/> Validar Todos</button>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 p-2">
+                            {pendingImports.map((item) => {
+                                const cat = indices.cat.get(item.categoryId);
+                                const isIncome = parseFloat(item.amount) >= 0;
+                                return (
+                                    <div key={item.tempId} className="bg-white border border-slate-100 rounded-3xl p-4 flex flex-col lg:flex-row items-center gap-4 shadow-sm hover:border-indigo-200 transition-colors group">
+                                        <div className="w-full lg:w-32">
+                                            <input type="date" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-[10px] font-bold outline-none focus:border-indigo-300" value={item.date} onChange={(e) => setPendingImports(prev => prev.map(p => p.tempId === item.tempId ? {...p, date: e.target.value} : p))} />
+                                        </div>
+                                        <div className="flex-1 w-full">
+                                            <input type="text" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-[11px] font-black uppercase text-slate-700 outline-none focus:border-indigo-300" value={item.description} onChange={(e) => setPendingImports(prev => prev.map(p => p.tempId === item.tempId ? {...p, description: e.target.value} : p))} />
+                                        </div>
+                                        <div className="w-full lg:w-48">
+                                             <select 
+                                                className={`w-full px-3 py-2 border rounded-xl text-[10px] font-bold outline-none appearance-none cursor-pointer transition-colors ${item.categoryId ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`} 
+                                                value={item.categoryId} 
+                                                onChange={(e) => setPendingImports(prev => prev.map(p => p.tempId === item.tempId ? {...p, categoryId: e.target.value} : p))}
+                                            >
+                                                <option value="">Sin categoría...</option>
+                                                {groupedLists.categories.map(group => (
+                                                    <optgroup key={group.family.id} label={group.family.name}>
+                                                        {group.items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                    </optgroup>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="w-full lg:w-32 relative">
+                                            <input type="number" step="0.01" className={`w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-right text-[12px] font-black outline-none focus:border-indigo-300 ${isIncome ? 'text-emerald-600' : 'text-rose-600'}`} value={item.amount} onChange={(e) => setPendingImports(prev => prev.map(p => p.tempId === item.tempId ? {...p, amount: e.target.value} : p))} />
+                                        </div>
+                                        <div className="flex gap-2 w-full lg:w-auto justify-end">
+                                            <button onClick={() => validateImportRow(item.tempId)} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors" title="Validar fila"><Check size={16}/></button>
+                                            <button onClick={() => setPendingImports(prev => prev.filter(p => p.tempId !== item.tempId))} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-colors" title="Descartar"><Trash2 size={16}/></button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar, Archive, RefreshCw, X, HardDriveDownload, HardDriveUpload } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import * as XLSX from 'xlsx';
 
@@ -26,10 +26,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
   const [structureReport, setStructureReport] = useState<{ added: number, type: string } | null>(null);
   const [massDeleteYear, setMassDeleteYear] = useState('');
   
+  // Backup States
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [restoreReport, setRestoreReport] = useState<string | null>(null);
+  
   const [webLogos, setWebLogos] = useState<{url: string, source: string}[]>([]);
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
   const iconUploadRef = useRef<HTMLInputElement>(null);
 
   // Form States
@@ -104,6 +109,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
 
     setImportReport(null); setStructureReport(null); setPasteData('');
     setWebLogos([]);
+    setRestoreReport(null);
   };
 
   const parseDate = (dateStr: string) => {
@@ -312,14 +318,84 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
     }
   };
 
-  const exportBackup = () => {
-    const backupData = JSON.stringify(data, null, 2);
-    const blob = new Blob([backupData], { type: 'application/json' });
+  const exportBackup = (scope: 'FULL' | 'MASTER' | 'TRANSACTIONS') => {
+    const backupData: Partial<AppState> = {};
+
+    if (scope === 'FULL' || scope === 'MASTER') {
+        backupData.accountGroups = data.accountGroups;
+        backupData.accounts = data.accounts;
+        backupData.families = data.families;
+        backupData.categories = data.categories;
+        backupData.recurrents = data.recurrents;
+        backupData.favorites = data.favorites;
+    }
+
+    if (scope === 'FULL' || scope === 'TRANSACTIONS') {
+        backupData.transactions = data.transactions;
+    }
+
+    const jsonStr = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `contamiki_backup_${new Date().toISOString().split('T')[0]}.json`;
+    const dateStr = new Date().toISOString().split('T')[0];
+    const typeStr = scope === 'FULL' ? 'completa' : scope === 'MASTER' ? 'maestros' : 'movimientos';
+    link.download = `contamiki_backup_${typeStr}_${dateStr}.json`;
     link.click();
+    setShowExportModal(false);
+  };
+
+  const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        try {
+            const content = ev.target?.result as string;
+            const parsed = JSON.parse(content);
+            
+            // FUSIÓN INTELIGENTE (Smart Merge)
+            // Creamos un mapa de los datos actuales por ID para actualizar si existe o añadir si no
+            const newData = { ...data };
+            let updatedCounts: string[] = [];
+
+            // Helper genérico para fusión
+            const mergeList = (currentList: any[], importedList: any[] | undefined, key: string) => {
+                if (!importedList || !Array.isArray(importedList)) return currentList;
+                const map = new Map(currentList.map(i => [i.id, i]));
+                let count = 0;
+                importedList.forEach(item => {
+                    if (item.id) {
+                        map.set(item.id, item);
+                        count++;
+                    }
+                });
+                if (count > 0) updatedCounts.push(`${count} ${key}`);
+                return Array.from(map.values());
+            };
+
+            // Intentamos fusionar cada colección si existe en el JSON importado
+            newData.accountGroups = mergeList(data.accountGroups, parsed.accountGroups, 'Grupos');
+            newData.accounts = mergeList(data.accounts, parsed.accounts, 'Cuentas');
+            newData.families = mergeList(data.families, parsed.families, 'Familias');
+            newData.categories = mergeList(data.categories, parsed.categories, 'Categorías');
+            newData.recurrents = mergeList(data.recurrents || [], parsed.recurrents, 'Recurrentes');
+            newData.favorites = mergeList(data.favorites || [], parsed.favorites, 'Favoritos');
+            newData.transactions = mergeList(data.transactions, parsed.transactions, 'Movimientos');
+
+            onUpdateData(newData);
+            setRestoreReport(`Restauración completada con éxito. Registros procesados: ${updatedCounts.join(', ') || '0'}.`);
+            
+        } catch (err) {
+            alert("Error al procesar el archivo de copia de seguridad. Asegúrate de que es un JSON válido de ContaMiki.");
+            console.error(err);
+        }
+    };
+    reader.readAsText(file);
+    // Reset input
+    e.target.value = '';
   };
 
   const handleLocalIconUpload = (e: React.ChangeEvent<HTMLInputElement>, setIcon: (s: string) => void) => {
@@ -434,6 +510,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
             </div>
         )}
 
+        {/* ... (Se mantienen las pestañas ACCOUNTS, FAMILIES, CATEGORIES, RECURRENTS, FAVORITES igual que antes, solo las omito aquí por brevedad del diff, el archivo final las contendrá) ... */}
         {activeTab === 'ACCOUNTS' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -815,14 +892,82 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData }
                     </div>
                 </div>
 
-                <div className="bg-slate-900 p-10 rounded-[3rem] text-center space-y-6 shadow-2xl overflow-hidden relative group border-t-4 border-indigo-500">
+                <div className="bg-slate-900 p-10 rounded-[3rem] text-center space-y-8 shadow-2xl overflow-hidden relative group border-t-4 border-indigo-500">
                     <div className="mx-auto bg-indigo-600 text-white w-16 h-16 rounded-3xl flex items-center justify-center shadow-2xl rotate-3 group-hover:rotate-12 transition-transform duration-500"><DatabaseZap size={32} /></div>
-                    <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Copia de Seguridad</h3>
-                    <button onClick={exportBackup} className="flex items-center justify-center gap-3 w-full p-5 bg-white text-slate-900 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-xl active:scale-95"><FileJson size={20} /> Exportar JSON completo</button>
+                    <div className="space-y-1">
+                        <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Zona de Seguridad</h3>
+                        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Exportación, Copia y Restauración</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <button onClick={() => setShowExportModal(true)} className="flex flex-col items-center justify-center gap-3 w-full p-6 bg-white text-slate-900 rounded-[2rem] font-black text-[11px] uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-xl active:scale-95 group/btn">
+                            <HardDriveDownload size={24} className="text-indigo-600 group-hover/btn:scale-110 transition-transform" /> 
+                            Exportar Copia
+                        </button>
+                        <button onClick={() => backupInputRef.current?.click()} className="flex flex-col items-center justify-center gap-3 w-full p-6 bg-slate-800 text-slate-300 rounded-[2rem] font-black text-[11px] uppercase tracking-widest hover:bg-slate-700 hover:text-white transition-all shadow-xl active:scale-95 group/btn border border-slate-700">
+                            <HardDriveUpload size={24} className="text-emerald-500 group-hover/btn:scale-110 transition-transform" />
+                            Restaurar Copia
+                        </button>
+                        <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={handleRestoreBackup} />
+                    </div>
+
+                    {restoreReport && (
+                        <div className="bg-emerald-900/30 border border-emerald-500/30 p-4 rounded-2xl animate-in slide-in-from-bottom-2">
+                            <p className="text-emerald-400 text-[10px] font-bold">{restoreReport}</p>
+                        </div>
+                    )}
                 </div>
             </div>
         )}
       </div>
+
+      {showExportModal && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-8 sm:p-12 relative border border-white/20">
+                <button onClick={() => setShowExportModal(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                <div className="text-center mb-10 space-y-2">
+                    <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600"><Archive size={32}/></div>
+                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Exportar Datos</h3>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Elige qué información deseas guardar</p>
+                </div>
+                
+                <div className="space-y-4">
+                    <button onClick={() => exportBackup('FULL')} className="w-full flex items-center justify-between p-6 bg-slate-50 rounded-[2rem] border-2 border-slate-100 hover:border-indigo-500 hover:bg-indigo-50 transition-all group">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-indigo-600 text-white p-3 rounded-xl"><DatabaseZap size={20}/></div>
+                            <div className="text-left">
+                                <span className="block font-black text-slate-900 uppercase text-xs">Copia Completa</span>
+                                <span className="block text-[10px] text-slate-400 font-medium">Configuración + Movimientos</span>
+                            </div>
+                        </div>
+                        <ArrowRightLeft className="text-slate-300 group-hover:text-indigo-500 -rotate-45" size={20}/>
+                    </button>
+
+                    <button onClick={() => exportBackup('MASTER')} className="w-full flex items-center justify-between p-6 bg-slate-50 rounded-[2rem] border-2 border-slate-100 hover:border-emerald-500 hover:bg-emerald-50 transition-all group">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-emerald-500 text-white p-3 rounded-xl"><Tag size={20}/></div>
+                            <div className="text-left">
+                                <span className="block font-black text-slate-900 uppercase text-xs">Solo Maestros</span>
+                                <span className="block text-[10px] text-slate-400 font-medium">Cuentas, Categorías, Recurrentes...</span>
+                            </div>
+                        </div>
+                        <ArrowRightLeft className="text-slate-300 group-hover:text-emerald-500 -rotate-45" size={20}/>
+                    </button>
+
+                    <button onClick={() => exportBackup('TRANSACTIONS')} className="w-full flex items-center justify-between p-6 bg-slate-50 rounded-[2rem] border-2 border-slate-100 hover:border-amber-500 hover:bg-amber-50 transition-all group">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-amber-500 text-white p-3 rounded-xl"><Receipt size={20}/></div>
+                            <div className="text-left">
+                                <span className="block font-black text-slate-900 uppercase text-xs">Solo Movimientos</span>
+                                <span className="block text-[10px] text-slate-400 font-medium">Historial de transacciones puro</span>
+                            </div>
+                        </div>
+                        <ArrowRightLeft className="text-slate-300 group-hover:text-amber-500 -rotate-45" size={20}/>
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 };
