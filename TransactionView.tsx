@@ -58,6 +58,15 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [sortDirection, setSortDirection] = useState<SortDirection>('DESC');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  // --- OPTIMIZACIÓN: INDEXACIÓN ---
+  const { accMap, catMap, famMap } = useMemo(() => {
+    return {
+      accMap: new Map(data.accounts.map(a => [a.id, a])),
+      catMap: new Map(data.categories.map(c => [c.id, c])),
+      famMap: new Map(data.families.map(f => [f.id, f]))
+    };
+  }, [data.accounts, data.categories, data.families]);
+
   // Helper para formatear fecha dd/mm/aa
   const formatDateDisplay = (dateStr: string) => {
     if (!dateStr) return '--/--/--';
@@ -80,8 +89,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     if (initialSpecificFilters) {
       if (initialSpecificFilters.action === 'NEW' && initialSpecificFilters.categoryId) {
          resetForm();
-         const cat = data.categories.find(c => c.id === initialSpecificFilters.categoryId);
-         const fam = data.families.find(f => f.id === cat?.familyId);
+         const cat = catMap.get(initialSpecificFilters.categoryId);
+         const fam = cat ? famMap.get(cat.familyId) : null;
          
          setFCat(initialSpecificFilters.categoryId);
          // Auto-detectar tipo basado en la familia de la categoría
@@ -100,7 +109,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
       if (clearSpecificFilters) clearSpecificFilters();
     }
-  }, [initialSpecificFilters, data.categories, data.families]);
+  }, [initialSpecificFilters, catMap, famMap]);
 
   const resetForm = () => {
     setEditingTx(null);
@@ -144,14 +153,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     // Gestión inteligente del signo:
     // Si es Gasto o Traspaso -> Forzamos Negativo
     // Si es Ingreso -> Forzamos Positivo
-    // Esto permite al usuario escribir "50" y que el sistema lo interprete correctamente según el contexto.
     let rawAmount = parseFloat(fAmount);
-    rawAmount = Math.abs(rawAmount); // Primero obtenemos magnitud absoluta
+    rawAmount = Math.abs(rawAmount);
 
     if (fType === 'EXPENSE' || fType === 'TRANSFER') {
         rawAmount = -rawAmount;
     } 
     
+    const cat = catMap.get(fCat);
     const finalTx: Transaction = {
       id: editingTx ? editingTx.id : generateId(),
       date: fDate,
@@ -160,7 +169,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       accountId: fAcc,
       type: fType,
       categoryId: fCat,
-      familyId: data.categories.find(c => c.id === fCat)?.familyId || '',
+      familyId: cat?.familyId || '',
       attachment: fAttachment,
       transferAccountId: fType === 'TRANSFER' ? fTransferDest : undefined
     };
@@ -211,8 +220,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       if (colFilterClip === 'NO' && t.attachment) return false;
 
       // Exit Filter (Cuenta)
-      // Ajuste: Ahora permite que aparezcan transacciones donde la cuenta es ORIGEN (accountId) 
-      // O DESTINO (transferAccountId)
       if (colFilterExit !== 'ALL') {
          const isSource = t.accountId === colFilterExit;
          const isDest = t.type === 'TRANSFER' && t.transferAccountId === colFilterExit;
@@ -246,12 +253,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       else if (sortField === 'DESCRIPTION') { vA = a.description.toLowerCase(); vB = b.description.toLowerCase(); }
       else if (sortField === 'AMOUNT') { vA = a.amount; vB = b.amount; }
       else if (sortField === 'ACCOUNT') { 
-          vA = data.accounts.find(x=>x.id===a.accountId)?.name.toLowerCase() || ''; 
-          vB = data.accounts.find(x=>x.id===b.accountId)?.name.toLowerCase() || ''; 
+          vA = accMap.get(a.accountId)?.name.toLowerCase() || ''; 
+          vB = accMap.get(b.accountId)?.name.toLowerCase() || ''; 
       }
       else if (sortField === 'CATEGORY') { 
-          const catA = data.categories.find(x=>x.id===a.categoryId)?.name.toLowerCase() || '';
-          const catB = data.categories.find(x=>x.id===b.categoryId)?.name.toLowerCase() || '';
+          const catA = catMap.get(a.categoryId)?.name.toLowerCase() || '';
+          const catB = catMap.get(b.categoryId)?.name.toLowerCase() || '';
           vA = catA; vB = catB;
       }
       else if (sortField === 'ATTACHMENT') { vA = a.attachment ? 1 : 0; vB = b.attachment ? 1 : 0; }
@@ -260,7 +267,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       if (vA > vB) return sortDirection === 'ASC' ? 1 : -1;
       return 0;
     });
-  }, [data.transactions, filter, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2, sortField, sortDirection, data.accounts, data.categories]);
+  }, [data.transactions, filter, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2, sortField, sortDirection, accMap, catMap]);
 
   const handleSort = (field: SortField) => {
       if (sortField === field) {
@@ -281,10 +288,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
   const handleExport = (type: 'CSV' | 'EXCEL') => {
       const exportData = filteredTransactions.map(t => {
-          const srcAcc = data.accounts.find(a => a.id === t.accountId);
-          const dstAcc = data.accounts.find(a => a.id === t.transferAccountId);
-          const cat = data.categories.find(c => c.id === t.categoryId);
-          const fam = data.families.find(f => f.id === cat?.familyId);
+          const srcAcc = accMap.get(t.accountId);
+          const dstAcc = t.transferAccountId ? accMap.get(t.transferAccountId) : null;
+          const cat = catMap.get(t.categoryId);
+          const fam = cat ? famMap.get(cat.familyId) : null;
 
           return {
               Fecha: t.date,
@@ -351,18 +358,41 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                     <button onClick={() => navigatePeriod('prev')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={20} /></button>
                     <button onClick={() => navigatePeriod('next')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={20} /></button>
                 </div>
-                <div className="flex gap-2">
-                    {filter.timeRange !== 'CUSTOM' && filter.timeRange !== 'ALL' && (
-                        <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
-                            {years.map(y => <option key={y} value={y}>{y}</option>)}
-                        </select>
-                    )}
-                    {filter.timeRange === 'MONTH' && (
-                        <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
-                            {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
-                        </select>
+                
+                {/* Inputs de Filtro Personalizado añadidos */}
+                <div className="flex gap-2 items-center">
+                    {filter.timeRange === 'CUSTOM' ? (
+                        <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                            <input 
+                                type="date" 
+                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent"
+                                value={filter.customStart}
+                                onChange={(e) => onUpdateFilter({...filter, customStart: e.target.value})}
+                            />
+                            <span className="text-slate-300 font-bold">-</span>
+                            <input 
+                                type="date" 
+                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent"
+                                value={filter.customEnd}
+                                onChange={(e) => onUpdateFilter({...filter, customEnd: e.target.value})}
+                            />
+                        </div>
+                    ) : (
+                        <>
+                            {filter.timeRange !== 'ALL' && (
+                                <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
+                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            )}
+                            {filter.timeRange === 'MONTH' && (
+                                <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
+                                    {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                </select>
+                            )}
+                        </>
                     )}
                 </div>
+
                 <button onClick={() => openEditor()} className="sm:ml-4 bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 active:scale-95">
                   <Plus size={16} /> Nuevo
                 </button>
@@ -477,22 +507,23 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
           </div>
 
           {filteredTransactions.map(t => {
-              const srcAcc = data.accounts.find(x=>x.id===t.accountId);
-              const dstAcc = t.transferAccountId ? data.accounts.find(x=>x.id===t.transferAccountId) : null;
-              const cat = data.categories.find(x=>x.id===t.categoryId);
+              // Uso de Mapas para O(1)
+              const srcAcc = accMap.get(t.accountId);
+              const dstAcc = t.transferAccountId ? accMap.get(t.transferAccountId) : null;
+              const cat = catMap.get(t.categoryId);
               
               let entryNode: React.ReactNode;
               let exitNode: React.ReactNode;
 
               if (t.type === 'TRANSFER') {
-                entryNode = <div className="flex items-center gap-2 text-indigo-600 font-bold truncate">{renderIcon(dstAcc?.icon || '🏦', "w-6 h-6")} {dstAcc?.name}</div>;
-                exitNode = <div className="flex items-center gap-2 text-slate-500 font-bold truncate">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
+                entryNode = <div onClick={(e) => { e.stopPropagation(); setColFilterExit(dstAcc?.id || ''); }} className="flex items-center gap-2 text-indigo-600 font-bold truncate cursor-pointer hover:underline decoration-2 underline-offset-4 decoration-indigo-200" title="Filtrar por esta cuenta">{renderIcon(dstAcc?.icon || '🏦', "w-6 h-6")} {dstAcc?.name}</div>;
+                exitNode = <div onClick={(e) => { e.stopPropagation(); setColFilterExit(srcAcc?.id || ''); }} className="flex items-center gap-2 text-slate-500 font-bold truncate cursor-pointer hover:underline decoration-2 underline-offset-4 decoration-slate-200" title="Filtrar por esta cuenta">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
               } else if (t.type === 'INCOME') {
-                entryNode = <div className="flex items-center gap-2 text-emerald-600 font-bold truncate">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
-                exitNode = <div className="flex items-center gap-2 text-slate-300 italic truncate">{cat ? renderIcon(cat.icon, "w-5 h-5") : <Tag size={14}/>} {cat?.name || 'S/C'}</div>;
+                entryNode = <div onClick={(e) => { e.stopPropagation(); setColFilterExit(srcAcc?.id || ''); }} className="flex items-center gap-2 text-emerald-600 font-bold truncate cursor-pointer hover:underline decoration-2 underline-offset-4 decoration-emerald-200" title="Filtrar por esta cuenta">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
+                exitNode = <div onClick={(e) => { e.stopPropagation(); setColFilterEntry(cat?.id || ''); }} className="flex items-center gap-2 text-slate-300 italic truncate cursor-pointer hover:text-emerald-500 transition-colors" title="Filtrar por esta categoría">{cat ? renderIcon(cat.icon, "w-5 h-5") : <Tag size={14}/>} {cat?.name || 'S/C'}</div>;
               } else {
-                entryNode = <div className="flex items-center gap-2 text-rose-500 font-bold truncate">{renderIcon(cat?.icon || '🏷️', "w-6 h-6")} {cat?.name}</div>;
-                exitNode = <div className="flex items-center gap-2 text-slate-500 font-bold truncate">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
+                entryNode = <div onClick={(e) => { e.stopPropagation(); setColFilterEntry(cat?.id || ''); }} className="flex items-center gap-2 text-rose-500 font-bold truncate cursor-pointer hover:underline decoration-2 underline-offset-4 decoration-rose-200" title="Filtrar por esta categoría">{renderIcon(cat?.icon || '🏷️', "w-6 h-6")} {cat?.name}</div>;
+                exitNode = <div onClick={(e) => { e.stopPropagation(); setColFilterExit(srcAcc?.id || ''); }} className="flex items-center gap-2 text-slate-500 font-bold truncate cursor-pointer hover:underline decoration-2 underline-offset-4 decoration-slate-200" title="Filtrar por esta cuenta">{renderIcon(srcAcc?.icon || '🏦', "w-6 h-6")} {srcAcc?.name}</div>;
               }
 
               return (
@@ -509,22 +540,22 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             <div className="flex flex-wrap items-center gap-1.5 text-[10px] leading-none">
                                 {t.type === 'TRANSFER' ? (
                                     <>
-                                        <span className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-[0.4rem]">
+                                        <span onClick={(e) => { e.stopPropagation(); setColFilterExit(srcAcc?.id || ''); }} className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-[0.4rem] cursor-pointer active:scale-95">
                                             {renderIcon(srcAcc?.icon, "w-3 h-3")} <span className="truncate max-w-[80px]">{srcAcc?.name}</span>
                                         </span>
                                         <ArrowRightLeft size={10} className="text-slate-300" />
-                                        <span className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-[0.4rem]">
+                                        <span onClick={(e) => { e.stopPropagation(); setColFilterExit(dstAcc?.id || ''); }} className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-[0.4rem] cursor-pointer active:scale-95">
                                             {renderIcon(dstAcc?.icon, "w-3 h-3")} <span className="truncate max-w-[80px]">{dstAcc?.name}</span>
                                         </span>
                                     </>
                                 ) : (
                                     <>
-                                        <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded-[0.4rem] ${t.type === 'EXPENSE' ? 'text-rose-600 bg-rose-50' : 'text-emerald-600 bg-emerald-50'}`}>
+                                        <span onClick={(e) => { e.stopPropagation(); setColFilterEntry(cat?.id || ''); }} className={`flex items-center gap-1 px-1.5 py-0.5 rounded-[0.4rem] cursor-pointer active:scale-95 ${t.type === 'EXPENSE' ? 'text-rose-600 bg-rose-50' : 'text-emerald-600 bg-emerald-50'}`}>
                                             {cat ? renderIcon(cat.icon, "w-3 h-3") : <Tag size={10}/>} 
                                             <span className="truncate max-w-[100px]">{cat?.name || 'S/C'}</span>
                                         </span>
                                         <span className="text-slate-300 text-[8px]">•</span>
-                                        <span className="text-slate-400 flex items-center gap-1 truncate max-w-[80px]">
+                                        <span onClick={(e) => { e.stopPropagation(); setColFilterExit(srcAcc?.id || ''); }} className="text-slate-400 flex items-center gap-1 truncate max-w-[80px] cursor-pointer hover:text-indigo-500">
                                             {renderIcon(srcAcc?.icon, "w-3 h-3")} {srcAcc?.name}
                                         </span>
                                     </>

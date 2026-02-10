@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
-import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category } from './types';
-import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search } from 'lucide-react';
+import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category, Family } from './types';
+import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays } from 'lucide-react';
 
 interface DashboardProps {
   data: AppState;
@@ -23,17 +23,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const [showBalanceDetail, setShowBalanceDetail] = useState(false);
   const [showRecurrentsModal, setShowRecurrentsModal] = useState(false);
   
-  // Estado para el menú de acción de categoría
   const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
 
-  // Helper para formatear fecha dd/mm/aa
+  // --- OPTIMIZACIÓN 1: INDEXACIÓN ---
+  // Convertimos los arrays en Mapas para acceso O(1) instantáneo.
+  // Esto evita hacer .find() miles de veces dentro de los bucles.
+  const { accMap, famMap, catMap, grpMap } = useMemo(() => {
+      return {
+          accMap: new Map(accounts.map(a => [a.id, a])),
+          famMap: new Map(families.map(f => [f.id, f])),
+          catMap: new Map(categories.map(c => [c.id, c])),
+          grpMap: new Map(accountGroups.map(g => [g.id, g]))
+      };
+  }, [accounts, families, categories, accountGroups]);
+
   const formatDateDisplay = (dateStr: string) => {
     if (!dateStr) return '--/--/--';
     const [year, month, day] = dateStr.split('-');
     return `${day}/${month}/${year.slice(-2)}`;
   };
 
-  // Helper para moneda: Muestra el signo real almacenado
   const formatCurrency = (amount: number) => {
     return `${numberFormatter.format(amount)} €`;
   };
@@ -49,6 +58,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return recurrents.filter(r => r.active && r.nextDueDate <= today);
   }, [recurrents]);
 
+  // Cálculo de límites de fecha optimizado
   const dateBounds = useMemo(() => {
     const y = filter.referenceDate.getFullYear();
     const m = filter.referenceDate.getMonth();
@@ -69,109 +79,138 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       endStr = '2100-12-31';
     }
     return { startStr, endStr };
-  }, [filter]);
+  }, [filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]);
 
-  const stats = useMemo(() => {
-    const accTotals: Record<string, number> = {};
-    accounts.forEach(a => accTotals[a.id] = a.initialBalance);
+  // --- OPTIMIZACIÓN 2: SINGLE PASS LOOP (BUCLE ÚNICO) ---
+  // Calculamos Stats, Saldos y Flujos en una sola pasada sobre las transacciones.
+  const dashboardData = useMemo(() => {
+    const accTotals = new Map<string, number>();
+    accounts.forEach(a => accTotals.set(a.id, a.initialBalance));
 
     let periodIncome = 0;
     let periodExpense = 0;
+    
+    // Estructuras para agrupar flujos (Familias y Categorías)
+    // Map<FamilyID, { total: number, cats: Map<CatID, number> }>
+    const incomeFlow = new Map<string, { total: number, cats: Map<string, number> }>();
+    const expenseFlow = new Map<string, { total: number, cats: Map<string, number> }>();
 
-    transactions.forEach(t => {
-      // Normalizamos el importe para cálculos:
-      // Si es TRASPASO o GASTO, aseguramos que sea negativo para la lógica contable.
-      // Si es INGRESO, positivo.
+    // Caché de fechas límite para comparar strings más rápido
+    const start = dateBounds.startStr;
+    const end = dateBounds.endStr;
+    const isAllTime = filter.timeRange === 'ALL';
+
+    // Iteramos transacciones UNA SOLA VEZ
+    for (const t of transactions) {
+      // Normalización de importe (Traspaso/Gasto -> Negativo)
       let effectiveAmount = t.amount;
-      
       if (t.type === 'TRANSFER' || t.type === 'EXPENSE') {
-          // Forzamos negativo por si acaso viene mal de la BD
           effectiveAmount = -Math.abs(t.amount);
       } else {
           effectiveAmount = Math.abs(t.amount);
       }
 
-      // 1. Cálculo de Saldos de Cuentas (Acumulado histórico algebraico)
-      if (t.date <= dateBounds.endStr) {
-        // Cuenta Origen: Se suma el importe (si es negativo, resta)
-        accTotals[t.accountId] = (accTotals[t.accountId] || 0) + effectiveAmount;
-        
-        // Cuenta Destino (solo en traspasos): Se resta el importe (si es negativo, suma -- menos por menos es más)
+      // 1. Cálculo de Saldos (Histórico hasta el final del periodo seleccionado)
+      if (t.date <= end) {
+        const currentSrc = accTotals.get(t.accountId) || 0;
+        accTotals.set(t.accountId, currentSrc + effectiveAmount);
+
         if (t.type === 'TRANSFER' && t.transferAccountId) {
-            accTotals[t.transferAccountId] = (accTotals[t.transferAccountId] || 0) - effectiveAmount;
+            const currentDst = accTotals.get(t.transferAccountId) || 0;
+            accTotals.set(t.transferAccountId, currentDst - effectiveAmount);
         }
       }
 
-      // 2. Cálculo del Periodo (Ingresos vs Gastos)
-      const inPeriod = filter.timeRange === 'ALL' || (t.date >= dateBounds.startStr && t.date <= dateBounds.endStr);
+      // 2. Cálculo del Periodo (KPIs y Flujos)
+      const inPeriod = isAllTime || (t.date >= start && t.date <= end);
+      
       if (inPeriod && t.type !== 'TRANSFER') {
-          // Buscamos la familia
-          const cat = categories.find(c => c.id === t.categoryId);
-          const fam = families.find(f => f.id === (t.familyId || cat?.familyId));
+          // KPIs Globales
+          if (t.type === 'INCOME') periodIncome += effectiveAmount;
+          else if (t.type === 'EXPENSE') periodExpense += effectiveAmount;
 
-          // Usamos el importe efectivo para sumarizar
+          // Agrupación por Familias y Categorías
+          const cat = catMap.get(t.categoryId);
+          // Si no hay familia en la tx, usamos la de la categoría, y si no, 'Sin Familia'
+          const familyId = t.familyId || cat?.familyId || 'unknown';
+          const fam = famMap.get(familyId); 
+          
           if (fam) {
-              if (fam.type === 'INCOME') periodIncome += effectiveAmount;
-              else if (fam.type === 'EXPENSE') periodExpense += effectiveAmount;
+              const targetFlow = fam.type === 'INCOME' ? incomeFlow : expenseFlow;
+              
+              if (!targetFlow.has(fam.id)) {
+                  targetFlow.set(fam.id, { total: 0, cats: new Map() });
+              }
+              const famEntry = targetFlow.get(fam.id)!;
+              famEntry.total += effectiveAmount;
+
+              if (cat) {
+                  const currentCatTotal = famEntry.cats.get(cat.id) || 0;
+                  famEntry.cats.set(cat.id, currentCatTotal + effectiveAmount);
+              }
           } else {
-              if (t.type === 'INCOME') periodIncome += effectiveAmount;
-              else if (t.type === 'EXPENSE') periodExpense += effectiveAmount;
+              // Manejo de huérfanos si es necesario, o basarse en t.type
+              // Por simplicidad, si no hay familia, se suma al KPI pero no al desglose visual
           }
       }
-    });
+    }
 
-    return { 
-        income: periodIncome, 
-        expense: periodExpense, 
-        balance: Object.values(accTotals).reduce((a, b) => a + b, 0), 
-        // Ahorro: Suma algebraica de Ingresos + Gastos del periodo
-        periodBalance: periodIncome + periodExpense,
-        accTotals
+    // 3. Transformación final a estructuras de visualización (Arrays ordenados)
+    const buildHierarchy = (flowMap: Map<string, { total: number, cats: Map<string, number> }>) => {
+        return Array.from(flowMap.entries())
+            .map(([famId, data]) => {
+                const fam = famMap.get(famId);
+                if (!fam) return null;
+
+                const catsArray = Array.from(data.cats.entries())
+                    .map(([catId, amount]) => ({
+                        category: catMap.get(catId)!,
+                        total: amount
+                    }))
+                    .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+
+                return {
+                    family: fam,
+                    total: data.total,
+                    categories: catsArray
+                };
+            })
+            .filter(Boolean) // Eliminar nulos
+            .sort((a, b) => Math.abs(b!.total) - Math.abs(a!.total)) as { family: Family, total: number, categories: {category: Category, total: number}[] }[];
     };
-  }, [transactions, accounts, dateBounds, filter.timeRange, families, categories]);
+
+    const globalBalance = Array.from(accTotals.values()).reduce((a, b) => a + b, 0);
+
+    return {
+        stats: {
+            income: periodIncome,
+            expense: periodExpense,
+            balance: globalBalance,
+            periodBalance: periodIncome + periodExpense,
+            accTotals
+        },
+        flows: {
+            incomes: buildHierarchy(incomeFlow),
+            expenses: buildHierarchy(expenseFlow)
+        }
+    };
+
+  }, [transactions, accounts, dateBounds, filter.timeRange, isAllTime => filter.timeRange === 'ALL', accMap, famMap, catMap]); // Dependencias optimizadas
 
   const groupedBalances = useMemo(() => {
     return accountGroups.map(group => {
         const groupAccounts = accounts.filter(a => a.groupId === group.id);
-        const groupTotal = groupAccounts.reduce((sum, acc) => sum + (stats.accTotals[acc.id] || 0), 0);
+        const groupTotal = groupAccounts.reduce((sum, acc) => sum + (dashboardData.stats.accTotals.get(acc.id) || 0), 0);
         return {
             group,
             total: groupTotal,
             accounts: groupAccounts.map(acc => ({
                 ...acc,
-                balance: stats.accTotals[acc.id] || 0
+                balance: dashboardData.stats.accTotals.get(acc.id) || 0
             }))
         };
     }).filter(g => g.accounts.length > 0);
-  }, [accountGroups, accounts, stats.accTotals]);
-
-  const flowData = useMemo(() => {
-      const periodTxs = transactions.filter(t => filter.timeRange === 'ALL' || (t.date >= dateBounds.startStr && t.date <= dateBounds.endStr));
-      
-      const buildHierarchy = (type: 'INCOME' | 'EXPENSE') => {
-          return families
-            .filter(f => f.type === type)
-            .map(fam => {
-                const famTxs = periodTxs.filter(t => t.familyId === fam.id || (categories.find(c => c.id === t.categoryId)?.familyId === fam.id));
-                // Suma directa algebraica
-                const totalFam = famTxs.reduce((sum, t) => sum + t.amount, 0);
-                
-                const cats = categories
-                    .filter(c => c.familyId === fam.id)
-                    .map(cat => ({
-                        category: cat,
-                        total: famTxs.filter(t => t.categoryId === cat.id).reduce((sum, t) => sum + t.amount, 0)
-                    }))
-                    // Ordenamos por magnitud absoluta para ver los mayores movimientos primero
-                    .sort((a,b) => Math.abs(b.total) - Math.abs(a.total));
-                
-                return { family: fam, total: totalFam, categories: cats };
-            })
-            // Ordenamos por magnitud absoluta
-            .sort((a,b) => Math.abs(b.total) - Math.abs(a.total));
-      };
-      return { incomes: buildHierarchy('INCOME'), expenses: buildHierarchy('EXPENSE') };
-  }, [families, categories, transactions, dateBounds, filter.timeRange]);
+  }, [accountGroups, accounts, dashboardData.stats.accTotals]);
 
   const navigatePeriod = (direction: 'prev' | 'next') => {
     const newDate = new Date(filter.referenceDate);
@@ -195,7 +234,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         id: Math.random().toString(36).substring(2, 15),
         date: r.nextDueDate,
         description: r.description,
-        amount: r.amount, // Debería venir con signo correcto desde configuración
+        amount: r.amount,
         accountId: r.accountId,
         transferAccountId: r.transferAccountId,
         familyId: r.familyId,
@@ -257,16 +296,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     <button onClick={() => navigatePeriod('prev')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={20} /></button>
                     <button onClick={() => navigatePeriod('next')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={20} /></button>
                 </div>
-                <div className="flex gap-2">
-                    {filter.timeRange !== 'CUSTOM' && filter.timeRange !== 'ALL' && (
-                        <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
-                            {years.map(y => <option key={y} value={y}>{y}</option>)}
-                        </select>
-                    )}
-                    {filter.timeRange === 'MONTH' && (
-                        <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
-                            {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
-                        </select>
+                
+                {/* Lógica de Filtro Personalizado añadida aquí */}
+                <div className="flex gap-2 items-center">
+                    {filter.timeRange === 'CUSTOM' ? (
+                        <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                            <input 
+                                type="date" 
+                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent"
+                                value={filter.customStart}
+                                onChange={(e) => onUpdateFilter({...filter, customStart: e.target.value})}
+                            />
+                            <span className="text-slate-300 font-bold">-</span>
+                            <input 
+                                type="date" 
+                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent"
+                                value={filter.customEnd}
+                                onChange={(e) => onUpdateFilter({...filter, customEnd: e.target.value})}
+                            />
+                        </div>
+                    ) : (
+                        <>
+                            {filter.timeRange !== 'ALL' && (
+                                <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
+                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            )}
+                            {filter.timeRange === 'MONTH' && (
+                                <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
+                                    {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                </select>
+                            )}
+                        </>
                     )}
                 </div>
             </div>
@@ -294,17 +355,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
             <div className="bg-indigo-50 text-indigo-600 w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform"><Banknote size={26}/></div>
             <div>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Patrimonio Global <span className="text-indigo-300 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">Ver detalle</span></p>
-                <p className={`text-3xl font-black tracking-tight ${getAmountColor(stats.balance)}`}>
-                    {formatCurrency(stats.balance)}
+                <p className={`text-3xl font-black tracking-tight ${getAmountColor(dashboardData.stats.balance)}`}>
+                    {formatCurrency(dashboardData.stats.balance)}
                 </p>
             </div>
         </button>
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col justify-between min-h-[160px]">
-            <div className={`${stats.periodBalance >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'} w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-sm`}><Scale size={26}/></div>
+            <div className={`${dashboardData.stats.periodBalance >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'} w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-sm`}><Scale size={26}/></div>
             <div>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Ahorro del Periodo</p>
-                <p className={`text-3xl font-black tracking-tight ${getAmountColor(stats.periodBalance)}`}>
-                    {formatCurrency(stats.periodBalance)}
+                <p className={`text-3xl font-black tracking-tight ${getAmountColor(dashboardData.stats.periodBalance)}`}>
+                    {formatCurrency(dashboardData.stats.periodBalance)}
                 </p>
             </div>
         </div>
@@ -319,11 +380,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                       <div className="bg-emerald-100 text-emerald-600 p-2.5 rounded-2xl"><ArrowUpCircle size={28}/></div>
                       <h3 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter">Ingresos</h3>
                   </div>
-                  <span className={`text-2xl md:text-3xl font-black tracking-tighter ${getAmountColor(stats.income)}`}>{formatCurrency(stats.income)}</span>
+                  <span className={`text-2xl md:text-3xl font-black tracking-tighter ${getAmountColor(dashboardData.stats.income)}`}>{formatCurrency(dashboardData.stats.income)}</span>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {flowData.incomes.map(item => (
+                  {dashboardData.flows.incomes.map(item => (
                       <div key={item.family.id} className={`bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all ${item.total === 0 ? 'opacity-60' : ''}`}>
                           <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
                               <div className="flex items-center gap-3">
@@ -354,7 +415,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                           </div>
                       </div>
                   ))}
-                  {flowData.incomes.length === 0 && <p className="col-span-full text-center text-slate-400 font-bold py-10 uppercase text-sm">No hay familias de ingresos configuradas</p>}
+                  {dashboardData.flows.incomes.length === 0 && <p className="col-span-full text-center text-slate-400 font-bold py-10 uppercase text-sm">No hay familias de ingresos configuradas</p>}
               </div>
           </section>
 
@@ -365,11 +426,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                       <div className="bg-rose-100 text-rose-600 p-2.5 rounded-2xl"><ArrowDownCircle size={28}/></div>
                       <h3 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter">Gastos</h3>
                   </div>
-                  <span className={`text-2xl md:text-3xl font-black tracking-tighter ${getAmountColor(stats.expense)}`}>{formatCurrency(stats.expense)}</span>
+                  <span className={`text-2xl md:text-3xl font-black tracking-tighter ${getAmountColor(dashboardData.stats.expense)}`}>{formatCurrency(dashboardData.stats.expense)}</span>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {flowData.expenses.map(item => (
+                  {dashboardData.flows.expenses.map(item => (
                       <div key={item.family.id} className={`bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all ${item.total === 0 ? 'opacity-60' : ''}`}>
                           <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
                               <div className="flex items-center gap-3">
@@ -400,7 +461,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                           </div>
                       </div>
                   ))}
-                   {flowData.expenses.length === 0 && <p className="col-span-full text-center text-slate-400 font-bold py-10 uppercase text-sm">No hay familias de gastos configuradas</p>}
+                   {dashboardData.flows.expenses.length === 0 && <p className="col-span-full text-center text-slate-400 font-bold py-10 uppercase text-sm">No hay familias de gastos configuradas</p>}
               </div>
           </section>
 
@@ -440,7 +501,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         </div>
       )}
 
-      {/* Modales (Sin cambios estructurales, solo visuales para usar getAmountColor) */}
+      {/* Modales */}
       {showBalanceDetail && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-8 sm:p-12 relative max-h-[90vh] overflow-y-auto custom-scrollbar border border-white/20">
@@ -475,7 +536,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                 </div>
                 <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-center px-4">
                     <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Patrimonio Neto Total</span>
-                    <span className={`text-3xl font-black tracking-tighter ${getAmountColor(stats.balance)}`}>{formatCurrency(stats.balance)}</span>
+                    <span className={`text-3xl font-black tracking-tighter ${getAmountColor(dashboardData.stats.balance)}`}>{formatCurrency(dashboardData.stats.balance)}</span>
                 </div>
                 <button onClick={() => setShowBalanceDetail(false)} className="w-full mt-10 py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-600 transition-all active:scale-95">Entendido</button>
             </div>
@@ -489,8 +550,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                 <div className="flex items-center gap-4 mb-10"><div className="bg-rose-500 p-4 rounded-3xl text-white shadow-xl shadow-rose-500/20"><Bell size={28} /></div><div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Vencimientos</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Movimientos recurrentes pendientes</p></div></div>
                 <div className="space-y-4">
                     {pendingRecurrents.map(r => {
-                        const acc = accounts.find(a => a.id === r.accountId);
-                        const cat = categories.find(c => c.id === r.categoryId);
+                        // Uso de Maps para búsqueda rápida
+                        const acc = accMap.get(r.accountId);
+                        const cat = catMap.get(r.categoryId);
                         return (
                             <div key={r.id} className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4 animate-in slide-in-from-right-4">
                                 <div className="flex justify-between items-start">
