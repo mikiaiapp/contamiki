@@ -4,6 +4,7 @@ import { Layout } from './Layout';
 import { Dashboard } from './Dashboard';
 import { TransactionView } from './TransactionView';
 import { SettingsView } from './components/SettingsView';
+import { AIInsights } from './components/AIInsights';
 import { LoginView } from './LoginView';
 import { AppState, View, Transaction, GlobalFilter, MultiBookState, BookMetadata, BookColor } from './types';
 import { loadData, saveData, defaultAppState } from './services/dataService';
@@ -135,6 +136,7 @@ const App: React.FC = () => {
           onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }}
         />
       )}
+      {currentView === 'AI_INSIGHTS' && <AIInsights data={currentAppData} />}
 
       {isBookModalOpen && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">

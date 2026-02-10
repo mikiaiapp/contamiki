@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check } from 'lucide-react';
+import { LayoutDashboard, Receipt, Settings, BrainCircuit, Wallet, LogOut, ChevronDown, Plus, Edit2, Check } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
 import { logout } from './services/authService';
 
@@ -54,6 +54,8 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
     { id: 'SETTINGS', label: 'Ajustes', icon: <Settings size={22} /> },
   ];
 
+  const aiNavItem = { id: 'AI_INSIGHTS' as View, label: 'Asesor IA', icon: <BrainCircuit size={22} /> };
+
   const renderNavItem = (item: { id: View; label: string; icon: React.ReactNode; badge?: number }, isMobile = false) => (
     <button
       key={item.id}
@@ -81,16 +83,16 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
     <div className="relative z-[60]">
         <button 
             onClick={() => setIsBookMenuOpen(!isBookMenuOpen)}
-            className="flex items-center gap-2 sm:gap-3 px-3 py-2 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all active:scale-95 shadow-sm"
+            className="flex items-center gap-3 px-3 py-2 rounded-2xl hover:bg-black/10 transition-all active:scale-95"
         >
-            <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm shrink-0">
+            <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm">
                 <Wallet className="text-white" size={20} />
             </div>
-            <div className="text-left min-w-0">
-                <span className="block text-[8px] uppercase tracking-widest text-white/50 leading-none mb-1">Contabilidad Actual</span>
-                <span className="block text-sm font-black text-white leading-none tracking-tight truncate max-w-[140px] md:max-w-none">{currentBook.name}</span>
+            <div className="text-left hidden sm:block">
+                <span className="block text-[10px] uppercase tracking-widest text-white/60">Contabilidad</span>
+                <span className="block text-sm font-black text-white leading-none tracking-tight">{currentBook.name}</span>
             </div>
-            <ChevronDown size={14} className={`text-white/40 ml-1 transition-transform shrink-0 ${isBookMenuOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown size={16} className={`text-white/60 transition-transform ${isBookMenuOpen ? 'rotate-180' : ''}`} />
         </button>
 
         {isBookMenuOpen && (
@@ -106,7 +108,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                                 className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all ${book.id === currentBook.id ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
                             >
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-3 h-3 rounded-full ${THEME_COLORS[book.color]}`}></div>
+                                    <div className={`w-3 h-3 rounded-full ${THEME_COLORS[book.color].replace('bg-', 'bg-')}`}></div>
                                     <span className="text-xs font-bold">{book.name}</span>
                                 </div>
                                 {book.id === currentBook.id && <Check size={14} />}
@@ -149,6 +151,9 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         </nav>
 
         <div className="px-6 pb-6 space-y-2">
+          <div className="h-px bg-white/10 mx-4 mb-4" />
+          {renderNavItem(aiNavItem)}
+          
           <button 
               onClick={logout}
               className="w-full flex items-center gap-4 px-6 py-4 rounded-[1.25rem] text-white/50 hover:bg-white/10 hover:text-white transition-all font-black text-[10px] uppercase tracking-widest group"
@@ -162,9 +167,9 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       </aside>
 
       {/* HEADER MOBILE */}
-      <header className={`lg:hidden ${bgClass} text-white px-4 py-3 flex justify-between items-center shadow-xl z-50 transition-colors duration-500`}>
+      <header className={`lg:hidden ${bgClass} text-white px-6 py-4 flex justify-between items-center shadow-xl z-50 transition-colors duration-500`}>
         <BookSelector />
-        <button onClick={logout} className="bg-white/10 text-white/70 p-2.5 rounded-xl border border-white/10 active:scale-90 transition-transform shadow-inner">
+        <button onClick={logout} className="bg-white/10 text-white/70 p-2 rounded-xl border border-white/10">
           <LogOut size={18} />
         </button>
       </header>
@@ -195,6 +200,15 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
             )}
           </button>
         ))}
+        <button
+            onClick={() => setCurrentView(aiNavItem.id)}
+            className={`flex flex-col items-center gap-1 p-3 transition-all ${
+              currentView === aiNavItem.id ? 'text-indigo-400 scale-110' : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            {aiNavItem.icon}
+            <span className="text-[8px] font-black uppercase tracking-[0.1em]">{aiNavItem.label}</span>
+          </button>
       </nav>
     </div>
   );
