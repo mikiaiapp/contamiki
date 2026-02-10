@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer, ChevronsLeft, ChevronsRight, List, Heart, Star } from 'lucide-react';
+import { AppState, Transaction, TransactionType, GlobalFilter } from './types';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
@@ -31,8 +31,6 @@ const numberFormatter = new Intl.NumberFormat('de-DE', {
 export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTransaction, onDeleteTransaction, onUpdateTransaction, filter, onUpdateFilter, initialSpecificFilters, clearSpecificFilters }) => {
   // Editor State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [showFavoritesModal, setShowFavoritesModal] = useState(false);
-  
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [fType, setFType] = useState<TransactionType>('EXPENSE');
   const [fAmount, setFAmount] = useState('');
@@ -59,10 +57,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [sortField, setSortField] = useState<SortField>('DATE');
   const [sortDirection, setSortDirection] = useState<SortDirection>('DESC');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   // --- CAPA 1: INDEXACIÓN ESTRUCTURAL ---
   const indices = useMemo(() => {
@@ -165,23 +159,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setIsModalOpen(true);
   };
 
-  // Lógica para cargar un favorito
-  const handleSelectFavorite = (fav: FavoriteMovement) => {
-      setEditingTx(null); // Es una nueva transacción basada en plantilla
-      setFType(fav.type);
-      setFAmount(Math.abs(fav.amount).toString()); // Usamos valor absoluto para el input
-      setFDesc(fav.description);
-      setFAcc(fav.accountId);
-      setFCat(fav.categoryId);
-      setFTransferDest(fav.transferAccountId || '');
-      // FECHA: Siempre hoy
-      setFDate(new Date().toISOString().split('T')[0]);
-      setFAttachment(undefined);
-
-      setShowFavoritesModal(false);
-      setIsModalOpen(true);
-  };
-
   const handleTypeChange = (newType: TransactionType) => {
       setFType(newType);
       // No modificamos el valor del input al cambiar tipo, dejamos que handleSave gestione el signo
@@ -205,7 +182,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     const cat = indices.cat.get(fCat);
     const finalTx: Transaction = {
       id: editingTx ? editingTx.id : generateId(),
-      ledgerId: editingTx ? editingTx.ledgerId : (data.activeLedgerId || 'l1'),
       date: fDate,
       amount: rawAmount,
       description: fDesc,
@@ -323,20 +299,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       return 0;
     });
   }, [data.transactions, filter, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2, sortField, sortDirection, indices]); // 'indices' es estable
-
-  // --- CAPA 4: PAGINACIÓN ---
-  // Resetear página cuando cambian los filtros
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filteredTransactions]);
-
-  const paginatedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    return filteredTransactions.slice(startIndex, endIndex);
-  }, [filteredTransactions, currentPage, itemsPerPage]);
-
-  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
 
   const handleSort = (field: SortField) => {
       if (sortField === field) {
@@ -462,14 +424,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                     )}
                 </div>
 
-                <div className="flex gap-2 sm:ml-4">
-                  <button onClick={() => setShowFavoritesModal(true)} className="bg-white border border-slate-200 text-slate-500 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm hover:text-rose-500 hover:border-rose-200 transition-all flex items-center justify-center gap-2 active:scale-95">
-                    <Heart size={16} /> Favorito
-                  </button>
-                  <button onClick={() => openEditor()} className="bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 active:scale-95">
-                    <Plus size={16} /> Nuevo
-                  </button>
-                </div>
+                <button onClick={() => openEditor()} className="sm:ml-4 bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 active:scale-95">
+                  <Plus size={16} /> Nuevo
+                </button>
             </div>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -594,7 +551,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             </div>
           </div>
 
-          {paginatedData.map(t => {
+          {filteredTransactions.map(t => {
               // Uso de Mapas para O(1)
               const srcAcc = indices.acc.get(t.accountId);
               const dstAcc = t.transferAccountId ? indices.acc.get(t.transferAccountId) : null;
@@ -712,112 +669,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
             </div>
           )}
       </div>
-
-      {/* FOOTER DE PAGINACIÓN */}
-      {filteredTransactions.length > 0 && (
-          <div className="sticky bottom-4 z-10 flex justify-center print:hidden">
-              <div className="bg-white/95 backdrop-blur-md border border-slate-200 shadow-2xl p-2 rounded-2xl flex items-center gap-2 sm:gap-4 animate-in slide-in-from-bottom-6">
-                  <div className="flex items-center gap-2 px-2 border-r border-slate-100 pr-4">
-                      <List size={16} className="text-slate-400"/>
-                      <select 
-                          className="bg-transparent text-[10px] font-black uppercase text-slate-600 outline-none cursor-pointer"
-                          value={itemsPerPage}
-                          onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                      >
-                          <option value="10">10 / pág</option>
-                          <option value="25">25 / pág</option>
-                          <option value="50">50 / pág</option>
-                          <option value="100">100 / pág</option>
-                          <option value="999999">Todo</option>
-                      </select>
-                  </div>
-                  
-                  <div className="flex items-center gap-1">
-                      <button 
-                          onClick={() => setCurrentPage(1)} 
-                          disabled={currentPage === 1}
-                          className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                      >
-                          <ChevronsLeft size={18} />
-                      </button>
-                      <button 
-                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} 
-                          disabled={currentPage === 1}
-                          className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                      >
-                          <ChevronLeft size={18} />
-                      </button>
-                      
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
-                          Página <span className="text-indigo-600">{currentPage}</span> de {totalPages}
-                      </span>
-
-                      <button 
-                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} 
-                          disabled={currentPage === totalPages}
-                          className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                      >
-                          <ChevronRight size={18} />
-                      </button>
-                       <button 
-                          onClick={() => setCurrentPage(totalPages)} 
-                          disabled={currentPage === totalPages}
-                          className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                      >
-                          <ChevronsRight size={18} />
-                      </button>
-                  </div>
-
-                  <div className="hidden sm:block border-l border-slate-100 pl-4 px-2">
-                      <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
-                          {filteredTransactions.length} items
-                      </span>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* Modal Selección Favoritos */}
-      {showFavoritesModal && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
-            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-8 relative max-h-[85vh] overflow-y-auto custom-scrollbar border border-white/20">
-                <button onClick={() => setShowFavoritesModal(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
-                <div className="flex items-center gap-4 mb-8">
-                    <div className="bg-rose-100 p-4 rounded-3xl text-rose-500 shadow-xl shadow-rose-100/50"><Heart size={28} /></div>
-                    <div>
-                      <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">Favoritos</h3>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Plantillas rápidas</p>
-                    </div>
-                </div>
-                
-                <div className="grid gap-3">
-                    {(!data.favorites || data.favorites.length === 0) && (
-                        <div className="text-center py-12 text-slate-400 italic">
-                           <Star size={40} className="mx-auto mb-3 opacity-20"/>
-                           <p className="text-xs">No tienes favoritos configurados.</p>
-                           <p className="text-[10px] mt-1">Ve a Ajustes > Favoritos para crearlos.</p>
-                        </div>
-                    )}
-                    {data.favorites?.map(fav => (
-                        <button 
-                            key={fav.id}
-                            onClick={() => handleSelectFavorite(fav)}
-                            className="flex items-center gap-4 p-4 bg-slate-50 hover:bg-indigo-50 border border-slate-100 hover:border-indigo-200 rounded-3xl transition-all group text-left active:scale-[0.98]"
-                        >
-                            <div className="w-12 h-12 flex-shrink-0 bg-white rounded-2xl flex items-center justify-center border border-slate-200 group-hover:scale-110 transition-transform">{renderIcon(fav.icon || '⭐', "w-6 h-6")}</div>
-                            <div className="flex-1 min-w-0">
-                                <p className="font-black text-slate-800 uppercase text-xs truncate">{fav.name}</p>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{fav.description}</p>
-                            </div>
-                            <span className={`text-sm font-black ${getAmountColor(fav.amount)} whitespace-nowrap`}>
-                                {formatCurrency(fav.amount)}
-                            </span>
-                        </button>
-                    ))}
-                </div>
-            </div>
-        </div>
-      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500">
