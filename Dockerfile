@@ -1,36 +1,31 @@
-# Usamos una imagen ligera de Node.js basada en Alpine Linux
-FROM node:18-alpine
+# Usamos la imagen base completa de Node.js 18 (basada en Debian Bullseye)
+# Esta imagen es más pesada que Alpine, pero garantiza máxima compatibilidad
+# con binarios del sistema (glibc) en arquitecturas como Synology NAS.
+FROM node:18-bullseye
 
-# --- SOLUCIÓN DEL ERROR ---
-# Instalamos la librería de compatibilidad libc6.
-# Esto es OBLIGATORIO para que 'esbuild' funcione dentro de Alpine Linux.
-RUN apk add --no-cache libc6-compat
-
-# Establecemos el directorio de trabajo
+# Establecemos el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
-# 1. Copiamos primero los archivos de definición de dependencias
-# Esto permite a Docker cachear la instalación de módulos si estos archivos no cambian
+# 1. Copiamos los archivos de definición de dependencias
 COPY package.json ./
-# Si tuvieras un package-lock.json, deberías descomentar la siguiente línea:
+# Si tienes package-lock.json, descomenta la siguiente línea:
 # COPY package-lock.json ./
 
-# 2. Instalamos las dependencias del proyecto
+# 2. Instalamos las dependencias
 RUN npm install
 
-# 3. Copiamos el resto del código fuente de la aplicación
+# 3. Copiamos el resto del código fuente
 COPY . .
 
-# 4. Construimos el bundle de la aplicación
-# Esto ejecutará "esbuild index.tsx ..." definido en tu package.json
+# 4. Construimos la aplicación
 RUN npm run build
 
-# Exponemos el puerto donde correrá la app
+# Exponemos el puerto
 EXPOSE 4000
 
-# Definimos variables de entorno por defecto
+# Variables de entorno
 ENV NODE_ENV=production
 ENV PORT=4000
 
-# Comando para iniciar el servidor
+# Comando de inicio
 CMD ["npm", "start"]

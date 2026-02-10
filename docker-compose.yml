@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   contamiki:
     container_name: contamiki
@@ -10,13 +9,13 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4000
-      # IMPORTANTE: Debes definir esta variable en tu entorno o crear un archivo .env
-      - API_KEY=${API_KEY}
-      # Opcional: Cambia esto por una cadena segura para firmar las sesiones
-      - JWT_SECRET=${JWT_SECRET:-clave_secreta_por_defecto_123}
+      # Pasa tu API KEY de Google aquí
+      - API_KEY=AIzaSyByt2qp5UYhL-bhf1me82AM81PEJ7MJyYE
+      # Secreto para tokens (opcional, tiene valor por defecto)
+      - JWT_SECRET=nasMAJU1505
     volumes:
-      # Volumen persistente para la base de datos JSON y usuarios
-      - contamiki_data:/app/data
+      # Volumen persistente para no perder los datos al reiniciar
+      - /volume1/docker/contamiki/data:/app/data
 
 volumes:
   contamiki_data:
