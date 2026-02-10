@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category, Family } from './types';
 import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown } from 'lucide-react';
 
@@ -12,7 +12,7 @@ interface DashboardProps {
   onNavigateToTransactions: (filters: any) => void;
 }
 
-// Se utiliza 'de-DE' para forzar estrictamente el formato 1.000,00 (Punto miles, Coma decimales)
+// Formateador estático para evitar recreación en render
 const numberFormatter = new Intl.NumberFormat('de-DE', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -23,19 +23,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const [showBalanceDetail, setShowBalanceDetail] = useState(false);
   const [showRecurrentsModal, setShowRecurrentsModal] = useState(false);
   
-  // Estado para controlar qué grupos están expandidos en el modal de patrimonio
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  
   const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
 
-  // --- CAPA 1: INDEXACIÓN ESTRUCTURAL (Solo cambia si cambia la configuración, no las transacciones) ---
+  // --- CAPA 1: INDEXACIÓN ESTRUCTURAL (Solo se recalcula si cambia la configuración base) ---
+  // Creamos mapas de acceso O(1) para evitar .find() dentro de bucles
   const indices = useMemo(() => {
-      // Creamos mapas de acceso O(1)
       const acc = new Map(accounts.map(a => [a.id, a]));
       const fam = new Map(families.map(f => [f.id, f]));
       const cat = new Map(categories.map(c => [c.id, c]));
       const grp = new Map(accountGroups.map(g => [g.id, g]));
-      
       return { acc, fam, cat, grp };
   }, [accounts, families, categories, accountGroups]);
 
@@ -45,9 +42,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return `${day}/${month}/${year.slice(-2)}`;
   };
 
-  const formatCurrency = (amount: number) => {
-    return `${numberFormatter.format(amount)} €`;
-  };
+  const formatCurrency = (amount: number) => `${numberFormatter.format(amount)} €`;
 
   const getAmountColor = (amount: number) => {
     if (amount > 0) return 'text-emerald-600';
@@ -55,22 +50,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return 'text-slate-400';
   };
 
-  const toggleGroupExpansion = (groupId: string) => {
-      const newSet = new Set(expandedGroups);
-      if (newSet.has(groupId)) {
-          newSet.delete(groupId);
-      } else {
-          newSet.add(groupId);
-      }
-      setExpandedGroups(newSet);
-  };
-
   const pendingRecurrents = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return recurrents.filter(r => r.active && r.nextDueDate <= today);
   }, [recurrents]);
 
-  // Cálculo de límites de fecha
+  // --- CAPA 2: LÍMITES TEMPORALES (Muy ligero) ---
   const dateBounds = useMemo(() => {
     const y = filter.referenceDate.getFullYear();
     const m = filter.referenceDate.getMonth();
@@ -84,6 +69,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       startStr = `${y}-01-01`; 
       endStr = `${y}-12-31`;
     } else if (filter.timeRange === 'CUSTOM') {
+      // Fallback a fechas amplias si están vacías para no romper lógica
       startStr = filter.customStart || '1900-01-01';
       endStr = filter.customEnd || '2100-12-31';
     } else {
@@ -93,142 +79,120 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return { startStr, endStr };
   }, [filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]);
 
-  // --- CAPA 2: MOTOR DE CÁLCULO (Single Pass Loop optimizado) ---
+  // --- CAPA 3: MOTOR DE CÁLCULO (Single Pass Loop optimizado) ---
+  // Este es el único bloque pesado. Se ejecuta solo si cambian transacciones o fechas.
   const dashboardData = useMemo(() => {
-    // 1. Inicialización de estructuras
+    // 1. Inicialización rápida
     const accTotals = new Map<string, number>();
-    // Usamos los datos originales de 'accounts' para el balance inicial, no el mapa, para iterar
     accounts.forEach(a => accTotals.set(a.id, a.initialBalance));
 
-    // Estructuras temporales para agregación
-    // Clave: FamilyID, Valor: Objeto con total y mapa de categorías
+    // Estructuras de agregación (Map es más rápido que Object para inserciones frecuentes)
     const incomeFlow = new Map<string, { total: number, cats: Map<string, number> }>();
     const expenseFlow = new Map<string, { total: number, cats: Map<string, number> }>();
-
-    let periodIncome = 0;
-    let periodExpense = 0;
 
     const start = dateBounds.startStr;
     const end = dateBounds.endStr;
     const isAllTime = filter.timeRange === 'ALL';
 
     // 2. Iteración Única (Hot Path)
-    // Se recorre el array de transacciones una sola vez
-    const len = transactions.length;
-    for (let i = 0; i < len; i++) {
-      const t = transactions[i];
-      
-      // Normalización de signo
-      let effectiveAmount = t.amount;
-      const absAmount = Math.abs(t.amount);
-      
-      // Lógica de signo para saldos de cuenta
-      if (t.type === 'TRANSFER' || t.type === 'EXPENSE') {
-          effectiveAmount = -absAmount;
-      } else {
-          effectiveAmount = absAmount;
-      }
-
-      // A) Cálculo de Saldos (Hasta fecha fin)
+    for (const t of transactions) {
+      // A) Cálculo de Saldos (Acumulativo hasta fecha fin)
+      // Si la transacción es posterior al rango, no afecta al saldo "a fecha de hoy" en lógica contable estricta
       if (t.date <= end) {
+        let effectiveAmount = t.amount;
+        // Normalización de signo para la cuenta
+        if (t.type === 'EXPENSE' || t.type === 'TRANSFER') effectiveAmount = -Math.abs(t.amount);
+        else effectiveAmount = Math.abs(t.amount);
+
         const currentSrc = accTotals.get(t.accountId) || 0;
         accTotals.set(t.accountId, currentSrc + effectiveAmount);
 
         if (t.type === 'TRANSFER' && t.transferAccountId) {
             const currentDst = accTotals.get(t.transferAccountId) || 0;
-            // En destino suma (restamos el negativo)
+            // En destino suma (restamos el negativo = suma)
             accTotals.set(t.transferAccountId, currentDst - effectiveAmount);
         }
       }
 
-      // B) Cálculo de Flujos del Periodo (Dentro del rango)
+      // B) Cálculo de Flujos del Periodo (Estrictamente dentro del rango)
       const inPeriod = isAllTime || (t.date >= start && t.date <= end);
       
       if (inPeriod && t.type !== 'TRANSFER') {
+          // Usamos índices O(1)
           const cat = indices.cat.get(t.categoryId);
-          // Si la tx tiene familia explícita usala, sino la de la categoría
           const familyId = t.familyId || cat?.familyId;
           const fam = familyId ? indices.fam.get(familyId) : null;
           
-          if (fam) {
-              // KPIs Globales
-              if (fam.type === 'INCOME') periodIncome += effectiveAmount;
-              else periodExpense += effectiveAmount;
+          // Importe con signo correcto para flujo (Ingreso +, Gasto -)
+          let flowAmount = t.amount; 
+          if (t.type === 'EXPENSE') flowAmount = -Math.abs(t.amount);
+          else flowAmount = Math.abs(t.amount);
 
-              // Desglose por Familia/Categoría
+          if (fam) {
               const targetFlow = fam.type === 'INCOME' ? incomeFlow : expenseFlow;
-              
               let famEntry = targetFlow.get(fam.id);
               if (!famEntry) {
                   famEntry = { total: 0, cats: new Map() };
                   targetFlow.set(fam.id, famEntry);
               }
-              famEntry.total += effectiveAmount;
+              famEntry.total += flowAmount;
 
               if (cat) {
                   const currentCatTotal = famEntry.cats.get(cat.id) || 0;
-                  famEntry.cats.set(cat.id, currentCatTotal + effectiveAmount);
+                  famEntry.cats.set(cat.id, currentCatTotal + flowAmount);
               }
-          } else {
-             // Huérfanos: Afectan KPI pero no salen en burbujas
-             if (t.type === 'INCOME') periodIncome += effectiveAmount;
-             else periodExpense += effectiveAmount;
           }
       }
     }
 
-    // 3. Transformación a Arrays Ordenados (Solo se ejecuta al final)
+    // 3. Transformación a Arrays Ordenados (Solo al final)
     const buildHierarchy = (flowMap: Map<string, { total: number, cats: Map<string, number> }>) => {
         return Array.from(flowMap.entries())
             .map(([famId, data]) => {
                 const fam = indices.fam.get(famId);
                 if (!fam) return null;
-
                 const catsArray = Array.from(data.cats.entries())
-                    .map(([catId, amount]) => ({
-                        category: indices.cat.get(catId)!,
-                        total: amount
-                    }))
+                    .map(([catId, amount]) => ({ category: indices.cat.get(catId)!, total: amount }))
                     .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
-
-                return {
-                    family: fam,
-                    total: data.total,
-                    categories: catsArray
-                };
+                return { family: fam, total: data.total, categories: catsArray };
             })
             .filter(Boolean)
             .sort((a, b) => Math.abs(b!.total) - Math.abs(a!.total)) as { family: Family, total: number, categories: {category: Category, total: number}[] }[];
     };
 
+    const finalIncomes = buildHierarchy(incomeFlow);
+    const finalExpenses = buildHierarchy(expenseFlow);
+    
+    // CÁLCULO DE TOTALES: Sumamos EXCLUSIVAMENTE lo que hay en las familias mostradas
+    const totalIncomeFromFamilies = finalIncomes.reduce((acc, item) => acc + item.total, 0);
+    const totalExpenseFromFamilies = finalExpenses.reduce((acc, item) => acc + item.total, 0);
+
     const globalBalance = Array.from(accTotals.values()).reduce((a, b) => a + b, 0);
 
     return {
         stats: {
-            income: periodIncome,
-            expense: periodExpense,
+            income: totalIncomeFromFamilies,
+            expense: totalExpenseFromFamilies,
             balance: globalBalance,
-            periodBalance: periodIncome + periodExpense,
+            periodBalance: totalIncomeFromFamilies + totalExpenseFromFamilies,
             accTotals
         },
         flows: {
-            incomes: buildHierarchy(incomeFlow),
-            expenses: buildHierarchy(expenseFlow)
+            incomes: finalIncomes,
+            expenses: finalExpenses
         }
     };
+  }, [transactions, accounts, dateBounds, indices]);
 
-  }, [transactions, accounts, dateBounds, indices]); // Dependencias muy controladas
-
-  // --- CAPA 3: DATOS DE UI (Patrimonio) ---
+  // --- CAPA 4: DATOS DE UI (Patrimonio) ---
   const groupedBalances = useMemo(() => {
     const sortedGroups = [...accountGroups].sort((a, b) => a.name.localeCompare(b.name));
-
     return sortedGroups.map(group => {
         const groupAccounts = accounts
             .filter(a => a.groupId === group.id)
             .sort((a, b) => a.name.localeCompare(b.name));
-            
-        // Usamos el accTotals pre-calculado
+        
+        // Usamos el mapa de totales pre-calculado
         const groupTotal = groupAccounts.reduce((sum, acc) => sum + (dashboardData.stats.accTotals.get(acc.id) || 0), 0);
         
         return {
@@ -240,7 +204,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
             }))
         };
     }).filter(g => g.accounts.length > 0);
-  }, [accountGroups, accounts, dashboardData.stats.accTotals]);
+  }, [accountGroups, accounts, dashboardData.stats.accTotals]); // Dependencia ligera
 
   // Handlers
   const navigatePeriod = (direction: 'prev' | 'next') => {
@@ -251,16 +215,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     onUpdateFilter({ ...filter, referenceDate: newDate });
   };
 
-  const calculateNextDate = (current: string, frequency: string, interval: number) => {
-    const d = new Date(current);
-    if (frequency === 'DAYS') d.setDate(d.getDate() + interval);
-    else if (frequency === 'WEEKS') d.setDate(d.getDate() + (interval * 7));
-    else if (frequency === 'MONTHLY') d.setMonth(d.getMonth() + interval);
-    else if (frequency === 'YEARS') d.setFullYear(d.getFullYear() + interval);
-    return d.toISOString().split('T')[0];
-  };
-
   const handleProcessRecurrent = (r: RecurrentMovement) => {
+    const nextDate = calculateNextDate(r.nextDueDate, r.frequency, r.interval);
     const newTx: Transaction = {
         id: Math.random().toString(36).substring(2, 15),
         date: r.nextDueDate,
@@ -274,32 +230,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         isFromRecurrence: r.id
     };
     onAddTransaction(newTx);
-    const nextDate = calculateNextDate(r.nextDueDate, r.frequency, r.interval);
-    onUpdateData({
-        recurrents: recurrents.map(item => item.id === r.id ? { ...item, nextDueDate: nextDate } : item)
-    });
+    onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, nextDueDate: nextDate } : item) });
   };
 
-  const handlePostponeRecurrent = (r: RecurrentMovement) => {
-    const nextDate = calculateNextDate(r.nextDueDate, r.frequency, r.interval);
-    onUpdateData({
-        recurrents: recurrents.map(item => item.id === r.id ? { ...item, nextDueDate: nextDate } : item)
-    });
-  };
-
-  const handleDeactivateRecurrent = (r: RecurrentMovement) => {
-    onUpdateData({
-        recurrents: recurrents.map(item => item.id === r.id ? { ...item, active: false } : item)
-    });
+  const calculateNextDate = (current: string, frequency: string, interval: number) => {
+    const d = new Date(current);
+    if (frequency === 'DAYS') d.setDate(d.getDate() + interval);
+    else if (frequency === 'WEEKS') d.setDate(d.getDate() + (interval * 7));
+    else if (frequency === 'MONTHLY') d.setMonth(d.getMonth() + interval);
+    else if (frequency === 'YEARS') d.setFullYear(d.getFullYear() + interval);
+    return d.toISOString().split('T')[0];
   };
 
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
     if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
     return <span className="text-xl flex items-center justify-center">{iconStr || '📂'}</span>;
-  };
-
-  const handleCategoryClick = (cat: Category) => {
-    setSelectedCategoryAction(cat);
   };
 
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
@@ -309,7 +254,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     <div className="space-y-8 md:space-y-12 pb-10">
       {/* HEADER y NAVEGACIÓN TEMPORAL */}
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8">
-        <div className="space-y-4 text-center md:text-left">
+        <div className="space-y-4 text-center md:text-left w-full xl:w-auto">
             <div className="flex items-center justify-center md:justify-start gap-4">
                 <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Resumen.</h2>
                 {pendingRecurrents.length > 0 && (
@@ -328,23 +273,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     <button onClick={() => navigatePeriod('next')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={20} /></button>
                 </div>
                 
-                {/* Inputs de Filtro Personalizado */}
-                <div className="flex gap-2 items-center">
+                {/* SELECTORES DE FECHA - Visualización Condicional Optimizada */}
+                <div className="flex gap-2 items-center flex-wrap justify-center">
                     {filter.timeRange === 'CUSTOM' ? (
-                        <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm animate-in fade-in zoom-in">
-                            <input 
-                                type="date" 
-                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent cursor-pointer"
-                                value={filter.customStart}
-                                onChange={(e) => onUpdateFilter({...filter, customStart: e.target.value})}
-                            />
-                            <span className="text-slate-300 font-bold">-</span>
-                            <input 
-                                type="date" 
-                                className="px-2 py-1.5 rounded-lg text-xs font-bold outline-none text-slate-700 bg-transparent cursor-pointer"
-                                value={filter.customEnd}
-                                onChange={(e) => onUpdateFilter({...filter, customEnd: e.target.value})}
-                            />
+                        <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border-2 border-indigo-100 shadow-sm animate-in fade-in zoom-in duration-200">
+                            <div className="flex flex-col px-2">
+                                <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Desde</span>
+                                <input 
+                                    type="date" 
+                                    className="text-xs font-bold outline-none text-slate-700 bg-transparent cursor-pointer"
+                                    value={filter.customStart}
+                                    onChange={(e) => onUpdateFilter({...filter, customStart: e.target.value})}
+                                />
+                            </div>
+                            <div className="w-px h-6 bg-slate-200"></div>
+                            <div className="flex flex-col px-2">
+                                <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Hasta</span>
+                                <input 
+                                    type="date" 
+                                    className="text-xs font-bold outline-none text-slate-700 bg-transparent cursor-pointer"
+                                    value={filter.customEnd}
+                                    onChange={(e) => onUpdateFilter({...filter, customEnd: e.target.value})}
+                                />
+                            </div>
                         </div>
                     ) : (
                         <>
@@ -430,7 +381,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                               {item.categories.map(cat => (
                                   <div 
                                     key={cat.category.id} 
-                                    onClick={() => handleCategoryClick(cat.category)}
+                                    onClick={() => setSelectedCategoryAction(cat.category)}
                                     className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-emerald-50 cursor-pointer group transition-colors"
                                   >
                                       <div className="flex items-center gap-3 overflow-hidden">
@@ -476,7 +427,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                               {item.categories.map(cat => (
                                   <div 
                                     key={cat.category.id} 
-                                    onClick={() => handleCategoryClick(cat.category)}
+                                    onClick={() => { setSelectedCategoryAction(cat.category); }}
                                     className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-rose-50 cursor-pointer group transition-colors"
                                   >
                                       <div className="flex items-center gap-3 overflow-hidden">
@@ -498,7 +449,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
       </div>
 
-      {/* Modal Acción Categoría */}
+      {/* MODALES - No afectan al renderizado del resto del dashboard gracias a la separación de lógica */}
       {selectedCategoryAction && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 text-center relative border border-white/20">
@@ -532,11 +483,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         </div>
       )}
 
-      {/* Modal Balance Detail con Header Fijo y Acordeón */}
       {showBalanceDetail && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl relative max-h-[90vh] flex flex-col border border-white/20 overflow-hidden">
-                {/* Header Fijo */}
                 <div className="p-8 sm:p-12 pb-6 flex-none bg-white border-b border-slate-50 relative z-10">
                     <button onClick={() => setShowBalanceDetail(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
                     <div className="flex items-center gap-4">
@@ -545,16 +494,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     </div>
                 </div>
                 
-                {/* Contenido Scrolleable con Acordeón */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-8 sm:p-12 pt-6">
                     <div className="space-y-6">
                         {groupedBalances.map(groupInfo => {
                             const isExpanded = expandedGroups.has(groupInfo.group.id);
                             return (
                                 <div key={groupInfo.group.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm transition-all">
-                                    {/* Cabecera del Grupo (Clickable) */}
                                     <button 
-                                        onClick={() => toggleGroupExpansion(groupInfo.group.id)}
+                                        onClick={() => {
+                                            const newSet = new Set(expandedGroups);
+                                            if (newSet.has(groupInfo.group.id)) newSet.delete(groupInfo.group.id);
+                                            else newSet.add(groupInfo.group.id);
+                                            setExpandedGroups(newSet);
+                                        }}
                                         className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors"
                                     >
                                         <div className="flex items-center gap-4">
@@ -567,7 +519,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                         </div>
                                     </button>
 
-                                    {/* Lista de Cuentas (Colapsable) */}
                                     {isExpanded && (
                                         <div className="border-t border-slate-50 bg-slate-50/50 p-3 space-y-2 animate-in slide-in-from-top-2 duration-200">
                                             {groupInfo.accounts.map(acc => (
@@ -605,7 +556,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                 <div className="flex items-center gap-4 mb-10"><div className="bg-rose-500 p-4 rounded-3xl text-white shadow-xl shadow-rose-500/20"><Bell size={28} /></div><div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Vencimientos</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Movimientos recurrentes pendientes</p></div></div>
                 <div className="space-y-4">
                     {pendingRecurrents.map(r => {
-                        // Uso de Maps para búsqueda rápida
                         const acc = indices.acc.get(r.accountId);
                         const cat = indices.cat.get(r.categoryId);
                         return (
@@ -616,8 +566,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                 </div>
                                 <div className="grid grid-cols-3 gap-2">
                                     <button onClick={() => handleProcessRecurrent(r)} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-emerald-300 hover:bg-emerald-50 transition-all group active:scale-95"><Check className="text-slate-400 group-hover:text-emerald-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-emerald-600">Validar</span></button>
-                                    <button onClick={() => handlePostponeRecurrent(r)} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-amber-300 hover:bg-amber-50 transition-all group active:scale-95"><Clock className="text-slate-400 group-hover:text-amber-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-amber-600">Posponer</span></button>
-                                    <button onClick={() => handleDeactivateRecurrent(r)} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-rose-300 hover:bg-rose-50 transition-all group active:scale-95"><AlertCircle className="text-slate-400 group-hover:text-rose-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-rose-600">Anular</span></button>
+                                    <button onClick={() => { const nextDate = calculateNextDate(r.nextDueDate, r.frequency, r.interval); onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, nextDueDate: nextDate } : item) }); }} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-amber-300 hover:bg-amber-50 transition-all group active:scale-95"><Clock className="text-slate-400 group-hover:text-amber-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-amber-600">Posponer</span></button>
+                                    <button onClick={() => onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, active: false } : item) })} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-rose-300 hover:bg-rose-50 transition-all group active:scale-95"><AlertCircle className="text-slate-400 group-hover:text-rose-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-rose-600">Anular</span></button>
                                 </div>
                             </div>
                         );
