@@ -68,6 +68,25 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     };
   }, [data.accounts, data.categories, data.families]);
 
+  // --- AGRUPACIÓN Y ORDENACIÓN ---
+  // Estructuras agrupadas y ordenadas alfabéticamente para Selectores
+  const groupedAccounts = useMemo(() => {
+    const groups = [...data.accountGroups].sort((a,b) => a.name.localeCompare(b.name));
+    return groups.map(g => ({
+        group: g,
+        accounts: data.accounts.filter(a => a.groupId === g.id).sort((a,b) => a.name.localeCompare(b.name))
+    })).filter(g => g.accounts.length > 0);
+  }, [data.accountGroups, data.accounts]);
+
+  const groupedCategories = useMemo(() => {
+    const families = [...data.families].sort((a,b) => a.name.localeCompare(b.name));
+    return families.map(f => ({
+        family: f,
+        categories: data.categories.filter(c => c.familyId === f.id).sort((a,b) => a.name.localeCompare(b.name))
+    })).filter(f => f.categories.length > 0);
+  }, [data.families, data.categories]);
+
+
   // Helper para formatear fecha dd/mm/aa
   const formatDateDisplay = (dateStr: string) => {
     if (!dateStr) return '--/--/--';
@@ -118,7 +137,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setFAmount('');
     setFDesc('');
     setFDate(new Date().toISOString().split('T')[0]);
-    setFAcc(data.accounts[0]?.id || '');
+    // Seleccionar por defecto la primera cuenta disponible en el orden agrupado
+    const defaultAcc = groupedAccounts[0]?.accounts[0]?.id || data.accounts[0]?.id || '';
+    setFAcc(defaultAcc);
     setFCat('');
     setFTransferDest('');
     setFAttachment(undefined);
@@ -433,9 +454,19 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 </button>
                 <select className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none cursor-pointer focus:border-indigo-300 transition-all" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)}>
                     <option value="ALL">TODAS</option>
-                    {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    <optgroup label="Categorías">
+                        {groupedCategories.map(group => (
+                            <optgroup key={group.family.id} label={group.family.name}>
+                                {group.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </optgroup>
+                        ))}
+                    </optgroup>
                     <optgroup label="Cuentas (Traspasos)">
-                        {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        {groupedAccounts.map(group => (
+                            <optgroup key={group.group.id} label={group.group.name}>
+                                {group.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </optgroup>
+                        ))}
                     </optgroup>
                 </select>
             </div>
@@ -473,7 +504,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 </button>
                 <select className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none cursor-pointer focus:border-indigo-300 transition-all" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}>
                     <option value="ALL">TODAS</option>
-                    {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    {groupedAccounts.map(group => (
+                        <optgroup key={group.group.id} label={group.group.name}>
+                            {group.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </optgroup>
+                    ))}
                 </select>
             </div>
 
@@ -671,17 +706,37 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{fType === 'TRANSFER' ? 'Desde Cuenta' : 'Cuenta de Pago/Cobro'}</label>
-                          <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all shadow-inner" value={fAcc} onChange={e => setFAcc(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                          <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all shadow-inner" value={fAcc} onChange={e => setFAcc(e.target.value)}>
+                              {groupedAccounts.map(group => (
+                                  <optgroup key={group.group.id} label={group.group.name}>
+                                      {group.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                  </optgroup>
+                              ))}
+                          </select>
                         </div>
                         {fType === 'TRANSFER' ? (
                           <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hacia Cuenta</label>
-                            <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all shadow-inner" value={fTransferDest} onChange={e => setFTransferDest(e.target.value)}><option value="">Destino...</option>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                            <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all shadow-inner" value={fTransferDest} onChange={e => setFTransferDest(e.target.value)}>
+                                <option value="">Destino...</option>
+                                {groupedAccounts.map(group => (
+                                    <optgroup key={group.group.id} label={group.group.name}>
+                                        {group.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                    </optgroup>
+                                ))}
+                            </select>
                           </div>
                         ) : (
                           <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoría</label>
-                            <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all shadow-inner" value={fCat} onChange={e => setFCat(e.target.value)}><option value="">Sin categoría...</option>{data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                            <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all shadow-inner" value={fCat} onChange={e => setFCat(e.target.value)}>
+                                <option value="">Sin categoría...</option>
+                                {groupedCategories.map(group => (
+                                    <optgroup key={group.family.id} label={group.family.name}>
+                                        {group.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </optgroup>
+                                ))}
+                            </select>
                           </div>
                         )}
                     </div>

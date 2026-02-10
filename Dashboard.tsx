@@ -26,7 +26,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
 
   // --- OPTIMIZACIÓN 1: INDEXACIÓN (O(1) Access) ---
-  // Creamos mapas para evitar .find() dentro de los bucles intensivos
   const { accMap, famMap, catMap, grpMap } = useMemo(() => {
       return {
           accMap: new Map(accounts.map(a => [a.id, a])),
@@ -81,13 +80,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   }, [filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]);
 
   // --- OPTIMIZACIÓN 2: SINGLE PASS LOOP (O(N)) ---
-  // Calculamos TODO (Saldos, KPIs y Flujos de Familias) en una sola pasada.
   const dashboardData = useMemo(() => {
     const accTotals = new Map<string, number>();
-    // Inicializar saldos con balance inicial
     accounts.forEach(a => accTotals.set(a.id, a.initialBalance));
 
-    // Estructuras para agrupar flujos
     const incomeFlow = new Map<string, { total: number, cats: Map<string, number> }>();
     const expenseFlow = new Map<string, { total: number, cats: Map<string, number> }>();
 
@@ -98,30 +94,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     const end = dateBounds.endStr;
     const isAllTime = filter.timeRange === 'ALL';
 
-    // Iteramos transacciones UNA SOLA VEZ
     for (const t of transactions) {
-      // Normalización de importe
       let effectiveAmount = t.amount;
-      // Gasto y Traspaso siempre restan en origen (negativo), Ingreso suma (positivo)
       if (t.type === 'TRANSFER' || t.type === 'EXPENSE') {
           effectiveAmount = -Math.abs(t.amount);
       } else {
           effectiveAmount = Math.abs(t.amount);
       }
 
-      // 1. Cálculo de Saldos Históricos (Hasta el final del periodo seleccionado)
       if (t.date <= end) {
         const currentSrc = accTotals.get(t.accountId) || 0;
         accTotals.set(t.accountId, currentSrc + effectiveAmount);
 
         if (t.type === 'TRANSFER' && t.transferAccountId) {
             const currentDst = accTotals.get(t.transferAccountId) || 0;
-            // En destino suma (restar el negativo)
             accTotals.set(t.transferAccountId, currentDst - effectiveAmount);
         }
       }
 
-      // 2. Cálculo del Periodo Actual (KPIs y Familias)
       const inPeriod = isAllTime || (t.date >= start && t.date <= end);
       
       if (inPeriod && t.type !== 'TRANSFER') {
@@ -130,11 +120,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
           const fam = familyId ? famMap.get(familyId) : null;
           
           if (fam) {
-              // Sumamos al KPI global basado en la FAMILIA (para consistencia visual)
               if (fam.type === 'INCOME') periodIncome += effectiveAmount;
               else periodExpense += effectiveAmount;
 
-              // Agregamos al desglose visual
               const targetFlow = fam.type === 'INCOME' ? incomeFlow : expenseFlow;
               
               if (!targetFlow.has(fam.id)) {
@@ -148,15 +136,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                   famEntry.cats.set(cat.id, currentCatTotal + effectiveAmount);
               }
           } else {
-             // Si no tiene familia (huérfano), lo sumamos al KPI general por tipo de transacción
-             // para que el "Ahorro del periodo" sea real, aunque no salga en los círculos de familias.
              if (t.type === 'INCOME') periodIncome += effectiveAmount;
              else periodExpense += effectiveAmount;
           }
       }
     }
 
-    // Transformación a Arrays ordenados para renderizado
     const buildHierarchy = (flowMap: Map<string, { total: number, cats: Map<string, number> }>) => {
         return Array.from(flowMap.entries())
             .map(([famId, data]) => {
@@ -198,10 +183,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
   }, [transactions, accounts, dateBounds, filter.timeRange, accMap, famMap, catMap]);
 
+  // Agrupación y ordenación alfabética para el modal de patrimonio
   const groupedBalances = useMemo(() => {
-    return accountGroups.map(group => {
-        const groupAccounts = accounts.filter(a => a.groupId === group.id);
+    // 1. Ordenar grupos alfabéticamente
+    const sortedGroups = [...accountGroups].sort((a, b) => a.name.localeCompare(b.name));
+
+    return sortedGroups.map(group => {
+        // 2. Ordenar cuentas dentro del grupo alfabéticamente
+        const groupAccounts = accounts
+            .filter(a => a.groupId === group.id)
+            .sort((a, b) => a.name.localeCompare(b.name));
+            
         const groupTotal = groupAccounts.reduce((sum, acc) => sum + (dashboardData.stats.accTotals.get(acc.id) || 0), 0);
+        
         return {
             group,
             total: groupTotal,
@@ -502,44 +496,51 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         </div>
       )}
 
-      {/* Modales */}
+      {/* Modal Balance Detail con Header Fijo */}
       {showBalanceDetail && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
-            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-8 sm:p-12 relative max-h-[90vh] overflow-y-auto custom-scrollbar border border-white/20">
-                <button onClick={() => setShowBalanceDetail(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
-                <div className="flex items-center gap-4 mb-10">
-                    <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Banknote size={28} /></div>
-                    <div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Desglose de Patrimonio</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Situación al {formatDateDisplay(dateBounds.endStr)}</p></div>
+            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl relative max-h-[90vh] flex flex-col border border-white/20 overflow-hidden">
+                {/* Header Fijo */}
+                <div className="p-8 sm:p-12 pb-6 flex-none bg-white border-b border-slate-50 relative z-10">
+                    <button onClick={() => setShowBalanceDetail(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                    <div className="flex items-center gap-4">
+                        <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Banknote size={28} /></div>
+                        <div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Desglose de Patrimonio</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Situación al {formatDateDisplay(dateBounds.endStr)}</p></div>
+                    </div>
                 </div>
-                <div className="space-y-10">
-                    {groupedBalances.map(groupInfo => (
-                        <div key={groupInfo.group.id} className="space-y-4">
-                            <div className="flex items-center justify-between px-2">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden">{renderIcon(groupInfo.group.icon, "w-6 h-6")}</div>
-                                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">{groupInfo.group.name}</h4>
-                                </div>
-                                <span className={`text-base font-black tracking-tighter ${getAmountColor(groupInfo.total)}`}>{formatCurrency(groupInfo.total)}</span>
-                            </div>
-                            <div className="grid grid-cols-1 gap-3">
-                                {groupInfo.accounts.map(acc => (
-                                    <div key={acc.id} onClick={() => { setShowBalanceDetail(false); onNavigateToTransactions({ filterAccount: acc.id }); }} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:border-indigo-200 transition-all shadow-sm cursor-pointer group/row active:scale-[0.99]">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-50 shadow-sm overflow-hidden group-hover/row:scale-110 transition-transform">{renderIcon(acc.icon, "w-6 h-6")}</div>
-                                            <div><span className="text-[11px] font-bold text-slate-600 uppercase block">{acc.name}</span><span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest opacity-0 group-hover/row:opacity-100 transition-opacity">Ver movimientos</span></div>
-                                        </div>
-                                        <div className="flex items-center gap-2"><span className={`text-xs font-black ${getAmountColor(acc.balance)}`}>{formatCurrency(acc.balance)}</span><ChevronRight size={14} className="text-slate-300 group-hover/row:text-indigo-400" /></div>
+                
+                {/* Contenido Scrolleable */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-8 sm:p-12 pt-6">
+                    <div className="space-y-10">
+                        {groupedBalances.map(groupInfo => (
+                            <div key={groupInfo.group.id} className="space-y-4">
+                                <div className="flex items-center justify-between px-2">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden">{renderIcon(groupInfo.group.icon, "w-6 h-6")}</div>
+                                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">{groupInfo.group.name}</h4>
                                     </div>
-                                ))}
+                                    <span className={`text-base font-black tracking-tighter ${getAmountColor(groupInfo.total)}`}>{formatCurrency(groupInfo.total)}</span>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3">
+                                    {groupInfo.accounts.map(acc => (
+                                        <div key={acc.id} onClick={() => { setShowBalanceDetail(false); onNavigateToTransactions({ filterAccount: acc.id }); }} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:border-indigo-200 transition-all shadow-sm cursor-pointer group/row active:scale-[0.99]">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-50 shadow-sm overflow-hidden group-hover/row:scale-110 transition-transform">{renderIcon(acc.icon, "w-6 h-6")}</div>
+                                                <div><span className="text-[11px] font-bold text-slate-600 uppercase block">{acc.name}</span><span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest opacity-0 group-hover/row:opacity-100 transition-opacity">Ver movimientos</span></div>
+                                            </div>
+                                            <div className="flex items-center gap-2"><span className={`text-xs font-black ${getAmountColor(acc.balance)}`}>{formatCurrency(acc.balance)}</span><ChevronRight size={14} className="text-slate-300 group-hover/row:text-indigo-400" /></div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
+                    <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-center px-4">
+                        <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Patrimonio Neto Total</span>
+                        <span className={`text-3xl font-black tracking-tighter ${getAmountColor(dashboardData.stats.balance)}`}>{formatCurrency(dashboardData.stats.balance)}</span>
+                    </div>
+                    <button onClick={() => setShowBalanceDetail(false)} className="w-full mt-10 py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-600 transition-all active:scale-95">Entendido</button>
                 </div>
-                <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-center px-4">
-                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Patrimonio Neto Total</span>
-                    <span className={`text-3xl font-black tracking-tighter ${getAmountColor(dashboardData.stats.balance)}`}>{formatCurrency(dashboardData.stats.balance)}</span>
-                </div>
-                <button onClick={() => setShowBalanceDetail(false)} className="w-full mt-10 py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-600 transition-all active:scale-95">Entendido</button>
             </div>
         </div>
       )}
