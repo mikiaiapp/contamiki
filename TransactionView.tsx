@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, Category } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Filter, Wallet, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Printer, ChevronsLeft, ChevronsRight, ListFilter, Heart, Star, Bot, FileText, Check, AlertTriangle, RefreshCw } from 'lucide-react';
+import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement } from './types';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, ChevronsLeft, ChevronsRight, Heart, Bot, Check, AlertTriangle, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
@@ -20,20 +20,18 @@ type SortField = 'DATE' | 'DESCRIPTION' | 'AMOUNT' | 'ACCOUNT' | 'CATEGORY' | 'A
 type SortDirection = 'ASC' | 'DESC';
 type AmountOperator = 'ALL' | 'GT' | 'LT' | 'EQ' | 'BETWEEN';
 
-// Estructura para la previsualización de importación
 interface PendingImport {
     tempId: string;
     date: string;
     description: string;
-    amount: string; // String para edición fácil
+    amount: string;
     categoryId: string;
-    accountId: string; // La cuenta seleccionada para importar
+    accountId: string;
     isValid: boolean;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
-// Formateador estático
 const numberFormatter = new Intl.NumberFormat('de-DE', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -55,7 +53,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
   // SMART IMPORT STATE
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [importStep, setImportStep] = useState<1 | 2>(1); // 1: Config, 2: Preview
+  const [importStep, setImportStep] = useState<1 | 2>(1); 
   const [importAccount, setImportAccount] = useState('');
   const [importRawData, setImportRawData] = useState('');
   const [pendingImports, setPendingImports] = useState<PendingImport[]>([]);
@@ -144,15 +142,143 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setCurrentPage(1);
   }, [filter, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2, sortField, sortDirection]);
 
-  // --- LOGIC: RESETEAR FILTROS DE COLUMNA SI CAMBIA EL TIEMPO ---
-  // Opcional: Si el usuario cambia de año, es probable que quiera ver todo, o al menos
-  // recalcular las opciones disponibles.
-  /* useEffect(() => {
-      setColFilterEntry('ALL');
-      setColFilterExit('ALL');
-  }, [filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]); */
+  // --- PASO 1: FILTRADO TEMPORAL ---
+  // Primero obtenemos las transacciones que entran en el rango de fechas
+  const timeFilteredList = useMemo(() => {
+    const y = filter.referenceDate.getFullYear();
+    const m = filter.referenceDate.getMonth();
+    let start = ''; let end = '';
+    
+    if (filter.timeRange === 'MONTH') {
+      start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+      end = `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`;
+    } else if (filter.timeRange === 'YEAR') {
+      start = `${y}-01-01`; end = `${y}-12-31`;
+    } else if (filter.timeRange === 'CUSTOM') {
+      start = filter.customStart || '1900-01-01';
+      end = filter.customEnd || '2100-12-31';
+    }
 
-  // ... (Reset Form, Load Favorite, Open Editor, Handle Save remain same) ...
+    return data.transactions.filter(t => {
+      if (filter.timeRange !== 'ALL' && (t.date < start || t.date > end)) return false;
+      return true;
+    });
+  }, [data.transactions, filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]);
+
+  // --- PASO 2: CALCULAR OPCIONES DE FILTRO ACTIVAS (Basadas en TimeFilteredList) ---
+  // Esto asegura que los desplegables solo muestren lo que existe en el rango de fechas seleccionado
+  const activeFilterOptions = useMemo(() => {
+      const activeEntryIds = new Set<string>(); // IDs para columna "Entrada/Cat"
+      const activeExitIds = new Set<string>();  // IDs para columna "Cuenta"
+
+      timeFilteredList.forEach(t => {
+          // Lógica Columna IZQUIERDA (Entrada/Cat)
+          if (t.type === 'EXPENSE') activeEntryIds.add(t.categoryId); // Gasto -> Categoría
+          else if (t.type === 'INCOME') activeEntryIds.add(t.accountId); // Ingreso -> Cuenta (Destino)
+          else if (t.type === 'TRANSFER') { if(t.transferAccountId) activeEntryIds.add(t.transferAccountId); } // Traspaso -> Cuenta Destino
+
+          // Lógica Columna DERECHA (Cuenta/Salida)
+          if (t.type === 'EXPENSE') activeExitIds.add(t.accountId); // Gasto -> Cuenta (Origen)
+          else if (t.type === 'INCOME') activeExitIds.add(t.categoryId); // Ingreso -> Categoría (Origen)
+          else if (t.type === 'TRANSFER') activeExitIds.add(t.accountId); // Traspaso -> Cuenta Origen
+      });
+
+      return { activeEntryIds, activeExitIds };
+  }, [timeFilteredList]);
+
+  // --- PASO 3: FILTRADO COMPLETO (Aplica filtros de columna sobre la lista temporal) ---
+  const filteredList = useMemo(() => {
+    const hasDescFilter = colFilterDesc && colFilterDesc.trim() !== '';
+    const descPattern = hasDescFilter ? colFilterDesc.trim().toLowerCase() : '';
+    const descIsRegex = hasDescFilter && (descPattern.includes('*') || descPattern.includes('?'));
+    let regex: RegExp | null = null;
+    if (descIsRegex) {
+        let regexStr = descPattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*').replace(/\\\?/g, '.');
+        regex = new RegExp(`^${regexStr}$`, 'i');
+    }
+
+    const v1 = parseFloat(colFilterAmountVal1);
+    const v2 = parseFloat(colFilterAmountVal2);
+    const hasAmountFilter = colFilterAmountOp !== 'ALL' && !isNaN(v1);
+
+    return timeFilteredList.filter(t => {
+      // 1. Filtro Columna IZQUIERDA (Entrada/Cat)
+      // Debe coincidir EXACTAMENTE con lo que se muestra visualmente en esa columna
+      if (colFilterEntry !== 'ALL') {
+          const val = t.type === 'EXPENSE' ? t.categoryId :
+                      t.type === 'INCOME' ? t.accountId :
+                      t.type === 'TRANSFER' ? (t.transferAccountId || '') : '';
+          if (val !== colFilterEntry) return false;
+      }
+
+      // 2. Filtro Columna DERECHA (Cuenta/Salida)
+      if (colFilterExit !== 'ALL') {
+          const val = t.type === 'EXPENSE' ? t.accountId :
+                      t.type === 'INCOME' ? t.categoryId :
+                      t.type === 'TRANSFER' ? t.accountId : '';
+          if (val !== colFilterExit) return false;
+      }
+
+      // 3. Filtro Descripción
+      if (hasDescFilter) {
+          if (regex) { if (!regex.test(t.description)) return false; }
+          else { if (!t.description.toLowerCase().includes(descPattern)) return false; }
+      }
+      
+      // 4. Filtro Clip
+      if (colFilterClip === 'YES' && !t.attachment) return false;
+      if (colFilterClip === 'NO' && t.attachment) return false;
+
+      // 5. Filtro Importe
+      if (hasAmountFilter) {
+          const val = t.amount;
+          if (colFilterAmountOp === 'GT' && val <= v1) return false;
+          if (colFilterAmountOp === 'LT' && val >= v1) return false;
+          if (colFilterAmountOp === 'EQ' && Math.abs(val - v1) > 0.01) return false;
+          if (colFilterAmountOp === 'BETWEEN') {
+              if (isNaN(v2)) { if (val < v1) return false; }
+              else { if (val < v1 || val > v2) return false; }
+          }
+      }
+      return true;
+    });
+  }, [timeFilteredList, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2]);
+
+  // --- CAPA 4: ORDENACIÓN ---
+  const sortedTransactions = useMemo(() => {
+    return [...filteredList].sort((a, b) => {
+      let vA: any, vB: any;
+      if (sortField === 'DATE') { vA = a.date; vB = b.date; }
+      else if (sortField === 'DESCRIPTION') { vA = a.description.toLowerCase(); vB = b.description.toLowerCase(); }
+      else if (sortField === 'AMOUNT') { vA = a.amount; vB = b.amount; }
+      else if (sortField === 'CATEGORY') { 
+          // Ordenar por lo que se ve en la columna "Entrada/Cat"
+          const getText = (tx: Transaction) => {
+              if (tx.type === 'INCOME') return indices.acc.get(tx.accountId)?.name.toLowerCase() || '';
+              if (tx.type === 'TRANSFER') return indices.acc.get(tx.transferAccountId || '')?.name.toLowerCase() || '';
+              return indices.cat.get(tx.categoryId)?.name.toLowerCase() || '';
+          };
+          vA = getText(a);
+          vB = getText(b);
+      }
+      else if (sortField === 'ACCOUNT') { 
+          // Ordenar por lo que se ve en la columna "Cuenta" (Derecha)
+          const getText = (tx: Transaction) => {
+              if (tx.type === 'INCOME') return indices.cat.get(tx.categoryId)?.name.toLowerCase() || '';
+              return indices.acc.get(tx.accountId)?.name.toLowerCase() || '';
+          };
+          vA = getText(a);
+          vB = getText(b);
+      }
+      else if (sortField === 'ATTACHMENT') { vA = a.attachment ? 1 : 0; vB = b.attachment ? 1 : 0; }
+      
+      if (vA < vB) return sortDirection === 'ASC' ? -1 : 1;
+      if (vA > vB) return sortDirection === 'ASC' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredList, sortField, sortDirection, indices]);
+
+  // ... (Reset Form, Load Favorite, Open Editor, Handle Save remain identical)
   const resetForm = () => {
     setEditingTx(null);
     setFType('EXPENSE');
@@ -222,7 +348,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     resetForm();
   };
 
-  // ... (Smart Import Logic remains same) ...
+  // ... (Smart Import Logic remains identical)
   const parseDateSmart = (dateStr: string) => {
     if (!dateStr) return new Date().toISOString().split('T')[0];
     const s = dateStr.trim();
@@ -360,142 +486,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       setImportStep(1);
   };
 
-  // --- PASO 1: FILTRADO TEMPORAL ---
-  // Primero obtenemos las transacciones que entran en el rango de fechas
-  const timeFilteredList = useMemo(() => {
-    const y = filter.referenceDate.getFullYear();
-    const m = filter.referenceDate.getMonth();
-    let start = ''; let end = '';
-    
-    if (filter.timeRange === 'MONTH') {
-      start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
-      end = `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`;
-    } else if (filter.timeRange === 'YEAR') {
-      start = `${y}-01-01`; end = `${y}-12-31`;
-    } else if (filter.timeRange === 'CUSTOM') {
-      start = filter.customStart || '1900-01-01';
-      end = filter.customEnd || '2100-12-31';
-    }
-
-    return data.transactions.filter(t => {
-      if (filter.timeRange !== 'ALL' && (t.date < start || t.date > end)) return false;
-      return true;
-    });
-  }, [data.transactions, filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]);
-
-  // --- PASO 2: CALCULAR OPCIONES DE FILTRO ACTIVAS ---
-  // Basándonos en la lista temporal, determinamos qué cuentas y categorías están "activas" en las columnas
-  const activeFilterOptions = useMemo(() => {
-      const activeEntryIds = new Set<string>();
-      const activeExitIds = new Set<string>();
-
-      timeFilteredList.forEach(t => {
-          // Columna IZQUIERDA (Entrada)
-          if (t.type === 'EXPENSE') activeEntryIds.add(t.categoryId); // Categoría de gasto
-          else if (t.type === 'INCOME') activeEntryIds.add(t.accountId); // Cuenta de cobro
-          else if (t.type === 'TRANSFER') { if(t.transferAccountId) activeEntryIds.add(t.transferAccountId); } // Cuenta destino
-
-          // Columna DERECHA (Salida)
-          if (t.type === 'EXPENSE') activeExitIds.add(t.accountId); // Cuenta de pago
-          else if (t.type === 'INCOME') activeExitIds.add(t.categoryId); // Categoría de ingreso
-          else if (t.type === 'TRANSFER') activeExitIds.add(t.accountId); // Cuenta origen
-      });
-
-      return { activeEntryIds, activeExitIds };
-  }, [timeFilteredList]);
-
-  // --- PASO 3: FILTRADO COMPLETO (Columnas, Texto, Importe) ---
-  const filteredList = useMemo(() => {
-    const hasDescFilter = colFilterDesc && colFilterDesc.trim() !== '';
-    const descPattern = hasDescFilter ? colFilterDesc.trim().toLowerCase() : '';
-    const descIsRegex = hasDescFilter && (descPattern.includes('*') || descPattern.includes('?'));
-    let regex: RegExp | null = null;
-    if (descIsRegex) {
-        let regexStr = descPattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*').replace(/\\\?/g, '.');
-        regex = new RegExp(`^${regexStr}$`, 'i');
-    }
-
-    const v1 = parseFloat(colFilterAmountVal1);
-    const v2 = parseFloat(colFilterAmountVal2);
-    const hasAmountFilter = colFilterAmountOp !== 'ALL' && !isNaN(v1);
-
-    return timeFilteredList.filter(t => {
-      // 1. Filtro Columna IZQUIERDA (Entrada/Cat)
-      if (colFilterEntry !== 'ALL') {
-          const val = t.type === 'EXPENSE' ? t.categoryId :
-                      t.type === 'INCOME' ? t.accountId :
-                      t.type === 'TRANSFER' ? t.transferAccountId : '';
-          if (val !== colFilterEntry) return false;
-      }
-
-      // 2. Filtro Columna DERECHA (Cuenta/Salida)
-      if (colFilterExit !== 'ALL') {
-          const val = t.type === 'EXPENSE' ? t.accountId :
-                      t.type === 'INCOME' ? t.categoryId :
-                      t.type === 'TRANSFER' ? t.accountId : '';
-          if (val !== colFilterExit) return false;
-      }
-
-      // 3. Filtro Descripción
-      if (hasDescFilter) {
-          if (regex) { if (!regex.test(t.description)) return false; }
-          else { if (!t.description.toLowerCase().includes(descPattern)) return false; }
-      }
-      
-      // 4. Filtro Clip
-      if (colFilterClip === 'YES' && !t.attachment) return false;
-      if (colFilterClip === 'NO' && t.attachment) return false;
-
-      // 5. Filtro Importe
-      if (hasAmountFilter) {
-          const val = t.amount;
-          if (colFilterAmountOp === 'GT' && val <= v1) return false;
-          if (colFilterAmountOp === 'LT' && val >= v1) return false;
-          if (colFilterAmountOp === 'EQ' && Math.abs(val - v1) > 0.01) return false;
-          if (colFilterAmountOp === 'BETWEEN') {
-              if (isNaN(v2)) { if (val < v1) return false; }
-              else { if (val < v1 || val > v2) return false; }
-          }
-      }
-      return true;
-    });
-  }, [timeFilteredList, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2]);
-
-  // --- CAPA 4: ORDENACIÓN ---
-  const sortedTransactions = useMemo(() => {
-    return [...filteredList].sort((a, b) => {
-      let vA: any, vB: any;
-      if (sortField === 'DATE') { vA = a.date; vB = b.date; }
-      else if (sortField === 'DESCRIPTION') { vA = a.description.toLowerCase(); vB = b.description.toLowerCase(); }
-      else if (sortField === 'AMOUNT') { vA = a.amount; vB = b.amount; }
-      else if (sortField === 'CATEGORY') { 
-          // Ordenar por lo que se ve en la columna "Entrada/Cat"
-          const getText = (tx: Transaction) => {
-              if (tx.type === 'INCOME') return indices.acc.get(tx.accountId)?.name.toLowerCase() || '';
-              if (tx.type === 'TRANSFER') return indices.acc.get(tx.transferAccountId || '')?.name.toLowerCase() || '';
-              return indices.cat.get(tx.categoryId)?.name.toLowerCase() || '';
-          };
-          vA = getText(a);
-          vB = getText(b);
-      }
-      else if (sortField === 'ACCOUNT') { 
-          // Ordenar por lo que se ve en la columna "Cuenta" (Derecha)
-          const getText = (tx: Transaction) => {
-              if (tx.type === 'INCOME') return indices.cat.get(tx.categoryId)?.name.toLowerCase() || '';
-              return indices.acc.get(tx.accountId)?.name.toLowerCase() || '';
-          };
-          vA = getText(a);
-          vB = getText(b);
-      }
-      else if (sortField === 'ATTACHMENT') { vA = a.attachment ? 1 : 0; vB = b.attachment ? 1 : 0; }
-      
-      if (vA < vB) return sortDirection === 'ASC' ? -1 : 1;
-      if (vA > vB) return sortDirection === 'ASC' ? 1 : -1;
-      return 0;
-    });
-  }, [filteredList, sortField, sortDirection, indices]);
-
-  // ... (Pagination and Export Logic remains same) ...
+  // --- PAGINACIÓN ---
   const totalItems = sortedTransactions.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   
@@ -576,7 +567,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
   return (
     <div className="space-y-6 md:space-y-10 pb-24">
-      {/* ... (Header Section remains same) ... */}
+      {/* ... (Cabecera Superior igual) ... */}
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
         <div className="space-y-4 text-center md:text-left w-full xl:w-auto">
             <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
@@ -710,10 +701,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                     onChange={e => setColFilterEntry(e.target.value)}
                 >
                     <option value="ALL">TODAS</option>
-                    {/* Generación dinámica de opciones basadas en lo visible actualmente */}
+                    {/* Generación dinámica de opciones basadas en lo visible actualmente en la columna izquierda */}
                     <optgroup label="Categorías (Gastos)">
                         {groupedLists.categories.map(group => {
-                            // Filtramos items que existan en activeFilterOptions
                             const visibleItems = group.items.filter(c => activeFilterOptions.activeEntryIds.has(c.id));
                             if (visibleItems.length === 0) return null;
                             return (
@@ -830,7 +820,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
           </div>
 
           {paginatedTransactions.map(t => {
-              // ... (Transaction Row remains identical) ...
               const srcAcc = indices.acc.get(t.accountId);
               const dstAcc = t.transferAccountId ? indices.acc.get(t.transferAccountId) : null;
               const cat = indices.cat.get(t.categoryId);
@@ -948,7 +937,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
           )}
 
           {/* CONTROL DE PAGINACIÓN */}
-          {/* ... (Same as before) ... */}
           {sortedTransactions.length > 0 && (
               <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8 pt-6 border-t border-slate-200 px-4 print:hidden">
                   <div className="flex items-center gap-3 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
@@ -982,11 +970,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
           )}
       </div>
 
-      {/* ... (Modals remain identical) ... */}
+      {/* ... (Resto de modales se mantienen idénticos: Editor, Importador) ... */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-white/20">
-                {/* ... (Modal content) ... */}
                 <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
                 <div className="flex items-center gap-4 mb-10">
                     <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20">< Receipt size={28} /></div>
@@ -1082,11 +1069,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         </div>
       )}
 
-      {/* ... (Import Modal remains identical) ... */}
       {isImportModalOpen && (
         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
             <div className={`bg-white rounded-[3rem] shadow-2xl w-full ${importStep === 2 ? 'max-w-6xl h-[90vh]' : 'max-w-xl'} p-8 sm:p-12 relative flex flex-col border border-white/20 transition-all duration-500`}>
-                {/* ... (Content of Smart Import) ... */}
                 <button onClick={() => { setIsImportModalOpen(false); setPendingImports([]); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all z-10"><X size={24}/></button>
                 
                 <div className="flex items-center gap-4 mb-8 flex-none">
