@@ -28,14 +28,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   
   const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
 
-  // --- OPTIMIZACIÓN 1: INDEXACIÓN (O(1) Access) ---
-  const { accMap, famMap, catMap, grpMap } = useMemo(() => {
-      return {
-          accMap: new Map(accounts.map(a => [a.id, a])),
-          famMap: new Map(families.map(f => [f.id, f])),
-          catMap: new Map(categories.map(c => [c.id, c])),
-          grpMap: new Map(accountGroups.map(g => [g.id, g]))
-      };
+  // --- CAPA 1: INDEXACIÓN ESTRUCTURAL (Solo cambia si cambia la configuración, no las transacciones) ---
+  const indices = useMemo(() => {
+      // Creamos mapas de acceso O(1)
+      const acc = new Map(accounts.map(a => [a.id, a]));
+      const fam = new Map(families.map(f => [f.id, f]));
+      const cat = new Map(categories.map(c => [c.id, c]));
+      const grp = new Map(accountGroups.map(g => [g.id, g]));
+      
+      return { acc, fam, cat, grp };
   }, [accounts, families, categories, accountGroups]);
 
   const formatDateDisplay = (dateStr: string) => {
@@ -92,11 +93,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return { startStr, endStr };
   }, [filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]);
 
-  // --- OPTIMIZACIÓN 2: SINGLE PASS LOOP (O(N)) ---
+  // --- CAPA 2: MOTOR DE CÁLCULO (Single Pass Loop optimizado) ---
   const dashboardData = useMemo(() => {
+    // 1. Inicialización de estructuras
     const accTotals = new Map<string, number>();
+    // Usamos los datos originales de 'accounts' para el balance inicial, no el mapa, para iterar
     accounts.forEach(a => accTotals.set(a.id, a.initialBalance));
 
+    // Estructuras temporales para agregación
+    // Clave: FamilyID, Valor: Objeto con total y mapa de categorías
     const incomeFlow = new Map<string, { total: number, cats: Map<string, number> }>();
     const expenseFlow = new Map<string, { total: number, cats: Map<string, number> }>();
 
@@ -107,41 +112,57 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     const end = dateBounds.endStr;
     const isAllTime = filter.timeRange === 'ALL';
 
-    for (const t of transactions) {
+    // 2. Iteración Única (Hot Path)
+    // Se recorre el array de transacciones una sola vez
+    const len = transactions.length;
+    for (let i = 0; i < len; i++) {
+      const t = transactions[i];
+      
+      // Normalización de signo
       let effectiveAmount = t.amount;
+      const absAmount = Math.abs(t.amount);
+      
+      // Lógica de signo para saldos de cuenta
       if (t.type === 'TRANSFER' || t.type === 'EXPENSE') {
-          effectiveAmount = -Math.abs(t.amount);
+          effectiveAmount = -absAmount;
       } else {
-          effectiveAmount = Math.abs(t.amount);
+          effectiveAmount = absAmount;
       }
 
+      // A) Cálculo de Saldos (Hasta fecha fin)
       if (t.date <= end) {
         const currentSrc = accTotals.get(t.accountId) || 0;
         accTotals.set(t.accountId, currentSrc + effectiveAmount);
 
         if (t.type === 'TRANSFER' && t.transferAccountId) {
             const currentDst = accTotals.get(t.transferAccountId) || 0;
+            // En destino suma (restamos el negativo)
             accTotals.set(t.transferAccountId, currentDst - effectiveAmount);
         }
       }
 
+      // B) Cálculo de Flujos del Periodo (Dentro del rango)
       const inPeriod = isAllTime || (t.date >= start && t.date <= end);
       
       if (inPeriod && t.type !== 'TRANSFER') {
-          const cat = catMap.get(t.categoryId);
+          const cat = indices.cat.get(t.categoryId);
+          // Si la tx tiene familia explícita usala, sino la de la categoría
           const familyId = t.familyId || cat?.familyId;
-          const fam = familyId ? famMap.get(familyId) : null;
+          const fam = familyId ? indices.fam.get(familyId) : null;
           
           if (fam) {
+              // KPIs Globales
               if (fam.type === 'INCOME') periodIncome += effectiveAmount;
               else periodExpense += effectiveAmount;
 
+              // Desglose por Familia/Categoría
               const targetFlow = fam.type === 'INCOME' ? incomeFlow : expenseFlow;
               
-              if (!targetFlow.has(fam.id)) {
-                  targetFlow.set(fam.id, { total: 0, cats: new Map() });
+              let famEntry = targetFlow.get(fam.id);
+              if (!famEntry) {
+                  famEntry = { total: 0, cats: new Map() };
+                  targetFlow.set(fam.id, famEntry);
               }
-              const famEntry = targetFlow.get(fam.id)!;
               famEntry.total += effectiveAmount;
 
               if (cat) {
@@ -149,21 +170,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                   famEntry.cats.set(cat.id, currentCatTotal + effectiveAmount);
               }
           } else {
+             // Huérfanos: Afectan KPI pero no salen en burbujas
              if (t.type === 'INCOME') periodIncome += effectiveAmount;
              else periodExpense += effectiveAmount;
           }
       }
     }
 
+    // 3. Transformación a Arrays Ordenados (Solo se ejecuta al final)
     const buildHierarchy = (flowMap: Map<string, { total: number, cats: Map<string, number> }>) => {
         return Array.from(flowMap.entries())
             .map(([famId, data]) => {
-                const fam = famMap.get(famId);
+                const fam = indices.fam.get(famId);
                 if (!fam) return null;
 
                 const catsArray = Array.from(data.cats.entries())
                     .map(([catId, amount]) => ({
-                        category: catMap.get(catId)!,
+                        category: indices.cat.get(catId)!,
                         total: amount
                     }))
                     .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
@@ -194,19 +217,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         }
     };
 
-  }, [transactions, accounts, dateBounds, filter.timeRange, accMap, famMap, catMap]);
+  }, [transactions, accounts, dateBounds, indices]); // Dependencias muy controladas
 
-  // Agrupación y ordenación alfabética para el modal de patrimonio
+  // --- CAPA 3: DATOS DE UI (Patrimonio) ---
   const groupedBalances = useMemo(() => {
-    // 1. Ordenar grupos alfabéticamente
     const sortedGroups = [...accountGroups].sort((a, b) => a.name.localeCompare(b.name));
 
     return sortedGroups.map(group => {
-        // 2. Ordenar cuentas dentro del grupo alfabéticamente
         const groupAccounts = accounts
             .filter(a => a.groupId === group.id)
             .sort((a, b) => a.name.localeCompare(b.name));
             
+        // Usamos el accTotals pre-calculado
         const groupTotal = groupAccounts.reduce((sum, acc) => sum + (dashboardData.stats.accTotals.get(acc.id) || 0), 0);
         
         return {
@@ -220,6 +242,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     }).filter(g => g.accounts.length > 0);
   }, [accountGroups, accounts, dashboardData.stats.accTotals]);
 
+  // Handlers
   const navigatePeriod = (direction: 'prev' | 'next') => {
     const newDate = new Date(filter.referenceDate);
     const step = direction === 'next' ? 1 : -1;
@@ -583,8 +606,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                 <div className="space-y-4">
                     {pendingRecurrents.map(r => {
                         // Uso de Maps para búsqueda rápida
-                        const acc = accMap.get(r.accountId);
-                        const cat = catMap.get(r.categoryId);
+                        const acc = indices.acc.get(r.accountId);
+                        const cat = indices.cat.get(r.categoryId);
                         return (
                             <div key={r.id} className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4 animate-in slide-in-from-right-4">
                                 <div className="flex justify-between items-start">

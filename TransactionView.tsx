@@ -58,34 +58,31 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
   const [sortDirection, setSortDirection] = useState<SortDirection>('DESC');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // --- OPTIMIZACIÓN: INDEXACIÓN ---
-  // Mapa de acceso rápido (O(1)) para evitar .find() en cada fila de la tabla
-  const { accMap, catMap, famMap } = useMemo(() => {
-    return {
-      accMap: new Map(data.accounts.map(a => [a.id, a])),
-      catMap: new Map(data.categories.map(c => [c.id, c])),
-      famMap: new Map(data.families.map(f => [f.id, f]))
-    };
+  // --- CAPA 1: INDEXACIÓN ESTRUCTURAL ---
+  const indices = useMemo(() => {
+    const acc = new Map(data.accounts.map(a => [a.id, a]));
+    const cat = new Map(data.categories.map(c => [c.id, c]));
+    const fam = new Map(data.families.map(f => [f.id, f]));
+    return { acc, cat, fam };
   }, [data.accounts, data.categories, data.families]);
 
-  // --- AGRUPACIÓN Y ORDENACIÓN ---
-  // Estructuras agrupadas y ordenadas alfabéticamente para Selectores
-  const groupedAccounts = useMemo(() => {
-    const groups = [...data.accountGroups].sort((a,b) => a.name.localeCompare(b.name));
-    return groups.map(g => ({
+  // --- CAPA 2: ESTRUCTURAS DE UI (Listas agrupadas) ---
+  const groupedLists = useMemo(() => {
+    const sortedGroups = [...data.accountGroups].sort((a,b) => a.name.localeCompare(b.name));
+    const sortedFamilies = [...data.families].sort((a,b) => a.name.localeCompare(b.name));
+
+    const accounts = sortedGroups.map(g => ({
         group: g,
-        accounts: data.accounts.filter(a => a.groupId === g.id).sort((a,b) => a.name.localeCompare(b.name))
-    })).filter(g => g.accounts.length > 0);
-  }, [data.accountGroups, data.accounts]);
+        items: data.accounts.filter(a => a.groupId === g.id).sort((a,b) => a.name.localeCompare(b.name))
+    })).filter(g => g.items.length > 0);
 
-  const groupedCategories = useMemo(() => {
-    const families = [...data.families].sort((a,b) => a.name.localeCompare(b.name));
-    return families.map(f => ({
+    const categories = sortedFamilies.map(f => ({
         family: f,
-        categories: data.categories.filter(c => c.familyId === f.id).sort((a,b) => a.name.localeCompare(b.name))
-    })).filter(f => f.categories.length > 0);
-  }, [data.families, data.categories]);
+        items: data.categories.filter(c => c.familyId === f.id).sort((a,b) => a.name.localeCompare(b.name))
+    })).filter(f => f.items.length > 0);
 
+    return { accounts, categories };
+  }, [data.accountGroups, data.accounts, data.families, data.categories]);
 
   // Helper para formatear fecha dd/mm/aa
   const formatDateDisplay = (dateStr: string) => {
@@ -109,8 +106,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     if (initialSpecificFilters) {
       if (initialSpecificFilters.action === 'NEW' && initialSpecificFilters.categoryId) {
          resetForm();
-         const cat = catMap.get(initialSpecificFilters.categoryId);
-         const fam = cat ? famMap.get(cat.familyId) : null;
+         const cat = indices.cat.get(initialSpecificFilters.categoryId);
+         const fam = cat ? indices.fam.get(cat.familyId) : null;
          
          setFCat(initialSpecificFilters.categoryId);
          // Auto-detectar tipo basado en la familia de la categoría
@@ -129,7 +126,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
       if (clearSpecificFilters) clearSpecificFilters();
     }
-  }, [initialSpecificFilters, catMap, famMap]);
+  }, [initialSpecificFilters, indices]);
 
   const resetForm = () => {
     setEditingTx(null);
@@ -138,7 +135,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     setFDesc('');
     setFDate(new Date().toISOString().split('T')[0]);
     // Seleccionar por defecto la primera cuenta disponible en el orden agrupado
-    const defaultAcc = groupedAccounts[0]?.accounts[0]?.id || data.accounts[0]?.id || '';
+    const defaultAcc = groupedLists.accounts[0]?.items[0]?.id || data.accounts[0]?.id || '';
     setFAcc(defaultAcc);
     setFCat('');
     setFTransferDest('');
@@ -182,7 +179,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
         rawAmount = -rawAmount;
     } 
     
-    const cat = catMap.get(fCat);
+    const cat = indices.cat.get(fCat);
     const finalTx: Transaction = {
       id: editingTx ? editingTx.id : generateId(),
       date: fDate,
@@ -201,69 +198,79 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
     resetForm();
   };
 
+  // --- CAPA 3: FILTRADO OPTIMIZADO ---
   const filteredTransactions = useMemo(() => {
+    // Pre-calculo de fechas de filtro
+    const y = filter.referenceDate.getFullYear();
+    const m = filter.referenceDate.getMonth();
+    let start = ''; let end = '';
+    
+    if (filter.timeRange === 'MONTH') {
+      start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+      end = `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`;
+    } else if (filter.timeRange === 'YEAR') {
+      start = `${y}-01-01`; end = `${y}-12-31`;
+    } else if (filter.timeRange === 'CUSTOM') {
+      start = filter.customStart || '1900-01-01';
+      end = filter.customEnd || '2100-12-31';
+    }
+
+    // Pre-procesamiento de filtros para el loop
+    const hasDescFilter = colFilterDesc && colFilterDesc.trim() !== '';
+    const descPattern = hasDescFilter ? colFilterDesc.trim().toLowerCase() : '';
+    const descIsRegex = hasDescFilter && (descPattern.includes('*') || descPattern.includes('?'));
+    let regex: RegExp | null = null;
+    
+    if (descIsRegex) {
+        let regexStr = descPattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+        regexStr = regexStr.replace(/\\\*/g, '.*').replace(/\\\?/g, '.');
+        regex = new RegExp(`^${regexStr}$`, 'i');
+    }
+
+    const v1 = parseFloat(colFilterAmountVal1);
+    const v2 = parseFloat(colFilterAmountVal2);
+    const hasAmountFilter = colFilterAmountOp !== 'ALL' && !isNaN(v1);
+
     return data.transactions.filter(t => {
-      // Time Range Filter
-      const y = filter.referenceDate.getFullYear();
-      const m = filter.referenceDate.getMonth();
-      let start = ''; let end = '';
-      if (filter.timeRange === 'MONTH') {
-        start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
-        end = `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`;
-      } else if (filter.timeRange === 'YEAR') {
-        start = `${y}-01-01`; end = `${y}-12-31`;
-      } else if (filter.timeRange === 'CUSTOM') {
-        start = filter.customStart || '1900-01-01';
-        end = filter.customEnd || '2100-12-31';
-      }
+      // 1. Filtro Fecha (Rápido)
       if (filter.timeRange !== 'ALL' && (t.date < start || t.date > end)) return false;
 
-      // Entry Filter
+      // 2. Filtro Categoría/Entrada
       if (colFilterEntry !== 'ALL') {
           if (t.categoryId !== colFilterEntry && t.transferAccountId !== colFilterEntry) return false;
       }
 
-      // Description Wildcard Filter
-      if (colFilterDesc && colFilterDesc.trim() !== '') {
-          const pattern = colFilterDesc.trim();
-          const hasWildcards = pattern.includes('*') || pattern.includes('?');
-          if (hasWildcards) {
-              let regexStr = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-              regexStr = regexStr.replace(/\\\*/g, '.*').replace(/\\\?/g, '.');
-              const regex = new RegExp(`^${regexStr}$`, 'i');
+      // 3. Filtro Descripción
+      if (hasDescFilter) {
+          if (regex) {
               if (!regex.test(t.description)) return false;
           } else {
-              if (!t.description.toLowerCase().includes(pattern.toLowerCase())) return false;
+              if (!t.description.toLowerCase().includes(descPattern)) return false;
           }
       }
       
-      // Clip Filter
+      // 4. Filtro Clip
       if (colFilterClip === 'YES' && !t.attachment) return false;
       if (colFilterClip === 'NO' && t.attachment) return false;
 
-      // Exit Filter (Cuenta)
+      // 5. Filtro Cuenta Salida
       if (colFilterExit !== 'ALL') {
          const isSource = t.accountId === colFilterExit;
          const isDest = t.type === 'TRANSFER' && t.transferAccountId === colFilterExit;
          if (!isSource && !isDest) return false;
       }
 
-      // Amount Filter
-      if (colFilterAmountOp !== 'ALL') {
+      // 6. Filtro Importe
+      if (hasAmountFilter) {
           const val = t.amount;
-          const v1 = parseFloat(colFilterAmountVal1);
-          const v2 = parseFloat(colFilterAmountVal2);
-
-          if (!isNaN(v1)) {
-              if (colFilterAmountOp === 'GT' && val <= v1) return false;
-              if (colFilterAmountOp === 'LT' && val >= v1) return false;
-              if (colFilterAmountOp === 'EQ' && Math.abs(val - v1) > 0.01) return false;
-              if (colFilterAmountOp === 'BETWEEN') {
-                  if (isNaN(v2)) {
-                      if (val < v1) return false;
-                  } else {
-                      if (val < v1 || val > v2) return false;
-                  }
+          if (colFilterAmountOp === 'GT' && val <= v1) return false;
+          if (colFilterAmountOp === 'LT' && val >= v1) return false;
+          if (colFilterAmountOp === 'EQ' && Math.abs(val - v1) > 0.01) return false;
+          if (colFilterAmountOp === 'BETWEEN') {
+              if (isNaN(v2)) {
+                  if (val < v1) return false;
+              } else {
+                  if (val < v1 || val > v2) return false;
               }
           }
       }
@@ -275,12 +282,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       else if (sortField === 'DESCRIPTION') { vA = a.description.toLowerCase(); vB = b.description.toLowerCase(); }
       else if (sortField === 'AMOUNT') { vA = a.amount; vB = b.amount; }
       else if (sortField === 'ACCOUNT') { 
-          vA = accMap.get(a.accountId)?.name.toLowerCase() || ''; 
-          vB = accMap.get(b.accountId)?.name.toLowerCase() || ''; 
+          // Uso del índice O(1)
+          vA = indices.acc.get(a.accountId)?.name.toLowerCase() || ''; 
+          vB = indices.acc.get(b.accountId)?.name.toLowerCase() || ''; 
       }
       else if (sortField === 'CATEGORY') { 
-          const catA = catMap.get(a.categoryId)?.name.toLowerCase() || '';
-          const catB = catMap.get(b.categoryId)?.name.toLowerCase() || '';
+          // Uso del índice O(1)
+          const catA = indices.cat.get(a.categoryId)?.name.toLowerCase() || '';
+          const catB = indices.cat.get(b.categoryId)?.name.toLowerCase() || '';
           vA = catA; vB = catB;
       }
       else if (sortField === 'ATTACHMENT') { vA = a.attachment ? 1 : 0; vB = b.attachment ? 1 : 0; }
@@ -289,7 +298,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
       if (vA > vB) return sortDirection === 'ASC' ? 1 : -1;
       return 0;
     });
-  }, [data.transactions, filter, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2, sortField, sortDirection, accMap, catMap]);
+  }, [data.transactions, filter, colFilterEntry, colFilterDesc, colFilterClip, colFilterExit, colFilterAmountOp, colFilterAmountVal1, colFilterAmountVal2, sortField, sortDirection, indices]); // 'indices' es estable
 
   const handleSort = (field: SortField) => {
       if (sortField === field) {
@@ -310,10 +319,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
   const handleExport = (type: 'CSV' | 'EXCEL') => {
       const exportData = filteredTransactions.map(t => {
-          const srcAcc = accMap.get(t.accountId);
-          const dstAcc = t.transferAccountId ? accMap.get(t.transferAccountId) : null;
-          const cat = catMap.get(t.categoryId);
-          const fam = cat ? famMap.get(cat.familyId) : null;
+          const srcAcc = indices.acc.get(t.accountId);
+          const dstAcc = t.transferAccountId ? indices.acc.get(t.transferAccountId) : null;
+          const cat = indices.cat.get(t.categoryId);
+          const fam = cat ? indices.fam.get(cat.familyId) : null;
 
           return {
               Fecha: t.date,
@@ -455,16 +464,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 <select className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none cursor-pointer focus:border-indigo-300 transition-all" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)}>
                     <option value="ALL">TODAS</option>
                     <optgroup label="Categorías">
-                        {groupedCategories.map(group => (
+                        {groupedLists.categories.map(group => (
                             <optgroup key={group.family.id} label={group.family.name}>
-                                {group.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                {group.items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </optgroup>
                         ))}
                     </optgroup>
                     <optgroup label="Cuentas (Traspasos)">
-                        {groupedAccounts.map(group => (
+                        {groupedLists.accounts.map(group => (
                             <optgroup key={group.group.id} label={group.group.name}>
-                                {group.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                {group.items.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </optgroup>
                         ))}
                     </optgroup>
@@ -504,9 +513,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                 </button>
                 <select className="w-full px-2 py-2 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold outline-none cursor-pointer focus:border-indigo-300 transition-all" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}>
                     <option value="ALL">TODAS</option>
-                    {groupedAccounts.map(group => (
+                    {groupedLists.accounts.map(group => (
                         <optgroup key={group.group.id} label={group.group.name}>
-                            {group.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            {group.items.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                         </optgroup>
                     ))}
                 </select>
@@ -544,9 +553,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
 
           {filteredTransactions.map(t => {
               // Uso de Mapas para O(1)
-              const srcAcc = accMap.get(t.accountId);
-              const dstAcc = t.transferAccountId ? accMap.get(t.transferAccountId) : null;
-              const cat = catMap.get(t.categoryId);
+              const srcAcc = indices.acc.get(t.accountId);
+              const dstAcc = t.transferAccountId ? indices.acc.get(t.transferAccountId) : null;
+              const cat = indices.cat.get(t.categoryId);
               
               let entryNode: React.ReactNode;
               let exitNode: React.ReactNode;
@@ -707,9 +716,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                         <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{fType === 'TRANSFER' ? 'Desde Cuenta' : 'Cuenta de Pago/Cobro'}</label>
                           <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all shadow-inner" value={fAcc} onChange={e => setFAcc(e.target.value)}>
-                              {groupedAccounts.map(group => (
+                              {groupedLists.accounts.map(group => (
                                   <optgroup key={group.group.id} label={group.group.name}>
-                                      {group.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                      {group.items.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                                   </optgroup>
                               ))}
                           </select>
@@ -719,9 +728,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hacia Cuenta</label>
                             <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all shadow-inner" value={fTransferDest} onChange={e => setFTransferDest(e.target.value)}>
                                 <option value="">Destino...</option>
-                                {groupedAccounts.map(group => (
+                                {groupedLists.accounts.map(group => (
                                     <optgroup key={group.group.id} label={group.group.name}>
-                                        {group.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                        {group.items.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                                     </optgroup>
                                 ))}
                             </select>
@@ -731,9 +740,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({ data, onAddTra
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoría</label>
                             <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all shadow-inner" value={fCat} onChange={e => setFCat(e.target.value)}>
                                 <option value="">Sin categoría...</option>
-                                {groupedCategories.map(group => (
+                                {groupedLists.categories.map(group => (
                                     <optgroup key={group.family.id} label={group.family.name}>
-                                        {group.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        {group.items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                     </optgroup>
                                 ))}
                             </select>
