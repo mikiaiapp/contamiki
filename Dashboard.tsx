@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category, Family } from './types';
-import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays } from 'lucide-react';
+import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown } from 'lucide-react';
 
 interface DashboardProps {
   data: AppState;
@@ -22,6 +22,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const { transactions, accounts, families, categories, accountGroups, recurrents = [] } = data;
   const [showBalanceDetail, setShowBalanceDetail] = useState(false);
   const [showRecurrentsModal, setShowRecurrentsModal] = useState(false);
+  
+  // Estado para controlar qué grupos están expandidos en el modal de patrimonio
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   
   const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
 
@@ -49,6 +52,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     if (amount > 0) return 'text-emerald-600';
     if (amount < 0) return 'text-rose-600';
     return 'text-slate-400';
+  };
+
+  const toggleGroupExpansion = (groupId: string) => {
+      const newSet = new Set(expandedGroups);
+      if (newSet.has(groupId)) {
+          newSet.delete(groupId);
+      } else {
+          newSet.add(groupId);
+      }
+      setExpandedGroups(newSet);
   };
 
   const pendingRecurrents = useMemo(() => {
@@ -496,7 +509,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         </div>
       )}
 
-      {/* Modal Balance Detail con Header Fijo */}
+      {/* Modal Balance Detail con Header Fijo y Acordeón */}
       {showBalanceDetail && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl relative max-h-[90vh] flex flex-col border border-white/20 overflow-hidden">
@@ -509,31 +522,48 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     </div>
                 </div>
                 
-                {/* Contenido Scrolleable */}
+                {/* Contenido Scrolleable con Acordeón */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-8 sm:p-12 pt-6">
-                    <div className="space-y-10">
-                        {groupedBalances.map(groupInfo => (
-                            <div key={groupInfo.group.id} className="space-y-4">
-                                <div className="flex items-center justify-between px-2">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden">{renderIcon(groupInfo.group.icon, "w-6 h-6")}</div>
-                                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">{groupInfo.group.name}</h4>
-                                    </div>
-                                    <span className={`text-base font-black tracking-tighter ${getAmountColor(groupInfo.total)}`}>{formatCurrency(groupInfo.total)}</span>
-                                </div>
-                                <div className="grid grid-cols-1 gap-3">
-                                    {groupInfo.accounts.map(acc => (
-                                        <div key={acc.id} onClick={() => { setShowBalanceDetail(false); onNavigateToTransactions({ filterAccount: acc.id }); }} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:border-indigo-200 transition-all shadow-sm cursor-pointer group/row active:scale-[0.99]">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-50 shadow-sm overflow-hidden group-hover/row:scale-110 transition-transform">{renderIcon(acc.icon, "w-6 h-6")}</div>
-                                                <div><span className="text-[11px] font-bold text-slate-600 uppercase block">{acc.name}</span><span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest opacity-0 group-hover/row:opacity-100 transition-opacity">Ver movimientos</span></div>
-                                            </div>
-                                            <div className="flex items-center gap-2"><span className={`text-xs font-black ${getAmountColor(acc.balance)}`}>{formatCurrency(acc.balance)}</span><ChevronRight size={14} className="text-slate-300 group-hover/row:text-indigo-400" /></div>
+                    <div className="space-y-6">
+                        {groupedBalances.map(groupInfo => {
+                            const isExpanded = expandedGroups.has(groupInfo.group.id);
+                            return (
+                                <div key={groupInfo.group.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm transition-all">
+                                    {/* Cabecera del Grupo (Clickable) */}
+                                    <button 
+                                        onClick={() => toggleGroupExpansion(groupInfo.group.id)}
+                                        className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">{renderIcon(groupInfo.group.icon, "w-6 h-6")}</div>
+                                            <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight text-left">{groupInfo.group.name}</h4>
                                         </div>
-                                    ))}
+                                        <div className="flex items-center gap-3">
+                                            <span className={`text-base font-black tracking-tighter ${getAmountColor(groupInfo.total)}`}>{formatCurrency(groupInfo.total)}</span>
+                                            <ChevronDown className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} size={20} />
+                                        </div>
+                                    </button>
+
+                                    {/* Lista de Cuentas (Colapsable) */}
+                                    {isExpanded && (
+                                        <div className="border-t border-slate-50 bg-slate-50/50 p-3 space-y-2 animate-in slide-in-from-top-2 duration-200">
+                                            {groupInfo.accounts.map(acc => (
+                                                <div key={acc.id} onClick={() => { setShowBalanceDetail(false); onNavigateToTransactions({ filterAccount: acc.id }); }} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-2xl hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer group/row active:scale-[0.99]">
+                                                    <div className="flex items-center gap-3 ml-2">
+                                                        <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden group-hover/row:scale-110 transition-transform">{renderIcon(acc.icon, "w-5 h-5")}</div>
+                                                        <span className="text-[11px] font-bold text-slate-600 uppercase block">{acc.name}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mr-2">
+                                                        <span className={`text-xs font-black ${getAmountColor(acc.balance)}`}>{formatCurrency(acc.balance)}</span>
+                                                        <ChevronRight size={14} className="text-slate-300 group-hover/row:text-indigo-400" />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                     <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-center px-4">
                         <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Patrimonio Neto Total</span>
