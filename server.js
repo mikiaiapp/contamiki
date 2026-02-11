@@ -9,11 +9,16 @@ import jwt from 'jsonwebtoken';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 4000;
-const DATA_DIR = path.join(__dirname, 'data');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
 // Configs
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_master_key_conta_miki';
+
+// DEFINICIÓN DE DIRECTORIO DE DATOS ROBUSTA
+// Permite definir DATA_DIR externamente (Docker) o usa fallback relativo
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+
+console.log(`ContaMiki Server: Storage path set to: ${DATA_DIR}`);
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
@@ -29,7 +34,7 @@ const initSystem = async () => {
       await fs.writeFile(USERS_FILE, JSON.stringify([]));
     }
   } catch (err) {
-    console.error("Error initializing storage:", err);
+    console.error("CRITICAL: Error initializing storage:", err);
   }
 };
 
@@ -93,7 +98,19 @@ app.get('/api/data', authenticateToken, async (req, res) => {
         const userFile = getUserDataFile(req.user.username);
         const data = await fs.readFile(userFile, 'utf-8');
         res.json(JSON.parse(data));
-    } catch (err) { res.json({}); }
+    } catch (err) {
+        // SEGURIDAD CRÍTICA:
+        // Solo devolvemos objeto vacío si el archivo NO EXISTE (usuario nuevo).
+        // Si hay otro error (permisos, disco lleno, fallo de montaje), devolvemos 500
+        // para que el Frontend NO sobreescriba los datos existentes con un libro vacío.
+        if (err.code === 'ENOENT') {
+            console.log(`New user data file initialized for: ${req.user.username}`);
+            res.json({}); 
+        } else {
+            console.error(`ERROR READING DATA for ${req.user.username}:`, err);
+            res.status(500).json({ error: "Storage access error. Please contact admin." });
+        }
+    }
 });
 
 app.post('/api/data', authenticateToken, async (req, res) => {
@@ -101,7 +118,10 @@ app.post('/api/data', authenticateToken, async (req, res) => {
         const userFile = getUserDataFile(req.user.username);
         await fs.writeFile(userFile, JSON.stringify(req.body, null, 2));
         res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: "Error save" }); }
+    } catch (err) { 
+        console.error(`ERROR SAVING DATA for ${req.user.username}:`, err);
+        res.status(500).json({ error: "Error save" }); 
+    }
 });
 
 app.get('/api/config', authenticateToken, (req, res) => {
