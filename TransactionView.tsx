@@ -352,7 +352,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   const formatDateDisplay = (dateStr: string) => { if (!dateStr) return '--/--/--'; const [y, m, d] = dateStr.split('-'); return `${d}/${m}/${y.slice(-2)}`; };
   const formatCurrency = (amount: number) => `${numberFormatter.format(amount)} €`;
-  const getAmountColor = (amount: number) => amount > 0 ? 'text-emerald-600' : amount < 0 ? 'text-rose-600' : 'text-slate-400';
+  
+  const getAmountColor = (amount: number, type?: TransactionType) => {
+      if (type === 'TRANSFER') return 'text-slate-900';
+      return amount > 0 ? 'text-emerald-600' : amount < 0 ? 'text-rose-600' : 'text-slate-400';
+  };
+
   const renderIcon = (iconStr: string, className = "w-4 h-4") => { if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />; return <span className="text-xs">{iconStr || '📂'}</span>; }
   
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -553,7 +558,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                         <button onClick={() => openEditor(t)} className="p-0.5 md:p-1 text-slate-300 hover:text-indigo-600"><Edit3 size={12} className="size-3 md:size-5"/></button>
                         <button onClick={() => setDeleteConfirmId(t.id)} className="p-0.5 md:p-1 text-slate-300 hover:text-rose-500"><Trash2 size={12} className="size-3 md:size-5"/></button>
                     </div>
-                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(t.amount)}`}>
+                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(t.amount, t.type)}`}>
                         {formatCurrency(t.amount)}
                     </div>
                 </div>
