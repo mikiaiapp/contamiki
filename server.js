@@ -19,8 +19,8 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
 console.log(`ContaMiki Server: Storage path set to: ${DATA_DIR}`);
 
-// Middleware
-app.use(express.json({ limit: '10mb' }));
+// Middleware - AUMENTADO A 50MB PARA SOPORTAR MULTI-LIBROS
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static(__dirname));
 
 // Initialize System Files
@@ -112,7 +112,6 @@ app.post('/api/data', authenticateToken, async (req, res) => {
     try {
         const userFile = getUserDataFile(req.user.username);
         // ESCRITURA ATÓMICA: Escribir en .tmp y luego renombrar.
-        // Esto evita archivos corruptos si el contenedor muere durante la escritura.
         const tempFile = `${userFile}.tmp`;
         
         await fs.writeFile(tempFile, JSON.stringify(req.body, null, 2));

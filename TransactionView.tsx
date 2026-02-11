@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, Category, Account } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Heart, Bot, Check, AlertTriangle, RefreshCw, Filter, Eraser, Calendar, Sparkles, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Heart, Bot, Check, AlertTriangle, RefreshCw, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
@@ -34,6 +34,31 @@ interface ProposedTransaction {
 const generateId = () => Math.random().toString(36).substring(2, 15);
 const numberFormatter = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Utility para comprimir imágenes
+const compressImage = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target?.result as string;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 800;
+                const scaleSize = MAX_WIDTH / img.width;
+                canvas.width = MAX_WIDTH;
+                canvas.height = img.height * scaleSize;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+                // Comprimir a JPEG calidad 0.6
+                resolve(canvas.toDataURL('image/jpeg', 0.6));
+            };
+            img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (err) => reject(err);
+    });
+};
+
 export const TransactionView: React.FC<TransactionViewProps> = ({ 
   data, 
   onAddTransaction, 
@@ -55,6 +80,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const [fCat, setFCat] = useState('');
   const [fTransferDest, setFTransferDest] = useState('');
   const [fAttachment, setFAttachment] = useState<string | undefined>(undefined);
+  const [isCompressing, setIsCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- SMART IMPORT STATE ---
@@ -177,47 +203,37 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   }, [data.transactions, filter]);
 
   // --- LÓGICA DE OPCIONES DINÁMICAS ---
-  // Calculamos qué IDs (Categorias o Cuentas) aparecen realmente en las columnas DEBE y HABER
-  // y las agrupamos para los desplegables.
   const activeDropdownOptions = useMemo(() => {
     const entryIds = new Set<string>();
     const exitIds = new Set<string>();
 
     timeFilteredList.forEach(t => {
-      // DEBE (Izquierda / Destino)
       if (t.type === 'EXPENSE') entryIds.add(t.categoryId);
       else if (t.type === 'INCOME') entryIds.add(t.accountId);
       else if (t.type === 'TRANSFER' && t.transferAccountId) entryIds.add(t.transferAccountId);
 
-      // HABER (Derecha / Origen)
       if (t.type === 'EXPENSE') exitIds.add(t.accountId);
       else if (t.type === 'INCOME') exitIds.add(t.categoryId);
       else if (t.type === 'TRANSFER') exitIds.add(t.accountId);
     });
 
-    // Helper para estructurar las opciones en grupos
     const buildGroupedOptions = (ids: Set<string>) => {
       const groupsMap = new Map<string, { label: string, options: { id: string, name: string }[] }>();
 
       ids.forEach(id => {
         let groupLabel = 'Otros';
         let itemName = 'Desconocido';
-        let sortKey = '';
 
         if (indices.cat.has(id)) {
-          // Es Categoría -> Agrupar por Familia
           const cat = indices.cat.get(id)!;
           itemName = cat.name;
           const fam = indices.fam.get(cat.familyId);
           groupLabel = fam ? `Fam: ${fam.name}` : 'Sin Familia';
-          sortKey = `A_${groupLabel}`; // Categorias primero o despues segun prefieras
         } else if (indices.acc.has(id)) {
-          // Es Cuenta -> Agrupar por AccountGroup
           const acc = indices.acc.get(id)!;
           itemName = acc.name;
           const grp = indices.grp.get(acc.groupId);
           groupLabel = grp ? `Grp: ${grp.name}` : 'Sin Grupo';
-          sortKey = `B_${groupLabel}`;
         }
 
         if (!groupsMap.has(groupLabel)) {
@@ -226,7 +242,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         groupsMap.get(groupLabel)!.options.push({ id, name: itemName });
       });
 
-      // Ordenar grupos y opciones dentro de grupos
       const sortedGroups = Array.from(groupsMap.values()).sort((a, b) => a.label.localeCompare(b.label));
       sortedGroups.forEach(g => g.options.sort((a, b) => a.name.localeCompare(b.name)));
       
@@ -245,7 +260,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     const v1 = parseFloat(colFilterAmountVal1);
     return timeFilteredList.filter(t => {
       if (colFilterEntry !== 'ALL') {
-        // Logica unificada: El filtro Entry aplica si el ID coincide con categoryId (Gasto), accountId (Ingreso), transferAccountId (Transf)
         let match = false;
         if (t.type === 'EXPENSE' && t.categoryId === colFilterEntry) match = true;
         else if (t.type === 'INCOME' && t.accountId === colFilterEntry) match = true;
@@ -253,7 +267,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         if (!match) return false;
       }
       if (colFilterExit !== 'ALL') {
-        // Logica unificada: El filtro Exit aplica si el ID coincide con accountId (Gasto/Transf), categoryId (Ingreso)
         let match = false;
         if (t.type === 'EXPENSE' && t.accountId === colFilterExit) match = true;
         else if (t.type === 'INCOME' && t.categoryId === colFilterExit) match = true;
@@ -279,9 +292,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       if (sortField === 'DATE') { vA = a.date; vB = b.date; }
       else if (sortField === 'DESCRIPTION') { vA = a.description.toLowerCase(); vB = b.description.toLowerCase(); }
       else if (sortField === 'AMOUNT') { vA = Math.abs(a.amount); vB = Math.abs(b.amount); }
-      // Ordenacion simple para columnas mixtas (Category/Account) basada en nombre
       else if (sortField === 'CATEGORY' || sortField === 'ACCOUNT') { 
-         // Simplificacion: usamos description como fallback si es complejo ordenar mixto
          vA = a.description; vB = b.description; 
       }
       if (vA < vB) return sortDirection === 'ASC' ? -1 : 1;
@@ -319,6 +330,21 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const openEditor = (t?: Transaction) => { if (t) { setEditingTx(t); setFType(t.type); setFAmount(Math.abs(t.amount).toString()); setFDesc(t.description); setFDate(t.date); setFAcc(t.accountId); setFCat(t.categoryId); setFTransferDest(t.transferAccountId || ''); setFAttachment(t.attachment); } else resetForm(); setIsModalOpen(true); };
   const handleSave = () => { if (!fAmount || !fDesc || !fAcc || (fType !== 'TRANSFER' && !fCat)) return; let amt = Math.abs(parseFloat(fAmount)); if (fType === 'EXPENSE' || fType === 'TRANSFER') amt = -amt; const cat = indices.cat.get(fCat); const tx: Transaction = { id: editingTx ? editingTx.id : generateId(), date: fDate, amount: amt, description: fDesc, accountId: fAcc, type: fType, categoryId: fCat, familyId: cat?.familyId || '', attachment: fAttachment, transferAccountId: fType === 'TRANSFER' ? fTransferDest : undefined }; if (editingTx) onUpdateTransaction(tx); else onAddTransaction(tx); setIsModalOpen(false); resetForm(); };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          setIsCompressing(true);
+          try {
+              const compressed = await compressImage(file);
+              setFAttachment(compressed);
+          } catch (err) {
+              console.error("Compression error", err);
+          } finally {
+              setIsCompressing(false);
+          }
+      }
+  };
+
   const formatDateDisplay = (dateStr: string) => { if (!dateStr) return '--/--/--'; const [y, m, d] = dateStr.split('-'); return `${d}/${m}/${y.slice(-2)}`; };
   const formatCurrency = (amount: number) => `${numberFormatter.format(amount)} €`;
   const getAmountColor = (amount: number) => amount > 0 ? 'text-emerald-600' : amount < 0 ? 'text-rose-600' : 'text-slate-400';
@@ -340,8 +366,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-  // Grid Config optimizado para mobile (Asiento Contable - Una línea y Importe al final)
-  // Cols: Date | Debit | Concept | Clip | Credit | Actions | Amount (LAST)
   const gridClasses = "grid grid-cols-[52px_1fr_1.2fr_12px_1fr_20px_55px] md:grid-cols-[90px_1fr_1.5fr_40px_1fr_40px_110px] gap-1 md:gap-4 items-center";
 
   return (
@@ -430,13 +454,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         </div>
       )}
 
-      {/* CABECERA DE FILTROS - FORMATO ASIENTO CONTABLE */}
+      {/* CABECERA DE FILTROS */}
       <div className={`bg-slate-900/5 p-2 md:p-4 rounded-2xl border border-slate-100 ${gridClasses}`}>
-          {/* 1. FECHA */}
           <div className="flex flex-col items-center justify-center">
               <button onClick={() => { if(sortField==='DATE') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('DATE'); }} className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest inline-flex items-center gap-0.5">Fec <SortIcon field="DATE"/></button>
           </div>
-          {/* 2. DEBE (Categoría Entrada) */}
           <div className="flex flex-col">
               <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Debe</span>
               <select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none truncate" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)}>
@@ -448,17 +470,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                   ))}
               </select>
           </div>
-          {/* 3. CONCEPTO */}
           <div className="flex flex-col">
               <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Concepto</span>
               <input type="text" className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 px-1 md:px-2 outline-none" placeholder="..." value={colFilterDesc} onChange={e => setColFilterDesc(e.target.value)} />
           </div>
-          {/* 4. CLIP */}
           <div className="flex flex-col">
               <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Clip</span>
               <select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none" value={colFilterClip} onChange={e => setColFilterClip(e.target.value as any)}><option value="ALL">.</option><option value="YES">SI</option><option value="NO">NO</option></select>
           </div>
-          {/* 5. HABER (Cuenta Salida) */}
           <div className="flex flex-col">
               <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Haber</span>
               <select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none truncate" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}>
@@ -470,18 +489,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                   ))}
               </select>
           </div>
-          {/* 6. RESET/ACCIONES */}
           <div className="flex justify-center">
               <button onClick={clearAllFilters} className="text-slate-300 hover:text-rose-500 transition-colors p-1"><Eraser size={14}/></button>
           </div>
-          {/* 7. IMPORTE (Último lugar) */}
           <div className="flex flex-col">
               <button onClick={() => { if(sortField==='AMOUNT') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('AMOUNT'); }} className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-end gap-0.5">Imp <SortIcon field="AMOUNT"/></button>
               <select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none text-right" value={colFilterAmountOp} onChange={e => setColFilterAmountOp(e.target.value as any)}><option value="ALL">...</option><option value="GT">{">"}</option><option value="LT">{"<"}</option></select>
           </div>
       </div>
 
-      {/* LISTADO DE MOVIMIENTOS - ÚNICA LÍNEA RESPONSIVA */}
+      {/* LISTADO DE MOVIMIENTOS */}
       <div className="space-y-1.5 md:space-y-2.5">
         {paginatedTransactions.map(t => {
           const srcAcc = indices.acc.get(t.accountId);
@@ -511,34 +528,21 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           return (
             <div key={t.id} className="group bg-white p-2 md:p-4 md:px-6 rounded-2xl border border-slate-100 hover:shadow-lg transition-all relative overflow-hidden">
                 <div className={gridClasses}>
-                    {/* 1. FECHA */}
                     <div className="text-left text-[8px] md:text-sm font-black text-slate-400 uppercase tracking-tighter leading-none truncate">
                         {formatDateDisplay(t.date)}
                     </div>
-
-                    {/* 2. DEBE */}
                     <div className="min-w-0 text-[8px] md:text-sm">{debitNode}</div>
-
-                    {/* 3. CONCEPTO */}
                     <div className="min-w-0 text-[8px] md:text-sm font-bold text-slate-800 uppercase truncate leading-tight cursor-pointer hover:text-indigo-600" onClick={() => setColFilterDesc(t.description)}>
                         {t.description}
                     </div>
-
-                    {/* 4. CLIP */}
                     <div className="flex justify-center">
                         {t.attachment ? <Paperclip size={10} className="text-indigo-500 md:size-4"/> : <div className="w-1 md:w-2" />}
                     </div>
-
-                    {/* 5. HABER */}
                     <div className="min-w-0 text-[8px] md:text-sm">{creditNode}</div>
-
-                    {/* 6. ACCIONES */}
                     <div className="flex justify-end gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => openEditor(t)} className="p-0.5 md:p-1 text-slate-300 hover:text-indigo-600"><Edit3 size={12} className="size-3 md:size-5"/></button>
                         <button onClick={() => setDeleteConfirmId(t.id)} className="p-0.5 md:p-1 text-slate-300 hover:text-rose-500"><Trash2 size={12} className="size-3 md:size-5"/></button>
                     </div>
-
-                    {/* 7. IMPORTE (Último lugar) */}
                     <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(t.amount)}`}>
                         {formatCurrency(t.amount)}
                     </div>
@@ -575,72 +579,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                   <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} className="p-2 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors"><ChevronRight size={20}/></button>
               </div>
           </div>
-      )}
-
-      {/* MODAL IMPORTACIÓN INTELIGENTE */}
-      {isImportModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-[250] p-4 animate-in fade-in duration-500">
-          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl p-8 lg:p-12 relative max-h-[90vh] flex flex-col border border-white/20">
-            <button onClick={() => setIsImportModalOpen(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
-            <div className="flex items-center gap-4 mb-8 flex-none">
-              <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Bot size={28} /></div>
-              <div>
-                <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Smart Import</h3>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Mapeo inteligente de extractos</p>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-              {importStep === 1 && (
-                <div className="space-y-8 animate-in slide-in-from-right-4">
-                  <div className="space-y-4">
-                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Paso 1: Destino de Fondos</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {data.accounts.map(acc => (
-                        <button key={acc.id} onClick={() => { setImportAccount(acc.id); setImportStep(2); }} className={`p-6 rounded-[2rem] border-2 transition-all flex flex-col gap-3 text-left ${importAccount === acc.id ? 'bg-indigo-50 border-indigo-500' : 'bg-white border-slate-100 hover:border-indigo-200'}`}>
-                          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">{renderIcon(acc.icon, "w-6 h-6")}</div>
-                          <div>
-                            <span className="block font-black text-slate-900 uppercase text-[11px]">{acc.name}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {importStep === 2 && (
-                <div className="space-y-8 animate-in slide-in-from-right-4">
-                  <textarea className="w-full h-64 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-[11px] outline-none focus:border-indigo-500 transition-all shadow-inner" placeholder="Fecha; Concepto; Importe..." value={importRawText} onChange={e => setImportRawText(e.target.value)} />
-                  <button onClick={() => handleStartAnalysis(importRawText)} className="w-full py-6 bg-indigo-600 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-widest shadow-xl">Analizar Texto</button>
-                </div>
-              )}
-              {importStep === 3 && (
-                <div className="space-y-6 animate-in zoom-in-95">
-                  <div className="space-y-3">
-                    {proposedTransactions.map(p => (
-                      <div key={p.id} className={`bg-white p-4 lg:px-8 rounded-[1.5rem] border transition-all flex flex-col lg:flex-row items-center gap-4 ${p.isValidated ? 'opacity-40 grayscale pointer-events-none' : 'border-slate-100 hover:border-indigo-300 shadow-sm'}`}>
-                        <span className="text-[10px] font-bold text-slate-400 w-32">{p.date}</span>
-                        <div className="flex-1 flex flex-col lg:flex-row gap-4 items-center w-full">
-                          <span className="flex-1 text-xs font-black uppercase truncate">{p.description}</span>
-                          <select className="bg-slate-50 border-none rounded-xl px-4 py-2 text-[10px] font-bold outline-none cursor-pointer" value={p.categoryId} onChange={e => setProposedTransactions(prev => prev.map(x => x.id === p.id ? { ...x, categoryId: e.target.value } : x))}>
-                            <option value="">¿Cat?</option>
-                            {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          </select>
-                          <span className={`w-24 text-right font-black text-lg ${getAmountColor(p.amount)}`}>{formatCurrency(p.amount)}</span>
-                        </div>
-                        <button onClick={() => setProposedTransactions(prev => prev.map(x => x.id === p.id ? { ...x, isValidated: !x.isValidated } : x))} className={`p-3 rounded-xl transition-all ${p.isValidated ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50'}`}>
-                          <Check size={18} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="sticky bottom-0 bg-white pt-6 flex gap-4">
-                    <button onClick={handleFinalImport} className="w-full py-6 bg-slate-950 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all"><CheckCircle2 size={18}/> Validar Importación</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
       )}
 
       {/* MODAL EDITOR NORMAL */}
@@ -691,16 +629,17 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2"><Paperclip size={14} /> Adjunto</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2"><Paperclip size={14} /> Adjunto (Se comprimirá automáticamente)</label>
                 <div className="flex gap-3">
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className={`flex-1 px-8 py-5 border-2 border-dashed rounded-3xl font-black text-[11px] uppercase transition-all flex items-center justify-center gap-3 ${fAttachment ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'bg-slate-50 border-slate-200 text-slate-400'}`}>
-                    {fAttachment ? <CheckCircle2 size={18}/> : <Upload size={18}/>} {fAttachment ? 'Listo' : 'Subir'}
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isCompressing} className={`flex-1 px-8 py-5 border-2 border-dashed rounded-3xl font-black text-[11px] uppercase transition-all flex items-center justify-center gap-3 ${fAttachment ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'bg-slate-50 border-slate-200 text-slate-400'}`}>
+                    {isCompressing ? <Loader2 size={18} className="animate-spin" /> : fAttachment ? <CheckCircle2 size={18}/> : <Upload size={18}/>} 
+                    {isCompressing ? 'Comprimiendo...' : fAttachment ? 'Listo (Optimizado)' : 'Subir'}
                   </button>
                   {fAttachment && <button type="button" onClick={() => setFAttachment(undefined)} className="p-5 bg-rose-50 text-rose-500 rounded-3xl active:scale-90"><X size={24}/></button>}
                 </div>
-                <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={e => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = ev => setFAttachment(ev.target?.result as string); reader.readAsDataURL(file); }}} />
+                <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />
               </div>
-              <button onClick={handleSave} className="w-full py-7 bg-slate-950 text-white rounded-[2.5rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-indigo-600 active:scale-95 transition-all mt-10">Guardar Asiento Contable</button>
+              <button onClick={handleSave} disabled={isCompressing} className="w-full py-7 bg-slate-950 text-white rounded-[2.5rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-indigo-600 active:scale-95 transition-all mt-10 disabled:opacity-50">Guardar Asiento Contable</button>
             </div>
           </div>
         </div>
