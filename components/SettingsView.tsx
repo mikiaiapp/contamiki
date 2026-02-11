@@ -219,7 +219,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
         <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Personalización y Control Maestro</p>
       </div>
 
-      <nav className="flex bg-slate-100 p-1.5 rounded-2xl shadow-inner border border-slate-200/50 overflow-x-auto scrollbar-hide">
+      <nav className="flex md:flex-wrap bg-slate-100 p-1.5 rounded-2xl shadow-inner border border-slate-200/50 overflow-x-auto md:overflow-visible scrollbar-hide">
         {[
             {id: 'ACC_GROUPS', label: 'Grupos', icon: <BoxSelect size={16}/>},
             {id: 'ACCOUNTS', label: 'Cuentas', icon: <Wallet size={16}/>},
@@ -230,8 +230,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
             {id: 'DATA', label: 'Datos', icon: <HardDriveDownload size={16}/>},
             {id: 'TOOLS', label: 'Herramientas', icon: <DatabaseZap size={16}/>}
         ].map(t => (
-            <button key={t.id} className={`flex-1 flex items-center justify-center gap-2 px-6 py-3.5 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => { setActiveTab(t.id); resetForm(); }}>
-              {t.icon} <span className="hidden sm:inline">{t.label}</span>
+            <button key={t.id} className={`flex-1 min-w-[70px] sm:min-w-[fit-content] flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 sm:px-6 py-2 sm:py-3.5 font-black text-[8px] sm:text-[10px] uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => { setActiveTab(t.id); resetForm(); }}>
+              {t.icon} <span className="block sm:inline mt-1 sm:mt-0">{t.label}</span>
             </button>
         ))}
       </nav>
@@ -639,7 +639,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                                     <button 
                                         onClick={() => { 
                                             if(onCreateBookFromImport) {
-                                                onCreateBookFromImport(restoreFile, restoreFileName || 'Importado');
+                                                const bookName = prompt("Introduce el nombre para el nuevo libro contable:", restoreFileName || "Libro Importado");
+                                                if (!bookName) return;
+                                                onCreateBookFromImport(restoreFile, bookName);
                                                 alert('Se ha creado un nuevo libro con los datos importados.');
                                                 resetForm();
                                             }
