@@ -82,8 +82,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     const acc = new Map(data.accounts.map(a => [a.id, a]));
     const cat = new Map(data.categories.map(c => [c.id, c]));
     const fam = new Map(data.families.map(f => [f.id, f]));
-    return { acc, cat, fam };
-  }, [data.accounts, data.categories, data.families]);
+    const grp = new Map(data.accountGroups.map(g => [g.id, g]));
+    return { acc, cat, fam, grp };
+  }, [data.accounts, data.categories, data.families, data.accountGroups]);
 
   useEffect(() => {
     if (initialSpecificFilters) {
@@ -175,28 +176,89 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     return data.transactions.filter(t => filter.timeRange === 'ALL' || (t.date >= start && t.date <= end));
   }, [data.transactions, filter]);
 
-  const activeFilterOptions = useMemo(() => {
-    const activeEntryIds = new Set<string>(); const activeExitIds = new Set<string>();
+  // --- LÓGICA DE OPCIONES DINÁMICAS ---
+  // Calculamos qué IDs (Categorias o Cuentas) aparecen realmente en las columnas DEBE y HABER
+  // y las agrupamos para los desplegables.
+  const activeDropdownOptions = useMemo(() => {
+    const entryIds = new Set<string>();
+    const exitIds = new Set<string>();
+
     timeFilteredList.forEach(t => {
-      if (t.type === 'EXPENSE') activeEntryIds.add(t.categoryId); else if (t.type === 'INCOME') activeEntryIds.add(t.accountId); else if (t.type === 'TRANSFER' && t.transferAccountId) activeEntryIds.add(t.transferAccountId);
-      if (t.type === 'EXPENSE') activeExitIds.add(t.accountId); else if (t.type === 'INCOME') activeExitIds.add(t.categoryId); else if (t.type === 'TRANSFER') activeExitIds.add(t.accountId);
+      // DEBE (Izquierda / Destino)
+      if (t.type === 'EXPENSE') entryIds.add(t.categoryId);
+      else if (t.type === 'INCOME') entryIds.add(t.accountId);
+      else if (t.type === 'TRANSFER' && t.transferAccountId) entryIds.add(t.transferAccountId);
+
+      // HABER (Derecha / Origen)
+      if (t.type === 'EXPENSE') exitIds.add(t.accountId);
+      else if (t.type === 'INCOME') exitIds.add(t.categoryId);
+      else if (t.type === 'TRANSFER') exitIds.add(t.accountId);
     });
-    return { activeEntryIds, activeExitIds };
-  }, [timeFilteredList]);
+
+    // Helper para estructurar las opciones en grupos
+    const buildGroupedOptions = (ids: Set<string>) => {
+      const groupsMap = new Map<string, { label: string, options: { id: string, name: string }[] }>();
+
+      ids.forEach(id => {
+        let groupLabel = 'Otros';
+        let itemName = 'Desconocido';
+        let sortKey = '';
+
+        if (indices.cat.has(id)) {
+          // Es Categoría -> Agrupar por Familia
+          const cat = indices.cat.get(id)!;
+          itemName = cat.name;
+          const fam = indices.fam.get(cat.familyId);
+          groupLabel = fam ? `Fam: ${fam.name}` : 'Sin Familia';
+          sortKey = `A_${groupLabel}`; // Categorias primero o despues segun prefieras
+        } else if (indices.acc.has(id)) {
+          // Es Cuenta -> Agrupar por AccountGroup
+          const acc = indices.acc.get(id)!;
+          itemName = acc.name;
+          const grp = indices.grp.get(acc.groupId);
+          groupLabel = grp ? `Grp: ${grp.name}` : 'Sin Grupo';
+          sortKey = `B_${groupLabel}`;
+        }
+
+        if (!groupsMap.has(groupLabel)) {
+          groupsMap.set(groupLabel, { label: groupLabel, options: [] });
+        }
+        groupsMap.get(groupLabel)!.options.push({ id, name: itemName });
+      });
+
+      // Ordenar grupos y opciones dentro de grupos
+      const sortedGroups = Array.from(groupsMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+      sortedGroups.forEach(g => g.options.sort((a, b) => a.name.localeCompare(b.name)));
+      
+      return sortedGroups;
+    };
+
+    return {
+      entryGroups: buildGroupedOptions(entryIds),
+      exitGroups: buildGroupedOptions(exitIds)
+    };
+  }, [timeFilteredList, indices]);
+
 
   const filteredList = useMemo(() => {
     const descPattern = colFilterDesc.trim().toLowerCase();
     const v1 = parseFloat(colFilterAmountVal1);
     return timeFilteredList.filter(t => {
       if (colFilterEntry !== 'ALL') {
-        const isAcc = indices.acc.has(colFilterEntry);
-        if (isAcc) { if (t.accountId !== colFilterEntry && t.transferAccountId !== colFilterEntry) return false; }
-        else { if (t.categoryId !== colFilterEntry) return false; }
+        // Logica unificada: El filtro Entry aplica si el ID coincide con categoryId (Gasto), accountId (Ingreso), transferAccountId (Transf)
+        let match = false;
+        if (t.type === 'EXPENSE' && t.categoryId === colFilterEntry) match = true;
+        else if (t.type === 'INCOME' && t.accountId === colFilterEntry) match = true;
+        else if (t.type === 'TRANSFER' && t.transferAccountId === colFilterEntry) match = true;
+        if (!match) return false;
       }
       if (colFilterExit !== 'ALL') {
-        const isAcc = indices.acc.has(colFilterExit);
-        if (isAcc) { if (t.accountId !== colFilterExit && t.transferAccountId !== colFilterExit) return false; }
-        else { if (t.categoryId !== colFilterExit) return false; }
+        // Logica unificada: El filtro Exit aplica si el ID coincide con accountId (Gasto/Transf), categoryId (Ingreso)
+        let match = false;
+        if (t.type === 'EXPENSE' && t.accountId === colFilterExit) match = true;
+        else if (t.type === 'INCOME' && t.categoryId === colFilterExit) match = true;
+        else if (t.type === 'TRANSFER' && t.accountId === colFilterExit) match = true;
+        if (!match) return false;
       }
       if (descPattern && !t.description.toLowerCase().includes(descPattern)) return false;
       if (colFilterClip === 'YES' && !t.attachment) return false;
@@ -209,7 +271,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       }
       return true;
     });
-  }, [timeFilteredList, colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, colFilterAmountVal1, indices]);
+  }, [timeFilteredList, colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, colFilterAmountVal1]);
 
   const sortedTransactions = useMemo(() => {
     return [...filteredList].sort((a, b) => {
@@ -217,13 +279,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       if (sortField === 'DATE') { vA = a.date; vB = b.date; }
       else if (sortField === 'DESCRIPTION') { vA = a.description.toLowerCase(); vB = b.description.toLowerCase(); }
       else if (sortField === 'AMOUNT') { vA = Math.abs(a.amount); vB = Math.abs(b.amount); }
-      else if (sortField === 'CATEGORY') { vA = (indices.cat.get(a.categoryId)?.name || '').toLowerCase(); vB = (indices.cat.get(b.categoryId)?.name || '').toLowerCase(); }
-      else if (sortField === 'ACCOUNT') { vA = (indices.acc.get(a.accountId)?.name || '').toLowerCase(); vB = (indices.acc.get(b.accountId)?.name || '').toLowerCase(); }
+      // Ordenacion simple para columnas mixtas (Category/Account) basada en nombre
+      else if (sortField === 'CATEGORY' || sortField === 'ACCOUNT') { 
+         // Simplificacion: usamos description como fallback si es complejo ordenar mixto
+         vA = a.description; vB = b.description; 
+      }
       if (vA < vB) return sortDirection === 'ASC' ? -1 : 1;
       if (vA > vB) return sortDirection === 'ASC' ? 1 : -1;
       return 0;
     });
-  }, [filteredList, sortField, sortDirection, indices]);
+  }, [filteredList, sortField, sortDirection]);
 
   const totalItems = sortedTransactions.length;
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(totalItems / itemsPerPage);
@@ -235,8 +300,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   const activeFiltersChips = useMemo(() => {
     const chips: { id: string, label: string, onRemove: () => void }[] = [];
-    if (colFilterEntry !== 'ALL') chips.push({ id: 'entry', label: `E/Cat: ${indices.acc.get(colFilterEntry)?.name || indices.cat.get(colFilterEntry)?.name}`, onRemove: () => setColFilterEntry('ALL') });
-    if (colFilterExit !== 'ALL') chips.push({ id: 'exit', label: `Cuenta: ${indices.acc.get(colFilterExit)?.name || indices.cat.get(colFilterExit)?.name}`, onRemove: () => setColFilterExit('ALL') });
+    if (colFilterEntry !== 'ALL') {
+        const name = indices.cat.get(colFilterEntry)?.name || indices.acc.get(colFilterEntry)?.name || '...';
+        chips.push({ id: 'entry', label: `Debe: ${name}`, onRemove: () => setColFilterEntry('ALL') });
+    }
+    if (colFilterExit !== 'ALL') {
+        const name = indices.cat.get(colFilterExit)?.name || indices.acc.get(colFilterExit)?.name || '...';
+        chips.push({ id: 'exit', label: `Haber: ${name}`, onRemove: () => setColFilterExit('ALL') });
+    }
     if (colFilterDesc) chips.push({ id: 'desc', label: `Texto: "${colFilterDesc}"`, onRemove: () => setColFilterDesc('') });
     if (colFilterClip !== 'ALL') chips.push({ id: 'clip', label: `Clip: ${colFilterClip}`, onRemove: () => setColFilterClip('ALL') });
     if (colFilterAmountOp !== 'ALL') chips.push({ id: 'amount', label: `Imp: ${colFilterAmountOp}`, onRemove: () => setColFilterAmountOp('ALL') });
@@ -252,6 +323,15 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const formatCurrency = (amount: number) => `${numberFormatter.format(amount)} €`;
   const getAmountColor = (amount: number) => amount > 0 ? 'text-emerald-600' : amount < 0 ? 'text-rose-600' : 'text-slate-400';
   const renderIcon = (iconStr: string, className = "w-4 h-4") => { if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />; return <span className="text-xs">{iconStr || '📂'}</span>; }
+  
+  const getFilterLabel = () => {
+    if (filter.timeRange === 'ALL') return 'Todo el Historial';
+    if (filter.timeRange === 'CUSTOM') return `${formatDateDisplay(filter.customStart)} - ${formatDateDisplay(filter.customEnd)}`;
+    const d = new Date(filter.referenceDate);
+    if (filter.timeRange === 'YEAR') return `Año ${d.getFullYear()}`;
+    const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    return `${months[d.getMonth()]} ${d.getFullYear()}`;
+  };
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return <ArrowUpDown size={8} className="opacity-40" />;
@@ -287,9 +367,17 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         </div>
       </div>
 
+      {/* INDICADOR DE FILTRO TEMPORAL */}
+      <div className="flex justify-center -mb-4 relative z-10">
+          <div className="bg-white border border-slate-200 px-6 py-2 rounded-full shadow-sm text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+            <Calendar size={12} className="text-indigo-500"/>
+            Viendo: <span className="text-slate-900">{getFilterLabel()}</span>
+          </div>
+      </div>
+
       {/* BARRA DE FILTROS ACTIVA */}
       {activeFiltersChips.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 p-3 px-6 bg-white rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 p-3 px-6 bg-white rounded-2xl border border-slate-100 shadow-sm mt-4">
           <span className="text-[9px] font-black text-slate-400 uppercase mr-2 flex items-center gap-1"><Filter size={12}/> Filtros:</span>
           {activeFiltersChips.map(c => (
             <div key={c.id} className="flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100">
@@ -310,7 +398,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           {/* 2. DEBE (Categoría Entrada) */}
           <div className="flex flex-col">
               <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Debe</span>
-              <select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)}><option value="ALL">...</option>{data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+              <select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none truncate" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)}>
+                  <option value="ALL">Todo</option>
+                  {activeDropdownOptions.entryGroups.map(group => (
+                    <optgroup key={group.label} label={group.label}>
+                        {group.options.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
+                    </optgroup>
+                  ))}
+              </select>
           </div>
           {/* 3. CONCEPTO */}
           <div className="flex flex-col">
@@ -325,7 +420,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           {/* 5. HABER (Cuenta Salida) */}
           <div className="flex flex-col">
               <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Haber</span>
-              <select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}><option value="ALL">...</option>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+              <select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none truncate" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}>
+                  <option value="ALL">Todo</option>
+                  {activeDropdownOptions.exitGroups.map(group => (
+                    <optgroup key={group.label} label={group.label}>
+                        {group.options.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
+                    </optgroup>
+                  ))}
+              </select>
           </div>
           {/* 6. RESET/ACCIONES */}
           <div className="flex justify-center">
@@ -346,15 +448,23 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           const cat = indices.cat.get(t.categoryId);
           
           let debitNode, creditNode;
+          let debitId = '', creditId = '';
+
           if (t.type === 'TRANSFER') {
-            debitNode = <div className="flex items-center gap-1 text-indigo-600 font-bold truncate leading-none">{renderIcon(dstAcc?.icon || '🏦')} <span className="truncate">{dstAcc?.name}</span></div>;
-            creditNode = <div className="flex items-center gap-1 text-slate-500 font-bold truncate leading-none">{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
+            debitId = t.transferAccountId || '';
+            creditId = t.accountId;
+            debitNode = <div className="flex items-center gap-1 text-indigo-600 font-bold truncate leading-none cursor-pointer hover:underline" onClick={() => setColFilterEntry(debitId)}>{renderIcon(dstAcc?.icon || '🏦')} <span className="truncate">{dstAcc?.name}</span></div>;
+            creditNode = <div className="flex items-center gap-1 text-slate-500 font-bold truncate leading-none cursor-pointer hover:underline" onClick={() => setColFilterExit(creditId)}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
           } else if (t.type === 'INCOME') {
-            debitNode = <div className="flex items-center gap-1 text-emerald-600 font-bold truncate leading-none">{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
-            creditNode = <div className="flex items-center gap-1 text-slate-400 italic truncate leading-none">{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name || 'S/C'}</span></div>;
+            debitId = t.accountId;
+            creditId = t.categoryId;
+            debitNode = <div className="flex items-center gap-1 text-emerald-600 font-bold truncate leading-none cursor-pointer hover:underline" onClick={() => setColFilterEntry(debitId)}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
+            creditNode = <div className="flex items-center gap-1 text-slate-400 italic truncate leading-none cursor-pointer hover:underline" onClick={() => setColFilterExit(creditId)}>{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name || 'S/C'}</span></div>;
           } else {
-            debitNode = <div className="flex items-center gap-1 text-rose-500 font-bold truncate leading-none">{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name}</span></div>;
-            creditNode = <div className="flex items-center gap-1 text-slate-500 font-bold truncate leading-none">{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
+            debitId = t.categoryId;
+            creditId = t.accountId;
+            debitNode = <div className="flex items-center gap-1 text-rose-500 font-bold truncate leading-none cursor-pointer hover:underline" onClick={() => setColFilterEntry(debitId)}>{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name}</span></div>;
+            creditNode = <div className="flex items-center gap-1 text-slate-500 font-bold truncate leading-none cursor-pointer hover:underline" onClick={() => setColFilterExit(creditId)}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
           }
 
           return (
