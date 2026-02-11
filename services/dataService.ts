@@ -199,11 +199,6 @@ export const saveData = async (state: MultiBookState) => {
 
   try {
       // OPTIMIZACIÓN CRÍTICA: PARTIAL SYNC
-      // En lugar de enviar TODOS los libros (que pueden pesar gigas),
-      // enviamos solo los metadatos globales y el contenido del libro ACTIVO.
-      // El servidor (que ya soporta fragmentación) actualizará solo la carpeta de este libro
-      // y dejará intactos los otros libros en el disco.
-      
       const currentBookId = state.currentBookId;
       const activeBookData = state.booksData[currentBookId];
 
@@ -212,7 +207,6 @@ export const saveData = async (state: MultiBookState) => {
           booksMetadata: state.booksMetadata, 
           currentBookId: state.currentBookId,
           // Enviamos SOLO el libro actual en booksData.
-          // El servidor iterará sobre esto. Como los otros IDs no están, no los tocará (no los borra).
           booksData: {
               [currentBookId]: activeBookData
           }
@@ -224,10 +218,20 @@ export const saveData = async (state: MultiBookState) => {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify(partialPayload) // Mucho más ligero
+          body: JSON.stringify(partialPayload)
       });
       
-      if (!response.ok) throw new Error("Server error saving data");
+      if (!response.ok) {
+          let errorMsg = `Server error ${response.status}`;
+          try {
+             const errJson = await response.json();
+             if (errJson.error) errorMsg = errJson.error;
+          } catch(e) {
+             const text = await response.text();
+             if (text) errorMsg = text.substring(0, 100); // Truncar si es html largo
+          }
+          throw new Error(errorMsg);
+      }
       
       // Actualizamos backup local completo por seguridad
       localStorage.setItem(DATA_KEY_PREFIX + username, JSON.stringify(state));

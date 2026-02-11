@@ -20,9 +20,9 @@ const GLOBAL_USERS_FILE = path.join(DATA_DIR, 'users.json');
 
 console.log(`ContaMiki Server: Storage path set to: ${DATA_DIR}`);
 
-// Middleware - AUMENTADO A 250MB PARA SOPORTAR CARGAS PESADAS Y MULTI-LIBROS
-app.use(express.json({ limit: '250mb' }));
-app.use(express.urlencoded({ limit: '250mb', extended: true }));
+// Middleware - AUMENTADO A 500MB PARA SOPORTAR CARGAS EXTREMAS
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
 app.use(express.static(__dirname));
 
 // Initialize System Files
@@ -131,14 +131,14 @@ const saveFullUserState = async (username, fullState) => {
     const userDir = getUserDir(username);
     await fs.mkdir(userDir, { recursive: true });
 
-    // 1. Guardar Metadatos Raíz
+    // 1. Guardar Metadatos Raíz (siempre se envían completos)
     const rootState = {
         booksMetadata: fullState.booksMetadata || [],
         currentBookId: fullState.currentBookId || ''
     };
     await fs.writeFile(path.join(userDir, 'metadata.json'), JSON.stringify(rootState, null, 2));
 
-    // 2. Guardar Libros Individualmente
+    // 2. Guardar Libros Individualmente (Itera solo sobre los que vienen en el payload)
     if (fullState.booksData) {
         for (const [bookId, bookData] of Object.entries(fullState.booksData)) {
             const bookDir = path.join(userDir, bookId);
@@ -152,6 +152,13 @@ const saveFullUserState = async (username, fullState) => {
             await fs.writeFile(`${configFile}.tmp`, JSON.stringify(configData, null, 2));
             await fs.rename(`${configFile}.tmp`, configFile);
 
+            // Identificar archivos existentes para limpieza posterior
+            let existingFiles = [];
+            try {
+                existingFiles = (await fs.readdir(bookDir)).filter(f => f.startsWith('transactions_') && f.endsWith('.json'));
+            } catch (e) { /* ignore if dir didn't exist */ }
+            const writtenFiles = new Set();
+
             // Agrupar transacciones por AÑO
             const txByYear = {};
             if (Array.isArray(transactions)) {
@@ -163,16 +170,22 @@ const saveFullUserState = async (username, fullState) => {
             }
 
             // Guardar archivos de transacciones por año
-            // Primero borramos los existentes para evitar duplicados si se mueven fechas (limpieza simple)
-            // (En producción idealmente haríamos diff, pero aquí sobrescribimos los años activos)
             for (const [year, txs] of Object.entries(txByYear)) {
-                const yearFile = path.join(bookDir, `transactions_${year}.json`);
+                const filename = `transactions_${year}.json`;
+                const yearFile = path.join(bookDir, filename);
                 await fs.writeFile(`${yearFile}.tmp`, JSON.stringify(txs, null, 2));
                 await fs.rename(`${yearFile}.tmp`, yearFile);
+                writtenFiles.add(filename);
             }
             
-            // Nota: Si un año se vacía completamente, el archivo antiguo podría quedar. 
-            // Para una app personal es aceptable, o se podría hacer limpieza de directorio previa.
+            // LIMPIEZA DE AÑOS BORRADOS:
+            // Si existía un archivo de año (ej: 2022) pero no está en la nueva data, es que se borraron todas sus transacciones.
+            // Lo eliminamos para mantener coherencia.
+            for (const file of existingFiles) {
+                if (!writtenFiles.has(file)) {
+                    await fs.unlink(path.join(bookDir, file)).catch(e => console.warn(`Could not delete obsolete file ${file}`, e));
+                }
+            }
         }
     }
 };
@@ -247,7 +260,8 @@ app.post('/api/data', authenticateToken, async (req, res) => {
         res.json({ success: true });
     } catch (err) { 
         console.error(`ERROR SAVING DATA for ${req.user.username}:`, err);
-        res.status(500).json({ error: "Error save" }); 
+        // Devolver detalles del error si es posible
+        res.status(500).json({ error: err.message || "Error save" }); 
     }
 });
 

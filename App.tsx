@@ -22,6 +22,7 @@ const App: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   
   const [syncStatus, setSyncStatus] = useState<'SAVED' | 'SAVING' | 'ERROR'>('SAVED');
+  const [syncErrorMsg, setSyncErrorMsg] = useState<string | null>(null);
   const lastSavedState = useRef<string>('');
   
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
@@ -60,12 +61,14 @@ const App: React.FC = () => {
 
   const performSave = async (stateToSave: MultiBookState) => {
       setSyncStatus('SAVING');
+      setSyncErrorMsg(null);
       try {
           await saveData(stateToSave);
           setSyncStatus('SAVED');
           lastSavedState.current = JSON.stringify(stateToSave);
-      } catch (err) {
+      } catch (err: any) {
           setSyncStatus('ERROR');
+          setSyncErrorMsg(err.message || "Error desconocido");
           console.error(err);
       }
   };
@@ -78,8 +81,6 @@ const App: React.FC = () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       
       setSyncStatus('SAVING');
-      // Aumentado a 4000ms (4 segundos) para dar tiempo a terminar ediciones
-      // y evitar llamadas simultáneas pesadas al servidor.
       saveTimeoutRef.current = window.setTimeout(() => performSave(multiState), 4000);
     }
   }, [multiState, dataLoaded, isLoggedIn, loadError]);
@@ -202,6 +203,7 @@ const App: React.FC = () => {
         onCreateBook={() => { setEditingBookId(null); setTempBookName(''); setTempBookColor('BLACK'); setIsBookModalOpen(true); }}
         onEditBook={() => { setEditingBookId(currentBookMeta.id); setTempBookName(currentBookMeta.name); setTempBookColor(currentBookMeta.color); setIsBookModalOpen(true); }}
         syncStatus={syncStatus}
+        syncError={syncErrorMsg}
         onManualSave={() => performSave(multiState)}
     >
       {currentView === 'RESUMEN' && (

@@ -15,7 +15,8 @@ interface LayoutProps {
   onCreateBook: () => void;
   onEditBook: () => void;
   syncStatus?: 'SAVED' | 'SAVING' | 'ERROR';
-  onManualSave?: () => void; // Nueva prop
+  syncError?: string | null;
+  onManualSave?: () => void;
 }
 
 const THEME_COLORS: Record<string, string> = {
@@ -36,7 +37,7 @@ const THEME_ACCENTS: Record<string, string> = {
     VIOLET: 'text-violet-200 hover:bg-white/10',
 };
 
-export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED', onManualSave }) => {
+export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED', syncError, onManualSave }) => {
   const [isBookMenuOpen, setIsBookMenuOpen] = useState(false);
 
   const pendingRecurrentsCount = useMemo(() => {
@@ -138,7 +139,21 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
           return <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-full text-white/80 select-none"><RefreshCw size={14} className="animate-spin"/><span className="text-[9px] font-black uppercase tracking-wider">Guardando...</span></div>;
       }
       if (syncStatus === 'ERROR') {
-          return <button onClick={onManualSave} className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/20 text-white rounded-full border border-rose-500/50 hover:bg-rose-500 hover:text-white transition-all active:scale-95"><CloudOff size={14} /><span className="text-[9px] font-black uppercase tracking-wider">Reintentar</span></button>;
+          return (
+             <button 
+                onClick={() => { if(syncError) alert(syncError); else onManualSave?.(); }} 
+                className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/20 text-white rounded-full border border-rose-500/50 hover:bg-rose-500 hover:text-white transition-all active:scale-95 group relative"
+                title={syncError || "Error desconocido. Clic para reintentar."}
+             >
+                <CloudOff size={14} />
+                <span className="text-[9px] font-black uppercase tracking-wider">Error</span>
+                {syncError && (
+                    <div className="hidden group-hover:block absolute top-full left-0 mt-2 bg-slate-900 text-white text-[10px] p-2 rounded-lg w-48 z-[100] shadow-xl">
+                        {syncError}
+                    </div>
+                )}
+             </button>
+          );
       }
       return <button onClick={onManualSave} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/20 rounded-full text-white/40 hover:text-white transition-all active:scale-95" title="Forzar guardado"><Cloud size={14} /><span className="text-[9px] font-black uppercase tracking-wider">Guardado</span></button>;
   };
