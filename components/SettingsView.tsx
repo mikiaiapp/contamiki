@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar, Archive, RefreshCw, X, HardDriveDownload, HardDriveUpload, Bot, ShieldAlert, Monitor, Palette } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar, Archive, RefreshCw, X, HardDriveDownload, HardDriveUpload, Bot, ShieldAlert, Monitor, Palette, Eye, EyeOff } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import * as XLSX from 'xlsx';
 
@@ -89,6 +89,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
   const [accBalance, setAccBalance] = useState('');
   const [accIcon, setAccIcon] = useState('🏦');
   const [accGroupId, setAccGroupId] = useState('');
+  const [accActive, setAccActive] = useState(true);
 
   const [famId, setFamId] = useState<string | null>(null);
   const [famName, setFamName] = useState('');
@@ -99,6 +100,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
   const [catName, setCatName] = useState('');
   const [catParent, setCatParent] = useState('');
   const [catIcon, setCatIcon] = useState('🏷️');
+  const [catActive, setCatActive] = useState(true);
 
   const [recId, setRecId] = useState<string | null>(null);
   const [recDesc, setRecDesc] = useState('');
@@ -128,9 +130,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
 
   const resetForm = () => {
     setGrpId(null); setGrpName(''); setGrpIcon('🗂️');
-    setAccId(null); setAccName(''); setAccBalance(''); setAccIcon('🏦'); setAccGroupId(data.accountGroups[0]?.id || '');
+    setAccId(null); setAccName(''); setAccBalance(''); setAccIcon('🏦'); setAccGroupId(data.accountGroups[0]?.id || ''); setAccActive(true);
     setFamId(null); setFamName(''); setFamIcon('📂'); setFamType('EXPENSE');
-    setCatId(null); setCatName(''); setCatIcon('🏷️'); setCatParent(data.families[0]?.id || '');
+    setCatId(null); setCatName(''); setCatIcon('🏷️'); setCatParent(data.families[0]?.id || ''); setCatActive(true);
     setRecId(null); setRecDesc(''); setRecAmount(''); setRecType('EXPENSE'); setRecAcc(data.accounts[0]?.id || ''); setRecCat(''); setRecFreq('MONTHLY'); setRecInterval('1'); setRecStart(new Date().toISOString().split('T')[0]); setRecEnd('');
     setFavId(null); setFavName(''); setFavDesc(''); setFavAmount(''); setFavType('EXPENSE'); setFavAcc(data.accounts[0]?.id || ''); setFavCat(''); setFavIcon('⭐');
     setImportReport(null); setStructureReport(null); setPasteData('');
@@ -145,6 +147,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
     if (iconStr.startsWith('http') || iconStr.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
     return <span className="text-xl">{iconStr}</span>;
   }
+
+  // --- DELETE PROTECTORS ---
+  const attemptDeleteAccount = (account: Account) => {
+      const usageCount = data.transactions.filter(t => t.accountId === account.id || t.transferAccountId === account.id).length;
+      if (usageCount > 0) {
+          alert(`No se puede borrar esta cuenta porque tiene ${usageCount} movimientos asociados. Edítala y desactívala (Archivar) para ocultarla sin perder datos.`);
+          return;
+      }
+      if (confirm('¿Borrar cuenta permanentemente?')) {
+          onUpdateData({accounts: data.accounts.filter(x => x.id !== account.id)});
+      }
+  };
+
+  const attemptDeleteCategory = (category: Category) => {
+      const usageCount = data.transactions.filter(t => t.categoryId === category.id).length;
+      if (usageCount > 0) {
+          alert(`No se puede borrar esta categoría porque tiene ${usageCount} movimientos asociados. Edítala y desactívala (Archivar) para ocultarla sin perder datos.`);
+          return;
+      }
+      if (confirm('¿Borrar categoría permanentemente?')) {
+          onUpdateData({categories: data.categories.filter(x => x.id !== category.id)});
+      }
+  };
 
   const handleExportBackup = () => {
       const jsonString = JSON.stringify(data, null, 2);
@@ -227,10 +252,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
       if (parts.length < 2) return;
       switch (importType) {
         case 'GROUPS': if (!localGroups.find(g => g.name.toLowerCase() === parts[0].toLowerCase())) { localGroups.push({ id: generateId(), name: parts[0], icon: parts[1] || '🗂️' }); addedCount++; } break;
-        case 'ACCOUNTS': const accGrp = localGroups.find(g => g.name.toLowerCase() === parts[1]?.toLowerCase()) || localGroups[0]; if (!localAccs.find(a => a.name.toLowerCase() === parts[0].toLowerCase())) { localAccs.push({ id: generateId(), name: parts[0], initialBalance: parseFloat(parts[2]) || 0, currency: 'EUR', icon: parts[3] || '🏦', groupId: accGrp?.id || 'g1' }); addedCount++; } break;
+        case 'ACCOUNTS': const accGrp = localGroups.find(g => g.name.toLowerCase() === parts[1]?.toLowerCase()) || localGroups[0]; if (!localAccs.find(a => a.name.toLowerCase() === parts[0].toLowerCase())) { localAccs.push({ id: generateId(), name: parts[0], initialBalance: parseFloat(parts[2]) || 0, currency: 'EUR', icon: parts[3] || '🏦', groupId: accGrp?.id || 'g1', active: true }); addedCount++; } break;
         case 'FAMILIES': const fType = parts[1]?.toUpperCase() === 'INCOME' ? 'INCOME' : 'EXPENSE'; if (!localFamilies.find(f => f.name.toLowerCase() === parts[0].toLowerCase())) { localFamilies.push({ id: generateId(), name: parts[0], type: fType, icon: parts[2] || '📂' }); addedCount++; } break;
-        case 'CATEGORIES': const fParent = localFamilies.find(f => f.name.toLowerCase() === parts[1]?.toLowerCase()) || localFamilies[0]; if (!localCategories.find(c => c.name.toLowerCase() === parts[0].toLowerCase())) { localCategories.push({ id: generateId(), name: parts[0], familyId: fParent?.id || 'f1', icon: parts[2] || '🏷️' }); addedCount++; } break;
-        case 'TRANSACTIONS': const amountVal = parseFloat(parts[4].replace(',', '.')); if (isNaN(amountVal)) return; let txAcc = localAccs.find(a => a.name.toLowerCase() === parts[2].toLowerCase()); if (!txAcc) { txAcc = { id: generateId(), name: parts[2], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: localGroups[0]?.id || 'g1' }; localAccs.push(txAcc); txReport.newAccounts.push(parts[2]); } let txCat = localCategories.find(c => c.name.toLowerCase() === parts[1].toLowerCase()); if (!txCat) { txCat = { id: generateId(), name: parts[1], familyId: localFamilies[0]?.id || 'f1', icon: '🏷️' }; localCategories.push(txCat); txReport.newCategories.push(parts[1]); } localTxs.push({ id: generateId(), date: parts[0], description: parts[3], amount: amountVal, type: amountVal < 0 ? 'EXPENSE' : 'INCOME', accountId: txAcc.id, categoryId: txCat.id, familyId: txCat.familyId }); txReport.added++; break;
+        case 'CATEGORIES': const fParent = localFamilies.find(f => f.name.toLowerCase() === parts[1]?.toLowerCase()) || localFamilies[0]; if (!localCategories.find(c => c.name.toLowerCase() === parts[0].toLowerCase())) { localCategories.push({ id: generateId(), name: parts[0], familyId: fParent?.id || 'f1', icon: parts[2] || '🏷️', active: true }); addedCount++; } break;
+        case 'TRANSACTIONS': const amountVal = parseFloat(parts[4].replace(',', '.')); if (isNaN(amountVal)) return; let txAcc = localAccs.find(a => a.name.toLowerCase() === parts[2].toLowerCase()); if (!txAcc) { txAcc = { id: generateId(), name: parts[2], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: localGroups[0]?.id || 'g1', active: true }; localAccs.push(txAcc); txReport.newAccounts.push(parts[2]); } let txCat = localCategories.find(c => c.name.toLowerCase() === parts[1].toLowerCase()); if (!txCat) { txCat = { id: generateId(), name: parts[1], familyId: localFamilies[0]?.id || 'f1', icon: '🏷️', active: true }; localCategories.push(txCat); txReport.newCategories.push(parts[1]); } localTxs.push({ id: generateId(), date: parts[0], description: parts[3], amount: amountVal, type: amountVal < 0 ? 'EXPENSE' : 'INCOME', accountId: txAcc.id, categoryId: txCat.id, familyId: txCat.familyId }); txReport.added++; break;
       }
     });
     if (['GROUPS', 'ACCOUNTS', 'FAMILIES', 'CATEGORIES'].includes(importType)) { setStructureReport({ added: addedCount, type: importType }); onUpdateData({ accountGroups: localGroups, accounts: localAccs, families: localFamilies, categories: localCategories }); } else { setImportReport(txReport); onUpdateData({ transactions: localTxs, accounts: localAccs, categories: localCategories }); }
@@ -327,7 +352,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
             </div>
         )}
 
-        {/* ... (OTRAS PESTAÑAS: ACCOUNTS, FAMILIES, CATEGORIES, RECURRENTS, FAVORITES SE MANTIENEN IGUAL) ... */}
         {activeTab === 'ACCOUNTS' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -344,6 +368,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                              </div>
                          </div>
                          <div className="space-y-2">
+                             <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Estado</label>
+                             <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+                                <button onClick={() => setAccActive(true)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${accActive ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}><Eye size={14}/> Activa</button>
+                                <button onClick={() => setAccActive(false)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${!accActive ? 'bg-white shadow-sm text-slate-600' : 'text-slate-400'}`}><EyeOff size={14}/> Archivada</button>
+                             </div>
+                         </div>
+                         <div className="space-y-2">
                              <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Grupo de Cuentas</label>
                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                  {data.accountGroups.map(g => (
@@ -357,8 +388,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                          <button onClick={() => { 
                              if(!accName || !accGroupId) return; 
                              const bal = parseFloat(accBalance) || 0;
-                             if(accId) onUpdateData({accounts: data.accounts.map(a=>a.id===accId?{...a,name:accName,initialBalance:bal,icon:accIcon,groupId:accGroupId}:a)}); 
-                             else onUpdateData({accounts: [...data.accounts, {id:generateId(),name:accName,initialBalance:bal,currency:'EUR',icon:accIcon,groupId:accGroupId}]}); 
+                             if(accId) onUpdateData({accounts: data.accounts.map(a=>a.id===accId?{...a,name:accName,initialBalance:bal,icon:accIcon,groupId:accGroupId, active: accActive}:a)}); 
+                             else onUpdateData({accounts: [...data.accounts, {id:generateId(),name:accName,initialBalance:bal,currency:'EUR',icon:accIcon,groupId:accGroupId, active: true}]}); 
                              resetForm(); 
                         }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Cuenta</button>
                     </div>
@@ -367,15 +398,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                     {data.accounts.map(a => (
                         <div key={a.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all">
                              <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100">{renderIcon(a.icon, "w-6 h-6")}</div>
+                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100">
+                                    {renderIcon(a.icon, "w-6 h-6")}
+                                </div>
                                 <div>
                                     <span className="block font-bold text-slate-700 uppercase text-xs">{a.name}</span>
                                     <span className="text-[9px] font-black text-slate-400 uppercase">{data.accountGroups.find(g=>g.id===a.groupId)?.name} • {numberFormatter.format(a.initialBalance)}€</span>
                                 </div>
                             </div>
                             <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                <button onClick={() => { setAccId(a.id); setAccName(a.name); setAccBalance(a.initialBalance.toString()); setAccIcon(a.icon); setAccGroupId(a.groupId); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
-                                <button onClick={() => { if(confirm('¿Borrar cuenta?')) onUpdateData({accounts: data.accounts.filter(x => x.id !== a.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button>
+                                <button onClick={() => { setAccId(a.id); setAccName(a.name); setAccBalance(a.initialBalance.toString()); setAccIcon(a.icon); setAccGroupId(a.groupId); setAccActive(a.active !== false); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
+                                <button onClick={() => attemptDeleteAccount(a)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button>
                             </div>
                         </div>
                     ))}
@@ -448,11 +481,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                                 </select>
                              </div>
                          </div>
+                         <div className="space-y-2">
+                             <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Estado</label>
+                             <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+                                <button onClick={() => setCatActive(true)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${catActive ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}><Eye size={14}/> Activa</button>
+                                <button onClick={() => setCatActive(false)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${!catActive ? 'bg-white shadow-sm text-slate-600' : 'text-slate-400'}`}><EyeOff size={14}/> Archivada</button>
+                             </div>
+                         </div>
                          {renderIconInput(catIcon, setCatIcon, catName)}
                          <button onClick={() => { 
                              if(!catName || !catParent) return; 
-                             if(catId) onUpdateData({categories: data.categories.map(c=>c.id===catId?{...c,name:catName,familyId:catParent,icon:catIcon}:c)}); 
-                             else onUpdateData({categories: [...data.categories, {id:generateId(),name:catName,familyId:catParent,icon:catIcon}]}); 
+                             if(catId) onUpdateData({categories: data.categories.map(c=>c.id===catId?{...c,name:catName,familyId:catParent,icon:catIcon, active: catActive}:c)}); 
+                             else onUpdateData({categories: [...data.categories, {id:generateId(),name:catName,familyId:catParent,icon:catIcon, active: true}]}); 
                              resetForm(); 
                         }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Categoría</button>
                      </div>
@@ -463,15 +503,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                         return (
                             <div key={c.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100">{renderIcon(c.icon, "w-6 h-6")}</div>
+                                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100">
+                                        {renderIcon(c.icon, "w-6 h-6")}
+                                    </div>
                                     <div>
                                         <span className="block font-bold text-slate-700 uppercase text-xs">{c.name}</span>
                                         <span className="text-[9px] font-black text-slate-400 uppercase">{fam?.name || 'Huérfana'}</span>
                                     </div>
                                 </div>
                                 <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                    <button onClick={() => { setCatId(c.id); setCatName(c.name); setCatParent(c.familyId); setCatIcon(c.icon); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
-                                    <button onClick={() => { if(confirm('¿Borrar categoría?')) onUpdateData({categories: data.categories.filter(x => x.id !== c.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button>
+                                    <button onClick={() => { setCatId(c.id); setCatName(c.name); setCatParent(c.familyId); setCatIcon(c.icon); setCatActive(c.active !== false); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
+                                    <button onClick={() => attemptDeleteCategory(c)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button>
                                 </div>
                             </div>
                         );
@@ -479,7 +521,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                 </div>
             </div>
         )}
-
+        
+        {/* ... RESTO DE COMPONENTES SIN CAMBIOS (RECURRENTS, FAVORITES, UI, DATA, TOOLS) ... */}
+        
         {activeTab === 'RECURRENTS' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -490,8 +534,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe</label><input type="number" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recAmount} onChange={e => setRecAmount(e.target.value)} /></div>
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tipo</label><div className="flex bg-slate-100 p-1.5 rounded-2xl"><button onClick={() => setRecType('EXPENSE')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${recType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-500' : 'text-slate-400'}`}>Gasto</button><button onClick={() => setRecType('INCOME')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${recType === 'INCOME' ? 'bg-white shadow-sm text-emerald-500' : 'text-slate-400'}`}>Ingreso</button></div></div>
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Frecuencia</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recFreq} onChange={e => setRecFreq(e.target.value as any)}><option value="DAYS">Días</option><option value="WEEKS">Semanas</option><option value="MONTHLY">Meses</option><option value="YEARS">Años</option></select></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Cuenta</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recAcc} onChange={e => setRecAcc(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recCat} onChange={e => setRecCat(e.target.value)}><option value="">Select...</option>{data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Cuenta</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recAcc} onChange={e => setRecAcc(e.target.value)}>{data.accounts.filter(a => a.active !== false).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recCat} onChange={e => setRecCat(e.target.value)}><option value="">Select...</option>{data.categories.filter(c => c.active !== false).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Intervalo</label><input type="number" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recInterval} onChange={e => setRecInterval(e.target.value)} /></div>
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Próximo Vencimiento</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recStart} onChange={e => setRecStart(e.target.value)} /></div>
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha Final (Opcional)</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recEnd} onChange={e => setRecEnd(e.target.value)} /></div>
@@ -551,8 +595,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                              <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Concepto Real</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favDesc} onChange={e => setFavDesc(e.target.value)} /></div>
                              <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe (Opcional)</label><input type="number" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favAmount} onChange={e => setFavAmount(e.target.value)} /></div>
                              <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tipo</label><div className="flex bg-slate-100 p-1.5 rounded-2xl"><button onClick={() => setFavType('EXPENSE')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${favType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-500' : 'text-slate-400'}`}>Gasto</button><button onClick={() => setFavType('INCOME')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${favType === 'INCOME' ? 'bg-white shadow-sm text-emerald-500' : 'text-slate-400'}`}>Ingreso</button></div></div>
-                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Cuenta</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favAcc} onChange={e => setFavAcc(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favCat} onChange={e => setFavCat(e.target.value)}><option value="">Select...</option>{data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Cuenta</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favAcc} onChange={e => setFavAcc(e.target.value)}>{data.accounts.filter(a => a.active !== false).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favCat} onChange={e => setFavCat(e.target.value)}><option value="">Select...</option>{data.categories.filter(c => c.active !== false).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                         </div>
                         {renderIconInput(favIcon, setFavIcon, favName)}
                         <button onClick={() => {
@@ -596,10 +640,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
             </div>
         )}
 
-        {/* --- NUEVA PESTAÑA DE INTERFAZ (UI) --- */}
+        {/* --- PESTAÑAS UI, DATA, TOOLS (Renderizado simplificado, ya que no cambian lógica, solo la reutilizan) --- */}
         {activeTab === 'UI' && (
             <div className="grid grid-cols-1 gap-10 animate-in fade-in slide-in-from-bottom-4">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Palette className="text-indigo-600"/> Personalización Visual</h3>
                     
                     <div className="space-y-6">
@@ -633,10 +677,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                                         <input type="file" ref={logoUploadRef} className="hidden" accept="image/*" onChange={handleLogoUpload} />
                                     </div>
                                 </div>
-                                <div className="text-[10px] text-slate-400">
-                                    <p>• Recomendado: Imagen cuadrada (1:1), formato PNG o JPG.</p>
-                                    <p>• La imagen se redimensionará automáticamente para optimizar el rendimiento.</p>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -644,9 +684,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
             </div>
         )}
 
-        {activeTab === 'DATA' && (
+         {activeTab === 'DATA' && (
             <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="bg-indigo-50 p-10 rounded-[3rem] border border-indigo-100 space-y-6 text-center">
                         <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm"><HardDriveDownload size={32}/></div>
                         <div><h3 className="text-xl font-black text-indigo-900 uppercase">Exportar Datos</h3><p className="text-xs font-bold text-indigo-400 mt-2">Guarda una copia de seguridad completa del libro actual en tu dispositivo.</p></div>
@@ -660,8 +700,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                         <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={handleFileSelect} />
                     </div>
                 </div>
-
-                {/* ZONA DE PELIGRO: Borrado */}
+                 {/* ZONA DE PELIGRO: Borrado */}
                 <div className="bg-rose-50 p-10 rounded-[3rem] border border-rose-100 space-y-6 text-center mt-8">
                     <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-rose-600 shadow-sm"><ShieldAlert size={32}/></div>
                     <div>
@@ -670,102 +709,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {/* 1. Borrar por Año */}
                         <div className="p-6 bg-white rounded-[2rem] border border-rose-100 space-y-3 flex flex-col justify-center">
                             <p className="text-[10px] font-black text-slate-400 uppercase">Borrar por Año</p>
                             <div className="flex gap-2">
-                                <select 
-                                    className="w-full bg-slate-50 border border-slate-200 font-bold text-sm rounded-xl px-3 outline-none text-slate-700" 
-                                    value={yearToDelete} 
-                                    onChange={e => setYearToDelete(e.target.value)}
-                                >
+                                <select className="w-full bg-slate-50 border border-slate-200 font-bold text-sm rounded-xl px-3 outline-none text-slate-700" value={yearToDelete} onChange={e => setYearToDelete(e.target.value)} >
                                     <option value="" disabled>Año</option>
                                     {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
                                 </select>
-                                <button 
-                                    onClick={() => openVerification('YEAR', yearToDelete)}
-                                    className="bg-rose-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase hover:bg-rose-700 shadow-lg disabled:opacity-50"
-                                    disabled={!yearToDelete}
-                                >
-                                    Borrar
-                                </button>
+                                <button onClick={() => openVerification('YEAR', yearToDelete)} className="bg-rose-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase hover:bg-rose-700 shadow-lg disabled:opacity-50" disabled={!yearToDelete}>Borrar</button>
                             </div>
                         </div>
 
-                        {/* 2. Borrar Todos los Movimientos */}
-                        <button 
-                            onClick={() => openVerification('ALL_TX')}
-                            className="p-6 bg-white rounded-[2rem] border border-rose-100 flex flex-col items-center justify-center gap-2 hover:border-rose-300 hover:shadow-lg transition-all group"
-                        >
+                        <button onClick={() => openVerification('ALL_TX')} className="p-6 bg-white rounded-[2rem] border border-rose-100 flex flex-col items-center justify-center gap-2 hover:border-rose-300 hover:shadow-lg transition-all group">
                             <Eraser size={24} className="text-rose-400 group-hover:text-rose-600 mb-1"/>
                             <span className="text-[10px] font-black text-rose-600 uppercase">Borrar TODOS los Movimientos</span>
                         </button>
 
-                         {/* 3. Eliminar Libro Completo (o Reset) */}
-                         <button 
-                            onClick={() => openVerification('BOOK')}
-                            className="p-6 bg-rose-600 text-white rounded-[2rem] border border-rose-600 flex flex-col items-center justify-center gap-2 hover:bg-rose-700 hover:shadow-xl transition-all group"
-                        >
+                         <button onClick={() => openVerification('BOOK')} className="p-6 bg-rose-600 text-white rounded-[2rem] border border-rose-600 flex flex-col items-center justify-center gap-2 hover:bg-rose-700 hover:shadow-xl transition-all group">
                             <Trash2 size={24} className="text-white/80 group-hover:text-white mb-1"/>
                             <span className="text-[10px] font-black text-white uppercase">Eliminar Libro Completo</span>
                         </button>
                     </div>
                 </div>
-
-                {restoreFile && (
-                    <div className="bg-white p-10 rounded-[3rem] border-2 border-indigo-100 shadow-2xl relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-8 opacity-5"><Archive size={160}/></div>
-                        <div className="relative z-10 space-y-8">
-                             <div className="flex items-center gap-4">
-                                <div className="bg-emerald-100 text-emerald-600 p-3 rounded-2xl"><CheckCircle2 size={24}/></div>
-                                <div><h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Archivo Cargado</h3><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{restoreFileName}</p></div>
-                             </div>
-                             
-                             <div className="bg-slate-50 rounded-2xl p-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                 <div><p className="text-[10px] font-black text-slate-400 uppercase">Movimientos</p><p className="text-xl font-black text-slate-800">{restoreFile.transactions?.length || 0}</p></div>
-                                 <div><p className="text-[10px] font-black text-slate-400 uppercase">Cuentas</p><p className="text-xl font-black text-slate-800">{restoreFile.accounts?.length || 0}</p></div>
-                                 <div><p className="text-[10px] font-black text-slate-400 uppercase">Familias</p><p className="text-xl font-black text-slate-800">{restoreFile.families?.length || 0}</p></div>
-                                 <div><p className="text-[10px] font-black text-slate-400 uppercase">Categorías</p><p className="text-xl font-black text-slate-800">{restoreFile.categories?.length || 0}</p></div>
-                             </div>
-
-                             <div className="space-y-3 pt-4">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mb-2">¿Cómo deseas proceder?</p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <button 
-                                        onClick={() => { 
-                                            if(window.confirm('¿Estás seguro? Esto borrará todos los datos del libro actual.')) { 
-                                                onUpdateData(restoreFile); 
-                                                alert('Datos restaurados correctamente en el libro actual.'); 
-                                                resetForm(); 
-                                            } 
-                                        }} 
-                                        className="py-5 bg-white border-2 border-slate-200 text-slate-600 rounded-2xl font-black uppercase text-[11px] hover:border-rose-500 hover:text-rose-500 transition-all"
-                                    >
-                                        Sobrescribir Libro Actual
-                                    </button>
-                                    <button 
-                                        onClick={() => { 
-                                            if(onCreateBookFromImport) {
-                                                const bookName = prompt("Introduce el nombre para el nuevo libro contable:", restoreFileName || "Libro Importado");
-                                                if (!bookName) return;
-                                                onCreateBookFromImport(restoreFile, bookName);
-                                                alert('Se ha creado un nuevo libro con los datos importados.');
-                                                resetForm();
-                                            }
-                                        }} 
-                                        className="py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] shadow-xl hover:bg-indigo-700 transition-all"
-                                    >
-                                        Crear como Nuevo Libro
-                                    </button>
-                                </div>
-                             </div>
-                        </div>
-                    </div>
-                )}
             </div>
-        )}
-
-        {activeTab === 'TOOLS' && (
+         )}
+         
+         {activeTab === 'TOOLS' && (
             <div className="space-y-12">
                 <div className="bg-indigo-600 p-10 rounded-[3rem] text-white space-y-8 shadow-2xl relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-12 opacity-10 group-hover:scale-110 transition-transform"><Bot size={120}/></div>

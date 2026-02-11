@@ -15,6 +15,7 @@ export interface Account {
   currency: string;
   icon: string;
   groupId: string;
+  active?: boolean; // Nuevo: Control de estado
 }
 
 export interface Family {
@@ -29,6 +30,7 @@ export interface Category {
   name: string;
   familyId: string;
   icon: string;
+  active?: boolean; // Nuevo: Control de estado
 }
 
 export interface Transaction {

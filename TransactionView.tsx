@@ -122,13 +122,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       
       return sortedGroups.map(group => {
           // 2. Filter and Sort Accounts Alphabetically within Group
+          // Also filter for ACTIVE accounts OR the one currently being edited
           const accounts = data.accounts
-              .filter(a => a.groupId === group.id)
+              .filter(a => a.groupId === group.id && (a.active !== false || (editingTx && (editingTx.accountId === a.id || editingTx.transferAccountId === a.id))))
               .sort((a, b) => a.name.localeCompare(b.name));
           
           return { group, accounts };
       }).filter(g => g.accounts.length > 0);
-  }, [data.accountGroups, data.accounts]);
+  }, [data.accountGroups, data.accounts, editingTx]);
 
   const groupedCategories = useMemo(() => {
       // 1. Sort Families Alphabetically
@@ -136,13 +137,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
       return sortedFamilies.map(family => {
           // 2. Filter and Sort Categories Alphabetically within Family
+          // Also filter for ACTIVE categories OR the one currently being edited
           const categories = data.categories
-              .filter(c => c.familyId === family.id)
+              .filter(c => c.familyId === family.id && (c.active !== false || (editingTx && editingTx.categoryId === c.id)))
               .sort((a, b) => a.name.localeCompare(b.name));
           
           return { family, categories };
       }).filter(f => f.categories.length > 0);
-  }, [data.families, data.categories]);
+  }, [data.families, data.categories, editingTx]);
 
 
   // RESET PAGE ON FILTER CHANGE

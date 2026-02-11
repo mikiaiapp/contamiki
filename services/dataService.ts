@@ -20,19 +20,19 @@ const defaultFamilies: Family[] = [
 ];
 
 const defaultCategories: Category[] = [
-  { id: 'c1', familyId: 'f1', name: 'Alquiler/Hipoteca', icon: '🔑' },
-  { id: 'c2', familyId: 'f1', name: 'Luz y Gas', icon: '💡' },
-  { id: 'c3', familyId: 'f2', name: 'Supermercado', icon: '🛒' },
-  { id: 'c4', familyId: 'f2', name: 'Restaurantes', icon: '🍽️' },
-  { id: 'c5', familyId: 'f3', name: 'Gasolina', icon: '⛽' },
-  { id: 'c6', familyId: 'f3', name: 'Mantenimiento', icon: '🔧' },
-  { id: 'c7', familyId: 'f4', name: 'Nómina Mensual', icon: '💵' },
-  { id: 'c8', familyId: 'f5', name: 'Dividendos', icon: '💰' },
+  { id: 'c1', familyId: 'f1', name: 'Alquiler/Hipoteca', icon: '🔑', active: true },
+  { id: 'c2', familyId: 'f1', name: 'Luz y Gas', icon: '💡', active: true },
+  { id: 'c3', familyId: 'f2', name: 'Supermercado', icon: '🛒', active: true },
+  { id: 'c4', familyId: 'f2', name: 'Restaurantes', icon: '🍽️', active: true },
+  { id: 'c5', familyId: 'f3', name: 'Gasolina', icon: '⛽', active: true },
+  { id: 'c6', familyId: 'f3', name: 'Mantenimiento', icon: '🔧', active: true },
+  { id: 'c7', familyId: 'f4', name: 'Nómina Mensual', icon: '💵', active: true },
+  { id: 'c8', familyId: 'f5', name: 'Dividendos', icon: '💰', active: true },
 ];
 
 const defaultAccounts: Account[] = [
-  { id: 'a1', groupId: 'g1', name: 'Banco Principal', initialBalance: 1000, currency: 'EUR', icon: '🏦' },
-  { id: 'a2', groupId: 'g2', name: 'Cartera / Efectivo', initialBalance: 150, currency: 'EUR', icon: '👛' },
+  { id: 'a1', groupId: 'g1', name: 'Banco Principal', initialBalance: 1000, currency: 'EUR', icon: '🏦', active: true },
+  { id: 'a2', groupId: 'g2', name: 'Cartera / Efectivo', initialBalance: 150, currency: 'EUR', icon: '👛', active: true },
 ];
 
 export const defaultAppState: AppState = {
@@ -69,11 +69,21 @@ const sanitizeAppState = (data: any): AppState => {
     if (!sanitized.accountGroups || !Array.isArray(sanitized.accountGroups)) sanitized.accountGroups = cleanDefault.accountGroups;
     if (!sanitized.accounts || !Array.isArray(sanitized.accounts)) sanitized.accounts = cleanDefault.accounts;
     
-    // Migración de cuentas antiguas sin groupId
-    sanitized.accounts = sanitized.accounts.map((a: Account) => ({ ...a, groupId: a.groupId || 'g1' }));
+    // Migración de cuentas antiguas sin groupId o active
+    sanitized.accounts = sanitized.accounts.map((a: Account) => ({ 
+        ...a, 
+        groupId: a.groupId || 'g1',
+        active: a.active !== false 
+    }));
     
     if (!sanitized.families || !Array.isArray(sanitized.families)) sanitized.families = cleanDefault.families;
     if (!sanitized.categories || !Array.isArray(sanitized.categories)) sanitized.categories = cleanDefault.categories;
+
+    // Migración categorías
+    sanitized.categories = sanitized.categories.map((c: Category) => ({
+        ...c,
+        active: c.active !== false
+    }));
     
     if (!sanitized.transactions || !Array.isArray(sanitized.transactions)) sanitized.transactions = [];
     if (!sanitized.recurrents || !Array.isArray(sanitized.recurrents)) sanitized.recurrents = [];
@@ -239,9 +249,6 @@ export const saveData = async (state: MultiBookState) => {
       }
       
       // Actualizamos backup local completo por seguridad
-      // IMPORTANTE: Envolvemos en try/catch para ignorar errores de 'QuotaExceeded'
-      // Si el servidor guardó bien, no queremos mostrar un error al usuario solo porque 
-      // la caché local está llena.
       try {
           localStorage.setItem(DATA_KEY_PREFIX + username, JSON.stringify(state));
       } catch (storageError) {
