@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar, Archive, RefreshCw, X, HardDriveDownload, HardDriveUpload, Bot, ShieldAlert, Monitor, Palette, Eye, EyeOff } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar, Archive, RefreshCw, X, HardDriveDownload, HardDriveUpload, Bot, ShieldAlert, Monitor, Palette, Eye, EyeOff, Plus } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import * as XLSX from 'xlsx';
 
@@ -50,6 +50,7 @@ const compressLogo = async (file: File): Promise<string> => {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, onNavigateToTransactions, onCreateBookFromImport, onDeleteBook }) => {
   const [activeTab, setActiveTab] = useState('ACC_GROUPS');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
   // Data & Import States
   const [importType, setImportType] = useState<'GROUPS' | 'ACCOUNTS' | 'FAMILIES' | 'CATEGORIES' | 'TRANSACTIONS' | 'TRANSFER'>('TRANSACTIONS');
@@ -140,6 +141,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
     setRestoreFile(null); setRestoreFileName('');
     setYearToDelete(availableYears[0] || '');
     setVerificationModal(null); setVerificationInput('');
+    setIsEditModalOpen(false);
+  };
+
+  const openEditor = () => {
+      setIsEditModalOpen(true);
   };
 
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
@@ -263,14 +269,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
 
   const renderIconInput = (icon: string, setIcon: (s: string) => void, currentName: string) => (
     <div className="space-y-4 w-full">
-        <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
-            <div className="w-20 h-20 flex-shrink-0 flex items-center justify-center border-4 border-white rounded-[1.5rem] bg-white overflow-hidden shadow-lg transition-transform hover:scale-105">
-                {renderIcon(icon, "w-12 h-12")}
+        <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 p-4 sm:p-6 rounded-[2rem] border border-slate-100 shadow-inner">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 flex items-center justify-center border-4 border-white rounded-[1.5rem] bg-white overflow-hidden shadow-lg transition-transform hover:scale-105">
+                {renderIcon(icon, "w-10 h-10 sm:w-12 sm:h-12")}
             </div>
             <div className="flex-1 space-y-3 w-full">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center sm:text-left">Identidad Visual</p>
                 <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                    <button onClick={async () => { if(!currentName) { alert("Escribe un nombre primero para buscar."); return; } setIsSearchingWeb(true); const results = await searchInternetLogos(currentName); setWebLogos(results); setIsSearchingWeb(false); }} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-950 transition-all flex items-center gap-2 shadow-lg">{isSearchingWeb ? <Loader2 size={14} className="animate-spin"/> : <Sparkles size={14}/>} IA Smart Search</button>
+                    <button onClick={async () => { if(!currentName) { alert("Escribe un nombre primero para buscar."); return; } setIsSearchingWeb(true); const results = await searchInternetLogos(currentName); setWebLogos(results); setIsSearchingWeb(false); }} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-950 transition-all flex items-center gap-2 shadow-lg">{isSearchingWeb ? <Loader2 size={14} className="animate-spin"/> : <Sparkles size={14}/>} IA Search</button>
                     <button onClick={() => iconUploadRef.current?.click()} className="px-5 py-3 bg-white text-slate-900 border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"><ImageIcon size={14}/> Subir</button>
                     <input type="file" ref={iconUploadRef} className="hidden" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = ev => setIcon(ev.target?.result as string); reader.readAsDataURL(file); } }} />
                     <input type="text" className="w-16 px-2 py-3 bg-white border border-slate-200 rounded-xl font-bold text-center text-sm shadow-sm" value={icon.length < 5 ? icon : '📂'} onChange={e => setIcon(e.target.value)} placeholder="Emoji"/>
@@ -278,12 +284,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
             </div>
         </div>
         {webLogos.length > 0 && (
-          <div className="bg-white p-6 rounded-[2.5rem] border-2 border-indigo-100 shadow-2xl space-y-5 animate-in slide-in-from-top-4 z-10 relative">
+          <div className="bg-white p-6 rounded-[2.5rem] border-2 border-indigo-100 shadow-2xl space-y-5 animate-in slide-in-from-top-4 z-[300] relative">
               <div className="flex justify-between items-center">
                   <span className="text-[11px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><Sparkles size={14}/> Resultados Encontrados</span>
                   <button onClick={() => setWebLogos([])} className="text-slate-300 hover:text-rose-500"><XCircle size={20}/></button>
               </div>
-              <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-3 max-h-64 overflow-y-auto p-2 custom-scrollbar">
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 max-h-64 overflow-y-auto p-2 custom-scrollbar">
                   {webLogos.map((l, i) => (
                       <button key={i} onClick={() => { setIcon(l.url); setWebLogos([]); }} className="aspect-square bg-slate-50 rounded-2xl border-2 border-transparent hover:border-indigo-500 p-2 transition-all flex items-center justify-center overflow-hidden shadow-sm group">
                           <img src={l.url} className="w-full h-full object-contain group-hover:scale-110 transition-transform" />
@@ -321,20 +327,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
       </nav>
 
       <div className="max-w-4xl mx-auto">
-        {/* ... (TABS EXISTENTES) ... */}
         {activeTab === 'ACC_GROUPS' && (
-            <div className="grid grid-cols-1 gap-10">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><BoxSelect className="text-indigo-600"/> {grpId ? 'Editar Grupo' : 'Nuevo Grupo de Cuentas'}</h3>
-                    <div className="space-y-6">
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre Descriptivo</label>
-                            <input type="text" placeholder="Ej: Bancos..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={grpName} onChange={e => setGrpName(e.target.value)} />
-                        </div>
-                        {renderIconInput(grpIcon, setGrpIcon, grpName)}
-                        <button onClick={() => { if(!grpName) return; if(grpId) onUpdateData({accountGroups: data.accountGroups.map(g=>g.id===grpId?{...g,name:grpName,icon:grpIcon}:g)}); else onUpdateData({accountGroups: [...data.accountGroups, {id:generateId(),name:grpName,icon:grpIcon}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Grupo</button>
-                    </div>
-                </div>
+            <div className="space-y-6">
+                <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nuevo Grupo</button>
                 <div className="space-y-4">
                     {data.accountGroups.map(g => (
                         <div key={g.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all">
@@ -343,63 +338,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                                 <span className="font-bold text-slate-700 uppercase text-xs">{g.name}</span>
                             </div>
                             <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                <button onClick={() => { setGrpId(g.id); setGrpName(g.name); setGrpIcon(g.icon); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
+                                <button onClick={() => { setGrpId(g.id); setGrpName(g.name); setGrpIcon(g.icon); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
                                 <button onClick={() => { if(confirm('¿Borrar grupo?')) onUpdateData({accountGroups: data.accountGroups.filter(x => x.id !== g.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button>
                             </div>
                         </div>
                     ))}
                 </div>
+                {/* MODAL EDITOR GRUPOS */}
+                {isEditModalOpen && (
+                    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
+                        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20">
+                            <button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                            <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><BoxSelect className="text-indigo-600"/> {grpId ? 'Editar Grupo' : 'Nuevo Grupo'}</h3>
+                            <div className="space-y-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre Descriptivo</label>
+                                    <input type="text" placeholder="Ej: Bancos..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={grpName} onChange={e => setGrpName(e.target.value)} />
+                                </div>
+                                {renderIconInput(grpIcon, setGrpIcon, grpName)}
+                                <button onClick={() => { if(!grpName) return; if(grpId) onUpdateData({accountGroups: data.accountGroups.map(g=>g.id===grpId?{...g,name:grpName,icon:grpIcon}:g)}); else onUpdateData({accountGroups: [...data.accountGroups, {id:generateId(),name:grpName,icon:grpIcon}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Grupo</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )}
 
         {activeTab === 'ACCOUNTS' && (
-            <div className="grid grid-cols-1 gap-10">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Wallet className="text-indigo-600"/> {accId ? 'Editar Cuenta' : 'Nueva Cuenta'}</h3>
-                    <div className="space-y-6">
-                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre</label>
-                                <input type="text" placeholder="Ej: Principal..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accName} onChange={e => setAccName(e.target.value)} />
-                             </div>
-                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Saldo Inicial</label>
-                                <input type="number" placeholder="0.00" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
-                             </div>
-                         </div>
-                         <div className="space-y-2">
-                             <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Estado</label>
-                             <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                                <button onClick={() => setAccActive(true)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${accActive ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}><Eye size={14}/> Activa</button>
-                                <button onClick={() => setAccActive(false)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${!accActive ? 'bg-white shadow-sm text-slate-600' : 'text-slate-400'}`}><EyeOff size={14}/> Archivada</button>
-                             </div>
-                         </div>
-                         <div className="space-y-2">
-                             <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Grupo de Cuentas</label>
-                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                 {data.accountGroups.map(g => (
-                                     <button key={g.id} onClick={() => setAccGroupId(g.id)} className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${accGroupId === g.id ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-300'}`}>
-                                         {renderIcon(g.icon, "w-6 h-6")} <span className="text-[9px] font-black uppercase">{g.name}</span>
-                                     </button>
-                                 ))}
-                             </div>
-                         </div>
-                         {renderIconInput(accIcon, setAccIcon, accName)}
-                         <button onClick={() => { 
-                             if(!accName || !accGroupId) return; 
-                             const bal = parseFloat(accBalance) || 0;
-                             if(accId) onUpdateData({accounts: data.accounts.map(a=>a.id===accId?{...a,name:accName,initialBalance:bal,icon:accIcon,groupId:accGroupId, active: accActive}:a)}); 
-                             else onUpdateData({accounts: [...data.accounts, {id:generateId(),name:accName,initialBalance:bal,currency:'EUR',icon:accIcon,groupId:accGroupId, active: true}]}); 
-                             resetForm(); 
-                        }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Cuenta</button>
-                    </div>
-                </div>
+            <div className="space-y-6">
+                <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nueva Cuenta</button>
                 <div className="space-y-4">
                     {data.accounts.map(a => (
-                        <div key={a.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all">
+                        <div key={a.id} className={`bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all ${a.active === false ? 'opacity-50 grayscale' : ''}`}>
                              <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100">
+                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 relative">
                                     {renderIcon(a.icon, "w-6 h-6")}
+                                    {a.active === false && <div className="absolute inset-0 bg-slate-100/50 backdrop-blur-[1px] rounded-2xl flex items-center justify-center"><EyeOff size={16} className="text-slate-400"/></div>}
                                 </div>
                                 <div>
                                     <span className="block font-bold text-slate-700 uppercase text-xs">{a.name}</span>
@@ -407,42 +381,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                                 </div>
                             </div>
                             <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                <button onClick={() => { setAccId(a.id); setAccName(a.name); setAccBalance(a.initialBalance.toString()); setAccIcon(a.icon); setAccGroupId(a.groupId); setAccActive(a.active !== false); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
+                                <button onClick={() => { setAccId(a.id); setAccName(a.name); setAccBalance(a.initialBalance.toString()); setAccIcon(a.icon); setAccGroupId(a.groupId); setAccActive(a.active !== false); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
                                 <button onClick={() => attemptDeleteAccount(a)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button>
                             </div>
                         </div>
                     ))}
                 </div>
+                {/* MODAL EDITOR CUENTAS */}
+                {isEditModalOpen && (
+                    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
+                        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-10 relative border border-white/20 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                            <button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                            <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Wallet className="text-indigo-600"/> {accId ? 'Editar Cuenta' : 'Nueva Cuenta'}</h3>
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre</label>
+                                        <input type="text" placeholder="Ej: Principal..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accName} onChange={e => setAccName(e.target.value)} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Saldo Inicial</label>
+                                        <input type="number" placeholder="0.00" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Estado</label>
+                                    <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+                                        <button onClick={() => setAccActive(true)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${accActive ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}><Eye size={14}/> Activa</button>
+                                        <button onClick={() => setAccActive(false)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${!accActive ? 'bg-white shadow-sm text-slate-600' : 'text-slate-400'}`}><EyeOff size={14}/> Archivada</button>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Grupo de Cuentas</label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                        {data.accountGroups.map(g => (
+                                            <button key={g.id} onClick={() => setAccGroupId(g.id)} className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${accGroupId === g.id ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-300'}`}>
+                                                {renderIcon(g.icon, "w-6 h-6")} <span className="text-[9px] font-black uppercase">{g.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                {renderIconInput(accIcon, setAccIcon, accName)}
+                                <button onClick={() => { 
+                                    if(!accName || !accGroupId) return; 
+                                    const bal = parseFloat(accBalance) || 0;
+                                    if(accId) onUpdateData({accounts: data.accounts.map(a=>a.id===accId?{...a,name:accName,initialBalance:bal,icon:accIcon,groupId:accGroupId, active: accActive}:a)}); 
+                                    else onUpdateData({accounts: [...data.accounts, {id:generateId(),name:accName,initialBalance:bal,currency:'EUR',icon:accIcon,groupId:accGroupId, active: true}]}); 
+                                    resetForm(); 
+                                }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Cuenta</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )}
 
         {activeTab === 'FAMILIES' && (
-             <div className="grid grid-cols-1 gap-10">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Layers className="text-indigo-600"/> {famId ? 'Editar Familia' : 'Nueva Familia'}</h3>
-                    <div className="space-y-6">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre</label>
-                                <input type="text" placeholder="Ej: Vivienda..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={famName} onChange={e => setFamName(e.target.value)} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tipo de Flujo</label>
-                                <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                                    <button onClick={() => setFamType('EXPENSE')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${famType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-500' : 'text-slate-400'}`}>Gasto</button>
-                                    <button onClick={() => setFamType('INCOME')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${famType === 'INCOME' ? 'bg-white shadow-sm text-emerald-500' : 'text-slate-400'}`}>Ingreso</button>
-                                </div>
-                            </div>
-                        </div>
-                        {renderIconInput(famIcon, setFamIcon, famName)}
-                        <button onClick={() => { 
-                             if(!famName) return; 
-                             if(famId) onUpdateData({families: data.families.map(f=>f.id===famId?{...f,name:famName,type:famType,icon:famIcon}:f)}); 
-                             else onUpdateData({families: [...data.families, {id:generateId(),name:famName,type:famType,icon:famIcon}]}); 
-                             resetForm(); 
-                        }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Familia</button>
-                    </div>
-                </div>
+             <div className="space-y-6">
+                <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nueva Familia</button>
                 <div className="space-y-4">
                     {data.families.map(f => (
                          <div key={f.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all">
@@ -454,57 +450,58 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                                 </div>
                             </div>
                             <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                <button onClick={() => { setFamId(f.id); setFamName(f.name); setFamType(f.type); setFamIcon(f.icon); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
+                                <button onClick={() => { setFamId(f.id); setFamName(f.name); setFamType(f.type); setFamIcon(f.icon); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
                                 <button onClick={() => { if(confirm('¿Borrar familia?')) onUpdateData({families: data.families.filter(x => x.id !== f.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button>
                             </div>
                         </div>
                     ))}
                 </div>
+                {/* MODAL EDITOR FAMILIAS */}
+                {isEditModalOpen && (
+                    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
+                        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20">
+                            <button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                            <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Layers className="text-indigo-600"/> {famId ? 'Editar Familia' : 'Nueva Familia'}</h3>
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre</label>
+                                        <input type="text" placeholder="Ej: Vivienda..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={famName} onChange={e => setFamName(e.target.value)} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tipo de Flujo</label>
+                                        <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+                                            <button onClick={() => setFamType('EXPENSE')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${famType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-500' : 'text-slate-400'}`}>Gasto</button>
+                                            <button onClick={() => setFamType('INCOME')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${famType === 'INCOME' ? 'bg-white shadow-sm text-emerald-500' : 'text-slate-400'}`}>Ingreso</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                {renderIconInput(famIcon, setFamIcon, famName)}
+                                <button onClick={() => { 
+                                    if(!famName) return; 
+                                    if(famId) onUpdateData({families: data.families.map(f=>f.id===famId?{...f,name:famName,type:famType,icon:famIcon}:f)}); 
+                                    else onUpdateData({families: [...data.families, {id:generateId(),name:famName,type:famType,icon:famIcon}]}); 
+                                    resetForm(); 
+                                }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Familia</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )}
 
         {activeTab === 'CATEGORIES' && (
-            <div className="grid grid-cols-1 gap-10">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                     <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Tag className="text-indigo-600"/> {catId ? 'Editar Categoría' : 'Nueva Categoría'}</h3>
-                     <div className="space-y-6">
-                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre</label>
-                                <input type="text" placeholder="Ej: Supermercado..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={catName} onChange={e => setCatName(e.target.value)} />
-                             </div>
-                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Familia Principal</label>
-                                <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none cursor-pointer appearance-none" value={catParent} onChange={e => setCatParent(e.target.value)}>
-                                    <option value="">Selecciona una familia...</option>
-                                    {data.families.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                </select>
-                             </div>
-                         </div>
-                         <div className="space-y-2">
-                             <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Estado</label>
-                             <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                                <button onClick={() => setCatActive(true)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${catActive ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}><Eye size={14}/> Activa</button>
-                                <button onClick={() => setCatActive(false)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${!catActive ? 'bg-white shadow-sm text-slate-600' : 'text-slate-400'}`}><EyeOff size={14}/> Archivada</button>
-                             </div>
-                         </div>
-                         {renderIconInput(catIcon, setCatIcon, catName)}
-                         <button onClick={() => { 
-                             if(!catName || !catParent) return; 
-                             if(catId) onUpdateData({categories: data.categories.map(c=>c.id===catId?{...c,name:catName,familyId:catParent,icon:catIcon, active: catActive}:c)}); 
-                             else onUpdateData({categories: [...data.categories, {id:generateId(),name:catName,familyId:catParent,icon:catIcon, active: true}]}); 
-                             resetForm(); 
-                        }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Categoría</button>
-                     </div>
-                </div>
+            <div className="space-y-6">
+                <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nueva Categoría</button>
                 <div className="space-y-4">
                     {data.categories.map(c => {
                         const fam = data.families.find(f => f.id === c.familyId);
                         return (
-                            <div key={c.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all">
+                            <div key={c.id} className={`bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all ${c.active === false ? 'opacity-50 grayscale' : ''}`}>
                                 <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100">
+                                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 relative">
                                         {renderIcon(c.icon, "w-6 h-6")}
+                                        {c.active === false && <div className="absolute inset-0 bg-slate-100/50 backdrop-blur-[1px] rounded-2xl flex items-center justify-center"><EyeOff size={16} className="text-slate-400"/></div>}
                                     </div>
                                     <div>
                                         <span className="block font-bold text-slate-700 uppercase text-xs">{c.name}</span>
@@ -512,13 +509,51 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                                     </div>
                                 </div>
                                 <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                    <button onClick={() => { setCatId(c.id); setCatName(c.name); setCatParent(c.familyId); setCatIcon(c.icon); setCatActive(c.active !== false); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
+                                    <button onClick={() => { setCatId(c.id); setCatName(c.name); setCatParent(c.familyId); setCatIcon(c.icon); setCatActive(c.active !== false); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
                                     <button onClick={() => attemptDeleteCategory(c)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button>
                                 </div>
                             </div>
                         );
                     })}
                 </div>
+                {/* MODAL EDITOR CATEGORÍAS */}
+                {isEditModalOpen && (
+                    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
+                        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-10 relative border border-white/20 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                            <button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                            <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Tag className="text-indigo-600"/> {catId ? 'Editar Categoría' : 'Nueva Categoría'}</h3>
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre</label>
+                                        <input type="text" placeholder="Ej: Supermercado..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={catName} onChange={e => setCatName(e.target.value)} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Familia Principal</label>
+                                        <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none cursor-pointer appearance-none" value={catParent} onChange={e => setCatParent(e.target.value)}>
+                                            <option value="">Selecciona una familia...</option>
+                                            {data.families.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Estado</label>
+                                    <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+                                        <button onClick={() => setCatActive(true)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${catActive ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}><Eye size={14}/> Activa</button>
+                                        <button onClick={() => setCatActive(false)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${!catActive ? 'bg-white shadow-sm text-slate-600' : 'text-slate-400'}`}><EyeOff size={14}/> Archivada</button>
+                                    </div>
+                                </div>
+                                {renderIconInput(catIcon, setCatIcon, catName)}
+                                <button onClick={() => { 
+                                    if(!catName || !catParent) return; 
+                                    if(catId) onUpdateData({categories: data.categories.map(c=>c.id===catId?{...c,name:catName,familyId:catParent,icon:catIcon, active: catActive}:c)}); 
+                                    else onUpdateData({categories: [...data.categories, {id:generateId(),name:catName,familyId:catParent,icon:catIcon, active: true}]}); 
+                                    resetForm(); 
+                                }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Categoría</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )}
         
