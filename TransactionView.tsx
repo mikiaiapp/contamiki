@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, Category, Account } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Heart, Bot, Check, AlertTriangle, RefreshCw, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Heart, Bot, Check, AlertTriangle, RefreshCw, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, Eye } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
@@ -82,6 +82,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const [fAttachment, setFAttachment] = useState<string | undefined>(undefined);
   const [isCompressing, setIsCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- PREVIEW STATE ---
+  const [previewAttachment, setPreviewAttachment] = useState<string | null>(null);
 
   // --- SMART IMPORT STATE ---
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -551,7 +554,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                         {t.description}
                     </div>
                     <div className="flex justify-center">
-                        {t.attachment ? <Paperclip size={10} className="text-indigo-500 md:size-4"/> : <div className="w-1 md:w-2" />}
+                        {t.attachment ? (
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); setPreviewAttachment(t.attachment || null); }}
+                                className="p-1 hover:bg-indigo-50 rounded-full text-indigo-500 transition-colors"
+                            >
+                                <Paperclip size={12} className="md:size-4"/>
+                            </button>
+                        ) : <div className="w-1 md:w-2" />}
                     </div>
                     <div className="min-w-0 text-[8px] md:text-sm">{creditNode}</div>
                     <div className="flex justify-end gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
@@ -672,6 +682,29 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
               <button onClick={handleSave} disabled={isCompressing} className="w-full py-7 bg-slate-950 text-white rounded-[2.5rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-indigo-600 active:scale-95 transition-all mt-10 disabled:opacity-50">Guardar Asiento Contable</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* VISOR DE ADJUNTOS (LIGHTBOX) */}
+      {previewAttachment && (
+        <div className="fixed inset-0 z-[300] bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setPreviewAttachment(null)}>
+            <button onClick={() => setPreviewAttachment(null)} className="absolute top-4 right-4 p-4 text-white/50 hover:text-white transition-colors"><X size={32}/></button>
+            
+            <img 
+                src={previewAttachment} 
+                className="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain" 
+                onClick={(e) => e.stopPropagation()} 
+                alt="Documento adjunto"
+            />
+            
+            <a 
+                href={previewAttachment} 
+                download={`adjunto-contamiki-${Date.now()}.jpg`}
+                className="mt-6 px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all backdrop-blur-md border border-white/10"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <Download size={16}/> Descargar Original
+            </a>
         </div>
       )}
     </div>
