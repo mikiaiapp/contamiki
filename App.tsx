@@ -19,7 +19,10 @@ const App: React.FC = () => {
   });
   const [currentView, setCurrentView] = useState<View>('RESUMEN');
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null); // Nuevo estado de error
+  const [loadError, setLoadError] = useState<string | null>(null);
+  
+  // Nuevo estado para la UI de Sync
+  const [syncStatus, setSyncStatus] = useState<'SAVED' | 'SAVING' | 'ERROR'>('SAVED');
   
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
   const [editingBookId, setEditingBookId] = useState<string | null>(null);
@@ -48,7 +51,6 @@ const App: React.FC = () => {
                 if (err.message.includes('401') || err.message.includes('403')) {
                     logout();
                 } else {
-                    // Mostrar pantalla de error y NO activar dataLoaded
                     setLoadError(err.message || "Error de conexión");
                 }
             });
@@ -57,10 +59,14 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // CRITICO: Solo guardar si dataLoaded es true.
-    // Si hubo error de carga, dataLoaded será false, previniendo la sobreescritura.
     if (isLoggedIn && dataLoaded && !loadError) {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = window.setTimeout(() => saveData(multiState), 1500);
+      setSyncStatus('SAVING');
+      saveTimeoutRef.current = window.setTimeout(() => {
+        saveData(multiState)
+            .then(() => setSyncStatus('SAVED'))
+            .catch(() => setSyncStatus('ERROR'));
+      }, 1500);
     }
   }, [multiState, dataLoaded, isLoggedIn, loadError]);
 
@@ -145,7 +151,6 @@ const App: React.FC = () => {
 
   if (!isLoggedIn) return <LoginView onLoginSuccess={() => setIsLoggedIn(true)} />;
   
-  // PANTALLA DE ERROR DE CONEXIÓN (Safe Mode)
   if (loadError) return (
       <div className="fixed inset-0 flex flex-col items-center justify-center bg-slate-950 text-white z-[999] p-6 text-center">
           <div className="bg-rose-500/10 p-6 rounded-full mb-6 animate-pulse">
@@ -178,6 +183,7 @@ const App: React.FC = () => {
         onSwitchBook={handleSwitchBook}
         onCreateBook={() => { setEditingBookId(null); setTempBookName(''); setTempBookColor('BLACK'); setIsBookModalOpen(true); }}
         onEditBook={() => { setEditingBookId(currentBookMeta.id); setTempBookName(currentBookMeta.name); setTempBookColor(currentBookMeta.color); setIsBookModalOpen(true); }}
+        syncStatus={syncStatus}
     >
       {currentView === 'RESUMEN' && (
         <Dashboard 

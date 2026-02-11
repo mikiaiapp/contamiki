@@ -60,59 +60,61 @@ const createInitialMultiBookState = (initialData?: AppState): MultiBookState => 
 
 // Helper para asegurar que un AppState tenga todas las propiedades necesarias
 const sanitizeAppState = (data: any): AppState => {
-    if (!data) return defaultAppState;
+    if (!data) return JSON.parse(JSON.stringify(defaultAppState));
     const sanitized = { ...data };
-    if (!sanitized.accountGroups) sanitized.accountGroups = defaultAccountGroups;
-    if (!sanitized.accounts) sanitized.accounts = defaultAccounts;
-    // Asegurar grupos en cuentas antiguas
+    
+    // Asegurar arrays estructurales si faltan
+    if (!sanitized.accountGroups || !Array.isArray(sanitized.accountGroups)) sanitized.accountGroups = defaultAccountGroups;
+    if (!sanitized.accounts || !Array.isArray(sanitized.accounts)) sanitized.accounts = defaultAccounts;
+    
+    // Migración de cuentas antiguas sin groupId
     sanitized.accounts = sanitized.accounts.map((a: Account) => ({ ...a, groupId: a.groupId || 'g1' }));
     
-    if (!sanitized.families) sanitized.families = defaultFamilies;
-    if (!sanitized.categories) sanitized.categories = defaultCategories;
-    if (!sanitized.transactions) sanitized.transactions = [];
-    if (!sanitized.recurrents) sanitized.recurrents = [];
-    if (!sanitized.favorites) sanitized.favorites = [];
+    if (!sanitized.families || !Array.isArray(sanitized.families)) sanitized.families = defaultFamilies;
+    if (!sanitized.categories || !Array.isArray(sanitized.categories)) sanitized.categories = defaultCategories;
+    
+    // Asegurar arrays de datos si faltan (evita que un libro parezca "vacío" o de error)
+    if (!sanitized.transactions || !Array.isArray(sanitized.transactions)) sanitized.transactions = [];
+    if (!sanitized.recurrents || !Array.isArray(sanitized.recurrents)) sanitized.recurrents = [];
+    if (!sanitized.favorites || !Array.isArray(sanitized.favorites)) sanitized.favorites = [];
     
     return sanitized;
 };
 
-// Reparar estados inconsistentes donde el currentBookId apunta a nada
+// Reparar estados inconsistentes de TODOS los libros
 const validateAndRepairState = (state: MultiBookState): MultiBookState => {
-    if (!state.booksData || !state.booksMetadata) return createInitialMultiBookState();
+    // 1. Estructura base
+    if (!state || !state.booksData || !state.booksMetadata || !Array.isArray(state.booksMetadata)) {
+        return createInitialMultiBookState();
+    }
     
-    // 1. Si no hay libros definidos en metadata, resetear
+    // 2. Si no hay libros definidos en metadata, resetear
     if (state.booksMetadata.length === 0) return createInitialMultiBookState();
 
-    // 2. Verificar que el libro actual existe en metadata
-    const metaExists = state.booksMetadata.find(b => b.id === state.currentBookId);
+    // 3. REPARACIÓN PROFUNDA: Iterar sobre TODOS los libros en metadata
+    // Si un libro existe en metadata pero no tiene datos (o están corruptos), inicializarlo/sanitizarlo.
+    const repairedBooksData: Record<string, AppState> = {};
     
-    // 3. Verificar que hay datos para el libro actual
-    const dataExists = state.booksData[state.currentBookId];
+    state.booksMetadata.forEach(book => {
+        const existingData = state.booksData[book.id];
+        // Aplicamos sanitizeAppState a CADA libro para garantizar que tiene transactions: [], accounts: [], etc.
+        repairedBooksData[book.id] = sanitizeAppState(existingData);
+    });
 
-    if (!metaExists || !dataExists) {
-        console.warn("DataService: Estado inconsistente detectado (Libro desvinculado). Reparando...");
-        // Intentar recuperar el primer libro válido
-        const firstValidId = state.booksMetadata[0].id;
-        
-        // Si incluso el primer libro no tiene datos, inicializarlos
-        if (!state.booksData[firstValidId]) {
-            return {
-                ...state,
-                currentBookId: firstValidId,
-                booksData: {
-                    ...state.booksData,
-                    [firstValidId]: defaultAppState
-                }
-            };
-        }
+    // 4. Verificar que el libro actual apunta a uno válido
+    let currentId = state.currentBookId;
+    const metaExists = state.booksMetadata.find(b => b.id === currentId);
 
-        return {
-            ...state,
-            currentBookId: firstValidId
-        };
+    if (!metaExists) {
+        console.warn("DataService: Libro actual no existe en metadata. Reseteando al primero.");
+        currentId = state.booksMetadata[0].id;
     }
 
-    return state;
+    return {
+        ...state,
+        currentBookId: currentId,
+        booksData: repairedBooksData // Usamos la data reparada
+    };
 };
 
 export const loadData = async (): Promise<MultiBookState> => {
@@ -132,23 +134,20 @@ export const loadData = async (): Promise<MultiBookState> => {
       }
 
       if (!response.ok) {
-          // CRITICO: Si el servidor falla, LANZAMOS ERROR. 
-          // No hacemos fallback a localStorage para evitar que una versión vieja o vacía local
-          // sobrescriba los datos del servidor cuando vuelva a estar online.
           throw new Error(`Error del servidor: ${response.status}`);
       }
 
       rawData = await response.json();
   } catch (err) {
       console.error("DataService: Error crítico cargando datos remotos.", err);
-      throw err; // Propagar error para que la UI muestre pantalla de reintento
+      throw err;
   }
 
   // --- Lógica de Migración ---
   let finalState: MultiBookState;
 
   if (!rawData || Object.keys(rawData).length === 0) {
-      // Solo si el servidor devuelve explícitamente vacío (usuario nuevo)
+      // Usuario nuevo o archivo vacío -> Inicializar
       finalState = createInitialMultiBookState();
   } else if (rawData.booksMetadata && Array.isArray(rawData.booksMetadata)) {
       // Formato nativo Multi-Libro
@@ -159,6 +158,7 @@ export const loadData = async (): Promise<MultiBookState> => {
       finalState = createInitialMultiBookState(sanitizeAppState(rawData));
   }
 
+  // Ejecutar validación profunda en todos los libros
   return validateAndRepairState(finalState);
 };
 
@@ -183,7 +183,6 @@ export const saveData = async (state: MultiBookState) => {
       localStorage.setItem(DATA_KEY_PREFIX + username, JSON.stringify(state));
   } catch (e) {
       console.error("Error guardando datos:", e);
-      // No hacemos nada más. Si falla el guardado, la UI debería avisar (pendiente de implementación UX),
-      // pero NO debemos confiar ciegamente en localStorage como fuente de verdad en entorno Docker.
+      throw e; // Lanzar error para que la UI pueda mostrarlo
   }
 };

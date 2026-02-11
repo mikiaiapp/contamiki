@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check } from 'lucide-react';
+import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
 import { logout } from './services/authService';
 
@@ -9,15 +9,14 @@ interface LayoutProps {
   setCurrentView: (view: View) => void;
   children: React.ReactNode;
   data: AppState;
-  // Nuevas props para Multi-Contabilidad
   books: BookMetadata[];
   currentBook: BookMetadata;
   onSwitchBook: (bookId: string) => void;
   onCreateBook: () => void;
   onEditBook: () => void;
+  syncStatus?: 'SAVED' | 'SAVING' | 'ERROR'; // Nuevo prop para estado
 }
 
-// Mapeo de colores a clases Tailwind
 const THEME_COLORS: Record<string, string> = {
     BLACK: 'bg-slate-950',
     BLUE: 'bg-blue-600',
@@ -27,7 +26,6 @@ const THEME_COLORS: Record<string, string> = {
     VIOLET: 'bg-violet-600',
 };
 
-// Mapeo para bordes y acentos ligeros
 const THEME_ACCENTS: Record<string, string> = {
     BLACK: 'text-slate-400 hover:bg-white/10',
     BLUE: 'text-blue-200 hover:bg-white/10',
@@ -37,7 +35,7 @@ const THEME_ACCENTS: Record<string, string> = {
     VIOLET: 'text-violet-200 hover:bg-white/10',
 };
 
-export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook }) => {
+export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED' }) => {
   const [isBookMenuOpen, setIsBookMenuOpen] = useState(false);
 
   const pendingRecurrentsCount = useMemo(() => {
@@ -134,12 +132,25 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
     </div>
   );
 
+  const SyncIndicator = () => {
+      if (syncStatus === 'SAVING') {
+          return <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-full text-white/80"><RefreshCw size={14} className="animate-spin"/><span className="text-[9px] font-black uppercase tracking-wider">Guardando...</span></div>;
+      }
+      if (syncStatus === 'ERROR') {
+          return <div className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/20 text-white rounded-full border border-rose-500/50"><CloudOff size={14} /><span className="text-[9px] font-black uppercase tracking-wider">Error Sync</span></div>;
+      }
+      return <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full text-white/40"><Cloud size={14} /><span className="text-[9px] font-black uppercase tracking-wider">Guardado</span></div>;
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 flex-col lg:flex-row overflow-hidden font-sans">
       {/* SIDEBAR DESKTOP */}
       <aside className={`hidden lg:flex w-72 xl:w-80 ${bgClass} text-white flex-col shadow-2xl z-50 transition-colors duration-500`}>
-        <div className="p-8 pb-4">
+        <div className="p-8 pb-4 space-y-4">
             <BookSelector />
+            <div className="flex justify-start pl-2">
+                <SyncIndicator />
+            </div>
         </div>
         
         <div className="h-px bg-white/10 mx-6 mb-6" />
@@ -166,9 +177,12 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       {/* HEADER MOBILE */}
       <header className={`lg:hidden ${bgClass} text-white px-6 py-4 flex justify-between items-center shadow-xl z-50 transition-colors duration-500`}>
         <BookSelector />
-        <button onClick={logout} className="bg-white/10 text-white/70 p-2 rounded-xl border border-white/10">
-          <LogOut size={18} />
-        </button>
+        <div className="flex items-center gap-3">
+            <SyncIndicator />
+            <button onClick={logout} className="bg-white/10 text-white/70 p-2 rounded-xl border border-white/10">
+              <LogOut size={18} />
+            </button>
+        </div>
       </header>
 
       {/* CONTENIDO PRINCIPAL */}
