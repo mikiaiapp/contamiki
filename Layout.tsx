@@ -54,8 +54,6 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
     { id: 'SETTINGS', label: 'Ajustes', icon: <Settings size={22} /> },
   ];
 
-  const logoSrc = localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
-
   const renderNavItem = (item: { id: View; label: string; icon: React.ReactNode; badge?: number }, isMobile = false) => (
     <button
       key={item.id}
@@ -87,10 +85,9 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         >
             <div className="bg-white/20 p-1.5 rounded-xl backdrop-blur-sm shadow-sm overflow-hidden flex items-center justify-center">
                  <img 
-                    src={logoSrc} 
+                    src="/contamiki.jpg" 
                     className="w-6 h-6 object-cover" 
                     alt="Logo" 
-                    onError={(e) => { e.currentTarget.src = "https://images.icon-icons.com/1850/PNG/512/accounting_116483.png"; }}
                  />
             </div>
             <div className="text-left">
@@ -183,12 +180,11 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         </nav>
 
         <div className="px-6 pb-6 space-y-2">
-          <div className="flex justify-center pb-6 opacity-70 hover:opacity-100 transition-opacity duration-500">
+          <div className="flex justify-center pb-6 opacity-80 hover:opacity-100 transition-all duration-500">
              <img 
-                src={logoSrc} 
-                className="w-20 h-20 rounded-2xl shadow-2xl object-cover border-2 border-white/10 bg-white" 
+                src="/contamiki.jpg" 
+                className="w-40 h-40 rounded-3xl shadow-2xl object-cover border-4 border-white/10 bg-white" 
                 alt="ContaMiki"
-                onError={(e) => { e.currentTarget.src = "https://images.icon-icons.com/1850/PNG/512/accounting_116483.png"; }}
              />
           </div>
 

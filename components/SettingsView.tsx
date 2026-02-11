@@ -42,7 +42,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
   const iconUploadRef = useRef<HTMLInputElement>(null);
-  const appLogoUploadRef = useRef<HTMLInputElement>(null);
 
   // Form States
   const [grpId, setGrpId] = useState<string | null>(null);
@@ -176,23 +175,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
       }
     });
     if (['GROUPS', 'ACCOUNTS', 'FAMILIES', 'CATEGORIES'].includes(importType)) { setStructureReport({ added: addedCount, type: importType }); onUpdateData({ accountGroups: localGroups, accounts: localAccs, families: localFamilies, categories: localCategories }); } else { setImportReport(txReport); onUpdateData({ transactions: localTxs, accounts: localAccs, categories: localCategories }); }
-  };
-
-  const handleAppLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-              const base64 = ev.target?.result as string;
-              localStorage.setItem('contamiki_custom_logo', base64);
-              // Forzar recarga suave para actualizar logo
-              if(confirm("Logo guardado. ¿Recargar para aplicar cambios?")) {
-                  window.location.reload();
-              }
-          };
-          reader.readAsDataURL(file);
-      }
-      e.target.value = '';
   };
 
   const renderIconInput = (icon: string, setIcon: (s: string) => void, currentName: string) => (
@@ -677,30 +659,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
 
         {activeTab === 'TOOLS' && (
             <div className="space-y-12">
-                 {/* PERSONALIZACIÓN LOGO */}
-                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-6">
-                    <div className="flex items-center gap-4 mb-4">
-                        <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600"><Monitor size={24}/></div>
-                        <div>
-                            <h3 className="text-xl font-black uppercase tracking-tight">Marca de la Aplicación</h3>
-                            <p className="text-xs font-bold text-slate-400">Personaliza el logotipo visible en el menú y login.</p>
-                        </div>
-                    </div>
-                    <div className="flex gap-4 items-center">
-                         <div className="w-20 h-20 bg-slate-50 border-2 border-slate-100 rounded-2xl overflow-hidden flex items-center justify-center">
-                            <img src={localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg"} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = "https://images.icon-icons.com/1850/PNG/512/accounting_116483.png"; }} />
-                         </div>
-                         <div className="flex-1 space-y-2">
-                             <button onClick={() => appLogoUploadRef.current?.click()} className="px-6 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-lg flex items-center gap-2"><Upload size={14}/> Subir Imagen</button>
-                             <input type="file" ref={appLogoUploadRef} className="hidden" accept="image/*" onChange={handleAppLogoUpload} />
-                             <p className="text-[9px] font-bold text-slate-400">Recomendado: 512x512px (JPG/PNG)</p>
-                         </div>
-                         {localStorage.getItem('contamiki_custom_logo') && (
-                             <button onClick={() => { localStorage.removeItem('contamiki_custom_logo'); window.location.reload(); }} className="px-4 py-3 bg-rose-50 text-rose-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all">Restablecer</button>
-                         )}
-                    </div>
-                </div>
-
                 <div className="bg-indigo-600 p-10 rounded-[3rem] text-white space-y-8 shadow-2xl relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-12 opacity-10 group-hover:scale-110 transition-transform"><Bot size={120}/></div>
                     <div className="relative z-10 space-y-4 text-center sm:text-left">
