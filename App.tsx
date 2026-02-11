@@ -78,7 +78,9 @@ const App: React.FC = () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       
       setSyncStatus('SAVING');
-      saveTimeoutRef.current = window.setTimeout(() => performSave(multiState), 1500);
+      // Aumentado a 4000ms (4 segundos) para dar tiempo a terminar ediciones
+      // y evitar llamadas simultáneas pesadas al servidor.
+      saveTimeoutRef.current = window.setTimeout(() => performSave(multiState), 4000);
     }
   }, [multiState, dataLoaded, isLoggedIn, loadError]);
 
@@ -250,4 +252,5 @@ const App: React.FC = () => {
     </Layout>
   );
 };
+
 export default App;
