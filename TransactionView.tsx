@@ -115,6 +115,36 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     return { acc, cat, fam, grp };
   }, [data.accounts, data.categories, data.families, data.accountGroups]);
 
+  // --- DATA PREPARATION FOR SELECTORS ---
+  const groupedAccounts = useMemo(() => {
+      // 1. Sort Groups Alphabetically
+      const sortedGroups = [...data.accountGroups].sort((a, b) => a.name.localeCompare(b.name));
+      
+      return sortedGroups.map(group => {
+          // 2. Filter and Sort Accounts Alphabetically within Group
+          const accounts = data.accounts
+              .filter(a => a.groupId === group.id)
+              .sort((a, b) => a.name.localeCompare(b.name));
+          
+          return { group, accounts };
+      }).filter(g => g.accounts.length > 0);
+  }, [data.accountGroups, data.accounts]);
+
+  const groupedCategories = useMemo(() => {
+      // 1. Sort Families Alphabetically
+      const sortedFamilies = [...data.families].sort((a, b) => a.name.localeCompare(b.name));
+
+      return sortedFamilies.map(family => {
+          // 2. Filter and Sort Categories Alphabetically within Family
+          const categories = data.categories
+              .filter(c => c.familyId === family.id)
+              .sort((a, b) => a.name.localeCompare(b.name));
+          
+          return { family, categories };
+      }).filter(f => f.categories.length > 0);
+  }, [data.families, data.categories]);
+
+
   // RESET PAGE ON FILTER CHANGE
   useEffect(() => {
       setCurrentPage(1);
@@ -657,14 +687,30 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1">{fType === 'TRANSFER' ? 'Origen' : 'Cuenta'}</label>
                   <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={fAcc} onChange={e => setFAcc(e.target.value)}>
-                    {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    {groupedAccounts.map(g => (
+                       <optgroup key={g.group.id} label={g.group.name}>
+                           {g.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                       </optgroup>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1">{fType === 'TRANSFER' ? 'Destino' : 'Categoría'}</label>
                   <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={fType === 'TRANSFER' ? fTransferDest : fCat} onChange={e => fType === 'TRANSFER' ? setFTransferDest(e.target.value) : setFCat(e.target.value)}>
                     <option value="">Seleccionar...</option>
-                    {fType === 'TRANSFER' ? data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>) : data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {fType === 'TRANSFER' ? (
+                        groupedAccounts.map(g => (
+                           <optgroup key={g.group.id} label={g.group.name}>
+                               {g.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                           </optgroup>
+                        ))
+                    ) : (
+                        groupedCategories.map(f => (
+                            <optgroup key={f.family.id} label={`${f.family.icon} ${f.family.name}`}>
+                                {f.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </optgroup>
+                        ))
+                    )}
                   </select>
                 </div>
               </div>
