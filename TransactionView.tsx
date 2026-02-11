@@ -319,7 +319,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const openEditor = (t?: Transaction) => { if (t) { setEditingTx(t); setFType(t.type); setFAmount(Math.abs(t.amount).toString()); setFDesc(t.description); setFDate(t.date); setFAcc(t.accountId); setFCat(t.categoryId); setFTransferDest(t.transferAccountId || ''); setFAttachment(t.attachment); } else resetForm(); setIsModalOpen(true); };
   const handleSave = () => { if (!fAmount || !fDesc || !fAcc || (fType !== 'TRANSFER' && !fCat)) return; let amt = Math.abs(parseFloat(fAmount)); if (fType === 'EXPENSE' || fType === 'TRANSFER') amt = -amt; const cat = indices.cat.get(fCat); const tx: Transaction = { id: editingTx ? editingTx.id : generateId(), date: fDate, amount: amt, description: fDesc, accountId: fAcc, type: fType, categoryId: fCat, familyId: cat?.familyId || '', attachment: fAttachment, transferAccountId: fType === 'TRANSFER' ? fTransferDest : undefined }; if (editingTx) onUpdateTransaction(tx); else onAddTransaction(tx); setIsModalOpen(false); resetForm(); };
 
-  const formatDateDisplay = (dateStr: string) => { if (!dateStr) return '--/--'; const [y, m, d] = dateStr.split('-'); return `${d}/${m}`; };
+  const formatDateDisplay = (dateStr: string) => { if (!dateStr) return '--/--/--'; const [y, m, d] = dateStr.split('-'); return `${d}/${m}/${y.slice(-2)}`; };
   const formatCurrency = (amount: number) => `${numberFormatter.format(amount)} €`;
   const getAmountColor = (amount: number) => amount > 0 ? 'text-emerald-600' : amount < 0 ? 'text-rose-600' : 'text-slate-400';
   const renderIcon = (iconStr: string, className = "w-4 h-4") => { if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />; return <span className="text-xs">{iconStr || '📂'}</span>; }
@@ -342,7 +342,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   // Grid Config optimizado para mobile (Asiento Contable - Una línea y Importe al final)
   // Cols: Date | Debit | Concept | Clip | Credit | Actions | Amount (LAST)
-  const gridClasses = "grid grid-cols-[35px_1fr_1.2fr_12px_1fr_20px_55px] md:grid-cols-[90px_1fr_1.5fr_40px_1fr_40px_110px] gap-1 md:gap-4 items-center";
+  const gridClasses = "grid grid-cols-[52px_1fr_1.2fr_12px_1fr_20px_55px] md:grid-cols-[90px_1fr_1.5fr_40px_1fr_40px_110px] gap-1 md:gap-4 items-center";
 
   return (
     <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500">
