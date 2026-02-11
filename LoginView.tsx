@@ -43,15 +43,20 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         onLoginSuccess();
     };
 
+    const logoSrc = localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
+
     return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 md:p-10 font-sans">
             <div className="bg-white rounded-[2.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.06)] w-full max-w-lg overflow-hidden border border-slate-100 flex flex-col">
                 <div className="bg-slate-950 p-10 sm:p-12 text-center relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-full bg-indigo-600/10 mix-blend-overlay"></div>
                     <div className="relative z-10">
-                        <div className="mx-auto bg-indigo-600 w-20 h-20 rounded-3xl flex items-center justify-center mb-6 shadow-2xl shadow-indigo-600/30 rotate-3">
-                            <Wallet className="text-white" size={36} />
-                        </div>
+                        <img 
+                            src={logoSrc} 
+                            onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.parentElement?.insertAdjacentHTML('afterbegin', '<div class="mx-auto w-24 h-24 mb-6 text-white flex items-center justify-center bg-white/10 rounded-3xl"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></div>'); }}
+                            className="mx-auto w-24 h-24 mb-6 drop-shadow-2xl animate-in zoom-in duration-700 hover:scale-105 transition-transform rounded-3xl shadow-xl object-cover border-4 border-white/10 bg-white"
+                            alt="ContaMiki Logo"
+                        />
                         <h1 className="text-3xl font-black text-white tracking-tighter">ContaMiki</h1>
                         <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em] mt-3">Soberanía Financiera</p>
                     </div>

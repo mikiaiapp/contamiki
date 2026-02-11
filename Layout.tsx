@@ -54,6 +54,8 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
     { id: 'SETTINGS', label: 'Ajustes', icon: <Settings size={22} /> },
   ];
 
+  const logoSrc = localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
+
   const renderNavItem = (item: { id: View; label: string; icon: React.ReactNode; badge?: number }, isMobile = false) => (
     <button
       key={item.id}
@@ -83,8 +85,13 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
             onClick={() => setIsBookMenuOpen(!isBookMenuOpen)}
             className="flex items-center gap-3 px-3 py-2 rounded-2xl hover:bg-black/10 transition-all active:scale-95"
         >
-            <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm">
-                <Wallet className="text-white" size={20} />
+            <div className="bg-white/20 p-1.5 rounded-xl backdrop-blur-sm shadow-sm overflow-hidden flex items-center justify-center">
+                 <img 
+                    src={logoSrc} 
+                    className="w-6 h-6 object-cover" 
+                    alt="Logo" 
+                    onError={(e) => { e.currentTarget.src = "https://images.icon-icons.com/1850/PNG/512/accounting_116483.png"; }}
+                 />
             </div>
             <div className="text-left">
                 <span className="hidden sm:block text-[10px] uppercase tracking-widest text-white/60">Contabilidad</span>
@@ -176,6 +183,15 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         </nav>
 
         <div className="px-6 pb-6 space-y-2">
+          <div className="flex justify-center pb-6 opacity-70 hover:opacity-100 transition-opacity duration-500">
+             <img 
+                src={logoSrc} 
+                className="w-20 h-20 rounded-2xl shadow-2xl object-cover border-2 border-white/10 bg-white" 
+                alt="ContaMiki"
+                onError={(e) => { e.currentTarget.src = "https://images.icon-icons.com/1850/PNG/512/accounting_116483.png"; }}
+             />
+          </div>
+
           <div className="h-px bg-white/10 mx-4 mb-4" />
           
           <button 
