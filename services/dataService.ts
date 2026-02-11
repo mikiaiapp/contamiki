@@ -76,6 +76,45 @@ const sanitizeAppState = (data: any): AppState => {
     return sanitized;
 };
 
+// Reparar estados inconsistentes donde el currentBookId apunta a nada
+const validateAndRepairState = (state: MultiBookState): MultiBookState => {
+    if (!state.booksData || !state.booksMetadata) return createInitialMultiBookState();
+    
+    // 1. Si no hay libros definidos en metadata, resetear
+    if (state.booksMetadata.length === 0) return createInitialMultiBookState();
+
+    // 2. Verificar que el libro actual existe en metadata
+    const metaExists = state.booksMetadata.find(b => b.id === state.currentBookId);
+    
+    // 3. Verificar que hay datos para el libro actual
+    const dataExists = state.booksData[state.currentBookId];
+
+    if (!metaExists || !dataExists) {
+        console.warn("DataService: Estado inconsistente detectado (Libro desvinculado). Reparando...");
+        // Intentar recuperar el primer libro válido
+        const firstValidId = state.booksMetadata[0].id;
+        
+        // Si incluso el primer libro no tiene datos, inicializarlos
+        if (!state.booksData[firstValidId]) {
+            return {
+                ...state,
+                currentBookId: firstValidId,
+                booksData: {
+                    ...state.booksData,
+                    [firstValidId]: defaultAppState
+                }
+            };
+        }
+
+        return {
+            ...state,
+            currentBookId: firstValidId
+        };
+    }
+
+    return state;
+};
+
 export const loadData = async (): Promise<MultiBookState> => {
   const token = getToken();
   const username = getUsername();
@@ -92,30 +131,35 @@ export const loadData = async (): Promise<MultiBookState> => {
           throw new Error("Sesión expirada (401)");
       }
 
-      if (response.ok) {
-          rawData = await response.json();
-      } else {
-          throw new Error("SERVER_UNAVAILABLE");
+      if (!response.ok) {
+          // CRITICO: Si el servidor falla, LANZAMOS ERROR. 
+          // No hacemos fallback a localStorage para evitar que una versión vieja o vacía local
+          // sobrescriba los datos del servidor cuando vuelva a estar online.
+          throw new Error(`Error del servidor: ${response.status}`);
       }
+
+      rawData = await response.json();
   } catch (err) {
-      // Fallback a localStorage
-      const local = localStorage.getItem(DATA_KEY_PREFIX + username);
-      if (local) rawData = JSON.parse(local);
+      console.error("DataService: Error crítico cargando datos remotos.", err);
+      throw err; // Propagar error para que la UI muestre pantalla de reintento
   }
 
   // --- Lógica de Migración ---
+  let finalState: MultiBookState;
+
   if (!rawData || Object.keys(rawData).length === 0) {
-      return createInitialMultiBookState();
+      // Solo si el servidor devuelve explícitamente vacío (usuario nuevo)
+      finalState = createInitialMultiBookState();
+  } else if (rawData.booksMetadata && Array.isArray(rawData.booksMetadata)) {
+      // Formato nativo Multi-Libro
+      finalState = rawData as MultiBookState;
+  } else {
+      // Migración formato antiguo
+      console.log("Migrando datos antiguos a estructura Multi-Libro...");
+      finalState = createInitialMultiBookState(sanitizeAppState(rawData));
   }
 
-  // Detectar si es el formato nuevo (tiene booksMetadata)
-  if (rawData.booksMetadata && Array.isArray(rawData.booksMetadata)) {
-      return rawData as MultiBookState;
-  } 
-  
-  // Es formato antiguo (AppState plano), lo migramos
-  console.log("Migrando datos antiguos a estructura Multi-Libro...");
-  return createInitialMultiBookState(sanitizeAppState(rawData));
+  return validateAndRepairState(finalState);
 };
 
 export const saveData = async (state: MultiBookState) => {
@@ -123,7 +167,6 @@ export const saveData = async (state: MultiBookState) => {
   const username = getUsername();
   if (!token || !username) return;
 
-  // Intentar guardar en servidor
   try {
       const response = await fetch('/api/data', {
           method: 'POST',
@@ -134,9 +177,13 @@ export const saveData = async (state: MultiBookState) => {
           body: JSON.stringify(state)
       });
       
-      if (!response.ok) throw new Error("Server error");
-  } catch (e) {
-      // Guardar siempre en local como respaldo
+      if (!response.ok) throw new Error("Server error saving data");
+      
+      // Solo actualizamos el backup local si el guardado en servidor fue exitoso
       localStorage.setItem(DATA_KEY_PREFIX + username, JSON.stringify(state));
+  } catch (e) {
+      console.error("Error guardando datos:", e);
+      // No hacemos nada más. Si falla el guardado, la UI debería avisar (pendiente de implementación UX),
+      // pero NO debemos confiar ciegamente en localStorage como fuente de verdad en entorno Docker.
   }
 };

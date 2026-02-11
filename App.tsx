@@ -8,7 +8,7 @@ import { LoginView } from './LoginView';
 import { AppState, View, Transaction, GlobalFilter, MultiBookState, BookMetadata, BookColor } from './types';
 import { loadData, saveData, defaultAppState } from './services/dataService';
 import { isAuthenticated, logout } from './services/authService';
-import { X, Check } from 'lucide-react';
+import { X, Check, WifiOff, RefreshCw } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(isAuthenticated());
@@ -19,6 +19,8 @@ const App: React.FC = () => {
   });
   const [currentView, setCurrentView] = useState<View>('RESUMEN');
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null); // Nuevo estado de error
+  
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
   const [editingBookId, setEditingBookId] = useState<string | null>(null);
   const [tempBookName, setTempBookName] = useState('');
@@ -35,29 +37,38 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isLoggedIn) {
         setDataLoaded(false);
+        setLoadError(null);
         loadData()
             .then(fetchedData => {
                 setMultiState(fetchedData);
                 setDataLoaded(true);
             })
             .catch(err => {
-                if (err.message.includes('401') || err.message.includes('403')) logout();
-                else setDataLoaded(true);
+                console.error("App: Load Error caught", err);
+                if (err.message.includes('401') || err.message.includes('403')) {
+                    logout();
+                } else {
+                    // Mostrar pantalla de error y NO activar dataLoaded
+                    setLoadError(err.message || "Error de conexión");
+                }
             });
     }
   }, [isLoggedIn]);
 
   useEffect(() => {
-    if (isLoggedIn && dataLoaded) {
+    // CRITICO: Solo guardar si dataLoaded es true.
+    // Si hubo error de carga, dataLoaded será false, previniendo la sobreescritura.
+    if (isLoggedIn && dataLoaded && !loadError) {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = window.setTimeout(() => saveData(multiState), 1500);
     }
-  }, [multiState, dataLoaded, isLoggedIn]);
+  }, [multiState, dataLoaded, isLoggedIn, loadError]);
 
   const currentAppData = useMemo(() => {
       const bookId = multiState.currentBookId;
       const data = multiState.booksData[bookId];
-      if (!data) return defaultAppState;
+      // Si falla la integridad aquí, ya debería haber sido reparado por loadData
+      if (!data) return defaultAppState; 
       return data;
   }, [multiState]);
 
@@ -78,7 +89,7 @@ const App: React.FC = () => {
       const newBook: BookMetadata = {
           id: newId,
           name: name || 'Libro Importado',
-          color: 'BLUE', // Color por defecto
+          color: 'BLUE',
           currency: 'EUR'
       };
       
@@ -88,27 +99,21 @@ const App: React.FC = () => {
           booksData: { ...prev.booksData, [newId]: importData },
           currentBookId: newId
       }));
-      // Cambiar vista al dashboard para ver los nuevos datos
       setCurrentView('RESUMEN');
   };
 
   const handleDeleteBook = () => {
       setMultiState(prev => {
           if (prev.booksMetadata.length <= 1) {
-              // Si es el último libro, no lo borramos, lo reseteamos a valores por defecto
               const currentId = prev.currentBookId;
               return {
                   ...prev,
                   booksData: { ...prev.booksData, [currentId]: { ...defaultAppState, transactions: [], recurrents: [], favorites: [] } }
               };
           } else {
-              // Borrar libro y cambiar al siguiente
               const remainingBooks = prev.booksMetadata.filter(b => b.id !== prev.currentBookId);
               const newCurrentId = remainingBooks[0].id;
-              
-              // Crear nuevo objeto de datos sin la clave del libro borrado
               const { [prev.currentBookId]: deleted, ...remainingData } = prev.booksData;
-
               return {
                   ...prev,
                   booksMetadata: remainingBooks,
@@ -139,6 +144,28 @@ const App: React.FC = () => {
   };
 
   if (!isLoggedIn) return <LoginView onLoginSuccess={() => setIsLoggedIn(true)} />;
+  
+  // PANTALLA DE ERROR DE CONEXIÓN (Safe Mode)
+  if (loadError) return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-slate-950 text-white z-[999] p-6 text-center">
+          <div className="bg-rose-500/10 p-6 rounded-full mb-6 animate-pulse">
+              <WifiOff size={48} className="text-rose-500" />
+          </div>
+          <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Error de Conexión</h2>
+          <p className="text-slate-400 text-sm max-w-md mb-8">
+              No se han podido cargar los datos del servidor. Se ha detenido el sistema para proteger tus datos existentes.
+              <br/><br/>
+              <span className="text-xs font-mono bg-slate-900 p-1 rounded text-rose-400">{loadError}</span>
+          </p>
+          <button 
+              onClick={() => window.location.reload()} 
+              className="bg-white text-slate-900 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-indigo-500 hover:text-white transition-all flex items-center gap-3"
+          >
+              <RefreshCw size={16} /> Reintentar Conexión
+          </button>
+      </div>
+  );
+
   if (!dataLoaded) return <div className="fixed inset-0 flex flex-col items-center justify-center bg-slate-950 text-white z-[999]"><div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6"></div><p className="text-xs font-black uppercase tracking-[0.4em]">Cargando...</p></div>;
 
   return (
