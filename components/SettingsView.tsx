@@ -26,6 +26,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
   const [restoreFile, setRestoreFile] = useState<AppState | null>(null);
   const [restoreFileName, setRestoreFileName] = useState('');
   
+  // Delete State
+  const [yearToDelete, setYearToDelete] = useState<string>('');
+  
   const [webLogos, setWebLogos] = useState<{url: string, source: string}[]>([]);
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
   
@@ -73,6 +76,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
   const [favCat, setFavCat] = useState('');
   const [favIcon, setFavIcon] = useState('⭐');
 
+  // Computed
+  const availableYears = useMemo(() => {
+    const years = new Set(data.transactions.map(t => t.date.substring(0, 4)));
+    return Array.from(years).sort().reverse();
+  }, [data.transactions]);
+
   const resetForm = () => {
     setGrpId(null); setGrpName(''); setGrpIcon('🗂️');
     setAccId(null); setAccName(''); setAccBalance(''); setAccIcon('🏦'); setAccGroupId('');
@@ -83,6 +92,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
     setImportReport(null); setStructureReport(null); setPasteData('');
     setWebLogos([]);
     setRestoreFile(null); setRestoreFileName('');
+    setYearToDelete(availableYears[0] || '');
   };
 
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
@@ -122,6 +132,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
       };
       reader.readAsText(file);
       e.target.value = ''; // Reset input
+  };
+
+  const handleDeleteYear = () => {
+    if (!yearToDelete) return;
+    if (window.confirm(`¿Estás seguro de que quieres BORRAR TODOS los movimientos del año ${yearToDelete}? Esta acción no se puede deshacer.`)) {
+        const filtered = data.transactions.filter(t => !t.date.startsWith(yearToDelete));
+        onUpdateData({ transactions: filtered });
+        alert(`Se han eliminado los movimientos de ${yearToDelete}.`);
+    }
+  };
+
+  const handleDeleteAllTransactions = () => {
+    if (window.confirm("¡ATENCIÓN! Esto borrará TODO EL HISTORIAL DE MOVIMIENTOS del libro actual. Se mantendrán cuentas y categorías. ¿Estás seguro?")) {
+        onUpdateData({ transactions: [] });
+        alert("Historial de movimientos eliminado.");
+    }
+  };
+
+  const handleFactoryReset = () => {
+     if (window.confirm("¡PELIGRO! Esto borrará TODO el contenido de este libro (Cuentas, Categorías, Movimientos...). ¿Confirmar reseteo total?")) {
+         // Se pasa un objeto vacío o inicial para que el DataService o el App lo manejen, 
+         // pero como onUpdateData hace merge, pasamos arrays vacíos explícitos.
+         // Lo ideal sería un metodo 'resetBook' pero simularemos borrando listas.
+         onUpdateData({
+             transactions: [],
+             recurrents: [],
+             favorites: [],
+             // Mantener cuentas y categorias por defecto es más seguro que borrar todo a cero absoluto,
+             // pero si el usuario quiere factory reset:
+             // Dejaremos los defaults del AppState que se inyecten si están vacios, 
+             // o limpiamos manualmente.
+             accounts: [],
+             categories: [],
+             families: [],
+             accountGroups: []
+         });
+         alert("Libro reseteado a fábrica.");
+     }
   };
 
   const handleProcessImport = (rawData: string) => {
@@ -275,6 +323,57 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                         <div><h3 className="text-xl font-black text-slate-900 uppercase">Restaurar Copia</h3><p className="text-xs font-bold text-slate-400 mt-2">Importa datos desde un archivo .json previamente exportado.</p></div>
                         <button onClick={() => backupInputRef.current?.click()} className="w-full py-4 bg-white text-slate-900 border-2 border-slate-200 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-sm hover:border-indigo-500 hover:text-indigo-600 transition-all">Seleccionar Archivo</button>
                         <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={handleFileSelect} />
+                    </div>
+                </div>
+
+                {/* ZONA DE PELIGRO: Borrado */}
+                <div className="bg-rose-50 p-10 rounded-[3rem] border border-rose-100 space-y-6 text-center mt-8">
+                    <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-rose-600 shadow-sm"><Trash2 size={32}/></div>
+                    <div>
+                        <h3 className="text-xl font-black text-rose-900 uppercase">Zona de Peligro</h3>
+                        <p className="text-xs font-bold text-rose-400 mt-2">Acciones destructivas para la gestión del libro.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {/* 1. Borrar por Año */}
+                        <div className="p-6 bg-white rounded-[2rem] border border-rose-100 space-y-3 flex flex-col justify-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase">Borrar por Año</p>
+                            <div className="flex gap-2">
+                                <select 
+                                    className="w-full bg-slate-50 border border-slate-200 font-bold text-sm rounded-xl px-3 outline-none text-slate-700" 
+                                    value={yearToDelete} 
+                                    onChange={e => setYearToDelete(e.target.value)}
+                                >
+                                    <option value="" disabled>Año</option>
+                                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                                <button 
+                                    onClick={handleDeleteYear}
+                                    className="bg-rose-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase hover:bg-rose-700 shadow-lg disabled:opacity-50"
+                                    disabled={!yearToDelete}
+                                >
+                                    Borrar
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 2. Borrar Todos los Movimientos */}
+                        <button 
+                            onClick={handleDeleteAllTransactions} 
+                            className="p-6 bg-white rounded-[2rem] border border-rose-100 flex flex-col items-center justify-center gap-2 hover:border-rose-300 hover:shadow-lg transition-all group"
+                        >
+                            <AlertTriangle size={24} className="text-rose-400 group-hover:text-rose-600 mb-1"/>
+                            <span className="text-[10px] font-black text-rose-600 uppercase">Borrar TODOS los Movimientos</span>
+                        </button>
+
+                         {/* 3. Factory Reset */}
+                         <button 
+                            onClick={handleFactoryReset} 
+                            className="p-6 bg-rose-600 text-white rounded-[2rem] border border-rose-600 flex flex-col items-center justify-center gap-2 hover:bg-rose-700 hover:shadow-xl transition-all group"
+                        >
+                            <Trash2 size={24} className="text-white/80 group-hover:text-white mb-1"/>
+                            <span className="text-[10px] font-black text-white uppercase">Reset Total (Fábrica)</span>
+                        </button>
                     </div>
                 </div>
 
