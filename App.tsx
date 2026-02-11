@@ -23,6 +23,8 @@ const App: React.FC = () => {
   
   // Nuevo estado para la UI de Sync
   const [syncStatus, setSyncStatus] = useState<'SAVED' | 'SAVING' | 'ERROR'>('SAVED');
+  // Referencia para el último estado guardado (Dirty Checking)
+  const lastSavedState = useRef<string>('');
   
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
   const [editingBookId, setEditingBookId] = useState<string | null>(null);
@@ -44,6 +46,9 @@ const App: React.FC = () => {
         loadData()
             .then(fetchedData => {
                 setMultiState(fetchedData);
+                // Inicializamos el "estado base" con lo que viene del servidor.
+                // Esto evita que el Auto-Save se dispare nada más entrar.
+                lastSavedState.current = JSON.stringify(fetchedData);
                 setDataLoaded(true);
             })
             .catch(err => {
@@ -58,13 +63,25 @@ const App: React.FC = () => {
   }, [isLoggedIn]);
 
   useEffect(() => {
-    // CRITICO: Solo guardar si dataLoaded es true.
+    // CRITICO: Solo guardar si hay datos cargados, no hay error de carga
     if (isLoggedIn && dataLoaded && !loadError) {
+      const currentStateStr = JSON.stringify(multiState);
+      
+      // DIRTY CHECK: Si el estado actual es idéntico al último guardado, NO hacemos nada.
+      // Esto previene guardados infinitos al cargar, y guardados innecesarios al cambiar de vista.
+      if (currentStateStr === lastSavedState.current) {
+          return;
+      }
+
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      
       setSyncStatus('SAVING');
       saveTimeoutRef.current = window.setTimeout(() => {
         saveData(multiState)
-            .then(() => setSyncStatus('SAVED'))
+            .then(() => {
+                setSyncStatus('SAVED');
+                lastSavedState.current = currentStateStr; // Actualizamos la referencia de éxito
+            })
             .catch(() => setSyncStatus('ERROR'));
       }, 1500);
     }
@@ -73,7 +90,6 @@ const App: React.FC = () => {
   const currentAppData = useMemo(() => {
       const bookId = multiState.currentBookId;
       const data = multiState.booksData[bookId];
-      // Si falla la integridad aquí, ya debería haber sido reparado por loadData
       if (!data) return defaultAppState; 
       return data;
   }, [multiState]);
@@ -143,7 +159,13 @@ const App: React.FC = () => {
               return { ...prev, booksMetadata: prev.booksMetadata.map(b => b.id === editingBookId ? { ...b, name: tempBookName, color: tempBookColor } : b) };
           } else {
               const newId = Math.random().toString(36).substring(2, 15);
-              return { ...prev, booksMetadata: [...prev.booksMetadata, { id: newId, name: tempBookName, color: tempBookColor, currency: 'EUR' }], booksData: { ...prev.booksData, [newId]: { ...defaultAppState } }, currentBookId: newId };
+              // Inicializar explícitamente los datos del nuevo libro
+              return { 
+                  ...prev, 
+                  booksMetadata: [...prev.booksMetadata, { id: newId, name: tempBookName, color: tempBookColor, currency: 'EUR' }], 
+                  booksData: { ...prev.booksData, [newId]: JSON.parse(JSON.stringify(defaultAppState)) }, 
+                  currentBookId: newId 
+              };
           }
       });
       setIsBookModalOpen(false);
