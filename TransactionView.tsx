@@ -106,7 +106,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     }
   }, [initialSpecificFilters, indices, data.accounts]);
 
-  // Lógica de búsqueda de categoría sugerida para importación
   const findSuggestedCategory = (desc: string): string => {
     const text = desc.toLowerCase();
     const match = data.transactions.find(t => t.description.toLowerCase().includes(text));
@@ -259,8 +258,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     return sortDirection === 'ASC' ? <SortAsc size={8} className="text-indigo-600" /> : <SortDesc size={8} className="text-indigo-600" />;
   };
 
-  // Grid Config optimizado para seguir el formato: Fecha, Debe, Concepto, Clip, Haber e Importe
-  const gridClasses = "grid grid-cols-[45px_1fr_1.2fr_20px_1fr_75px_30px] md:grid-cols-[100px_1fr_1.5fr_40px_1fr_120px_90px] gap-1.5 md:gap-4 items-center";
+  // Grid Config optimizado para mobile (Asiento Contable - Una línea y Importe al final)
+  // Cols: Date | Debit | Concept | Clip | Credit | Actions | Amount (LAST)
+  const gridClasses = "grid grid-cols-[35px_1fr_1.2fr_12px_1fr_20px_55px] md:grid-cols-[90px_1fr_1.5fr_40px_1fr_40px_110px] gap-1 md:gap-4 items-center";
 
   return (
     <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500">
@@ -301,41 +301,40 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         </div>
       )}
 
-      {/* CABECERA DE FILTROS - FORMATO ASIENTO CONTABLE UNIFICADO */}
+      {/* CABECERA DE FILTROS - FORMATO ASIENTO CONTABLE */}
       <div className={`bg-slate-900/5 p-2 md:p-4 rounded-2xl border border-slate-100 ${gridClasses}`}>
           {/* 1. FECHA */}
-          <div className="flex flex-col">
+          <div className="flex flex-col items-center justify-center">
               <button onClick={() => { if(sortField==='DATE') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('DATE'); }} className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest inline-flex items-center gap-0.5">Fec <SortIcon field="DATE"/></button>
-              <span className="h-4"></span>
           </div>
           {/* 2. DEBE (Categoría Entrada) */}
           <div className="flex flex-col">
-              <span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Debe</span>
+              <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Debe</span>
               <select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)}><option value="ALL">...</option>{data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
           </div>
           {/* 3. CONCEPTO */}
           <div className="flex flex-col">
-              <span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Concepto</span>
+              <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Concepto</span>
               <input type="text" className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 px-1 md:px-2 outline-none" placeholder="..." value={colFilterDesc} onChange={e => setColFilterDesc(e.target.value)} />
           </div>
-          {/* 4. CLIP (Filtro Adjunto) */}
+          {/* 4. CLIP */}
           <div className="flex flex-col">
-              <span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Clip</span>
-              <select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none" value={colFilterClip} onChange={e => setColFilterClip(e.target.value as any)}><option value="ALL">...</option><option value="YES">SÍ</option><option value="NO">NO</option></select>
+              <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Clip</span>
+              <select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none" value={colFilterClip} onChange={e => setColFilterClip(e.target.value as any)}><option value="ALL">.</option><option value="YES">SI</option><option value="NO">NO</option></select>
           </div>
           {/* 5. HABER (Cuenta Salida) */}
           <div className="flex flex-col">
-              <span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Haber</span>
+              <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Haber</span>
               <select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}><option value="ALL">...</option>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
           </div>
-          {/* 6. IMPORTE (Último lugar en operativa mobile) */}
-          <div className="flex flex-col">
-              <button onClick={() => { if(sortField==='AMOUNT') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('AMOUNT'); }} className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-end gap-0.5">Imp <SortIcon field="AMOUNT"/></button>
-              <select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none" value={colFilterAmountOp} onChange={e => setColFilterAmountOp(e.target.value as any)}><option value="ALL">...</option><option value="GT">{">"}</option><option value="LT">{"<"}</option></select>
-          </div>
-          {/* 7. RESET / ACCIONES */}
+          {/* 6. RESET/ACCIONES */}
           <div className="flex justify-center">
               <button onClick={clearAllFilters} className="text-slate-300 hover:text-rose-500 transition-colors p-1"><Eraser size={14}/></button>
+          </div>
+          {/* 7. IMPORTE (Último lugar) */}
+          <div className="flex flex-col">
+              <button onClick={() => { if(sortField==='AMOUNT') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('AMOUNT'); }} className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-end gap-0.5">Imp <SortIcon field="AMOUNT"/></button>
+              <select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none text-right" value={colFilterAmountOp} onChange={e => setColFilterAmountOp(e.target.value as any)}><option value="ALL">...</option><option value="GT">{">"}</option><option value="LT">{"<"}</option></select>
           </div>
       </div>
 
@@ -376,21 +375,21 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
                     {/* 4. CLIP */}
                     <div className="flex justify-center">
-                        {t.attachment ? <Paperclip size={10} className="text-indigo-500 md:size-4"/> : <div className="w-2 md:w-4" />}
+                        {t.attachment ? <Paperclip size={10} className="text-indigo-500 md:size-4"/> : <div className="w-1 md:w-2" />}
                     </div>
 
                     {/* 5. HABER */}
                     <div className="min-w-0 text-[8px] md:text-sm">{creditNode}</div>
 
-                    {/* 6. IMPORTE (Último lugar) */}
-                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(t.amount)}`}>
-                        {formatCurrency(t.amount)}
+                    {/* 6. ACCIONES */}
+                    <div className="flex justify-end gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => openEditor(t)} className="p-0.5 md:p-1 text-slate-300 hover:text-indigo-600"><Edit3 size={12} className="size-3 md:size-5"/></button>
+                        <button onClick={() => setDeleteConfirmId(t.id)} className="p-0.5 md:p-1 text-slate-300 hover:text-rose-500"><Trash2 size={12} className="size-3 md:size-5"/></button>
                     </div>
 
-                    {/* 7. ACCIONES */}
-                    <div className="flex justify-end gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => openEditor(t)} className="p-0.5 md:p-1 text-slate-300 hover:text-indigo-600"><Edit3 size={14} className="size-3 md:size-5"/></button>
-                        <button onClick={() => setDeleteConfirmId(t.id)} className="p-0.5 md:p-1 text-slate-300 hover:text-rose-500"><Trash2 size={14} className="size-3 md:size-5"/></button>
+                    {/* 7. IMPORTE (Último lugar) */}
+                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(t.amount)}`}>
+                        {formatCurrency(t.amount)}
                     </div>
                 </div>
 
