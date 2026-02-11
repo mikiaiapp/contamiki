@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
 import { logout } from './services/authService';
@@ -39,6 +39,15 @@ const THEME_ACCENTS: Record<string, string> = {
 
 export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED', syncError, onManualSave }) => {
   const [isBookMenuOpen, setIsBookMenuOpen] = useState(false);
+  const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('contamiki_custom_logo'));
+
+  useEffect(() => {
+      const handleLogoChange = () => {
+          setCustomLogo(localStorage.getItem('contamiki_custom_logo'));
+      };
+      window.addEventListener('contamiki_logo_changed', handleLogoChange);
+      return () => window.removeEventListener('contamiki_logo_changed', handleLogoChange);
+  }, []);
 
   const pendingRecurrentsCount = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -53,6 +62,21 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
     { id: 'TRANSACTIONS', label: 'Movimientos', icon: <Receipt size={22} /> },
     { id: 'SETTINGS', label: 'Ajustes', icon: <Settings size={22} /> },
   ];
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+      const target = e.currentTarget;
+      const src = target.src;
+      // Estrategia de reintentos
+      if (src.endsWith('/contamiki.jpg')) {
+          target.src = '/ContaMiki.jpg'; // Probar CamelCase
+      } else if (src.endsWith('/ContaMiki.jpg')) {
+          target.src = '/contamiki.png'; // Probar PNG
+      } else if (src.endsWith('/contamiki.png')) {
+           target.src = '/logo.jpg'; // Probar genérico
+      } else {
+          target.src = "https://cdn-icons-png.flaticon.com/512/2910/2910296.png";
+      }
+  };
 
   const renderNavItem = (item: { id: View; label: string; icon: React.ReactNode; badge?: number }, isMobile = false) => (
     <button
@@ -85,9 +109,10 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         >
             <div className="bg-white/20 p-1.5 rounded-xl backdrop-blur-sm shadow-sm overflow-hidden flex items-center justify-center">
                  <img 
-                    src="/contamiki.jpg" 
+                    src={customLogo || "/contamiki.jpg"} 
                     className="w-6 h-6 object-cover" 
                     alt="Logo" 
+                    onError={customLogo ? undefined : handleImageError}
                  />
             </div>
             <div className="text-left">
@@ -182,9 +207,10 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         <div className="px-6 pb-6 space-y-2">
           <div className="flex justify-center pb-6 opacity-80 hover:opacity-100 transition-all duration-500">
              <img 
-                src="/contamiki.jpg" 
+                src={customLogo || "/contamiki.jpg"} 
                 className="w-40 h-40 rounded-3xl shadow-2xl object-cover border-4 border-white/10 bg-white" 
                 alt="ContaMiki"
+                onError={customLogo ? undefined : handleImageError}
              />
           </div>
 

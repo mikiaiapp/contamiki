@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar, Archive, RefreshCw, X, HardDriveDownload, HardDriveUpload, Bot, ShieldAlert, Monitor } from 'lucide-react';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar, Archive, RefreshCw, X, HardDriveDownload, HardDriveUpload, Bot, ShieldAlert, Monitor, Palette } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import * as XLSX from 'xlsx';
 
@@ -15,6 +15,38 @@ interface SettingsViewProps {
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
 const numberFormatter = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Utility para comprimir logo
+const compressLogo = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target?.result as string;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                // Limitamos tamaño para localStorage
+                const MAX_WIDTH = 512; 
+                let width = img.width;
+                let height = img.height;
+                
+                if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (err) => reject(err);
+    });
+};
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, onNavigateToTransactions, onCreateBookFromImport, onDeleteBook }) => {
   const [activeTab, setActiveTab] = useState('ACC_GROUPS');
@@ -38,10 +70,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
   const [webLogos, setWebLogos] = useState<{url: string, source: string}[]>([]);
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
   
+  // Custom Logo State
+  const [customLogoPreview, setCustomLogoPreview] = useState<string>(localStorage.getItem('contamiki_custom_logo') || '');
+
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
   const iconUploadRef = useRef<HTMLInputElement>(null);
+  const logoUploadRef = useRef<HTMLInputElement>(null);
 
   // Form States
   const [grpId, setGrpId] = useState<string | null>(null);
@@ -143,6 +179,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
       e.target.value = ''; // Reset input
   };
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+          const base64 = await compressLogo(file);
+          localStorage.setItem('contamiki_custom_logo', base64);
+          setCustomLogoPreview(base64);
+          // Disparar evento para que Layout y Login se actualicen
+          window.dispatchEvent(new Event('contamiki_logo_changed'));
+          alert("Logo actualizado correctamente.");
+      } catch (err) {
+          console.error(err);
+          alert("Error al procesar la imagen.");
+      }
+      e.target.value = '';
+  };
+
+  const handleRemoveLogo = () => {
+      localStorage.removeItem('contamiki_custom_logo');
+      setCustomLogoPreview('');
+      window.dispatchEvent(new Event('contamiki_logo_changed'));
+  };
+
   const openVerification = (type: 'YEAR' | 'ALL_TX' | 'BOOK', payload?: any) => {
       setVerificationModal({ type, payload });
       setVerificationInput('');
@@ -226,6 +285,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
             {id: 'CATEGORIES', label: 'Categorías', icon: <Tag size={16}/>},
             {id: 'RECURRENTS', label: 'Recurrentes', icon: <CalendarClock size={16}/>},
             {id: 'FAVORITES', label: 'Favoritos', icon: <Heart size={16}/>},
+            {id: 'UI', label: 'Interfaz', icon: <Palette size={16}/>},
             {id: 'DATA', label: 'Datos', icon: <HardDriveDownload size={16}/>},
             {id: 'TOOLS', label: 'Herramientas', icon: <DatabaseZap size={16}/>}
         ].map(t => (
@@ -236,7 +296,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
       </nav>
 
       <div className="max-w-4xl mx-auto">
-        {/* ... (SECCIONES ACC_GROUPS, ACCOUNTS, FAMILIES, CATEGORIES MANTENIDAS) ... */}
+        {/* ... (TABS EXISTENTES) ... */}
         {activeTab === 'ACC_GROUPS' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -267,6 +327,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
             </div>
         )}
 
+        {/* ... (OTRAS PESTAÑAS: ACCOUNTS, FAMILIES, CATEGORIES, RECURRENTS, FAVORITES SE MANTIENEN IGUAL) ... */}
         {activeTab === 'ACCOUNTS' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -323,7 +384,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
         )}
 
         {activeTab === 'FAMILIES' && (
-            <div className="grid grid-cols-1 gap-10">
+             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Layers className="text-indigo-600"/> {famId ? 'Editar Familia' : 'Nueva Familia'}</h3>
                     <div className="space-y-6">
@@ -480,7 +541,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
             </div>
         )}
 
-        {/* ... (RESTO DE TABS: FAVORITES, DATA, TOOLS, MODALS MANTENIDOS) ... */}
         {activeTab === 'FAVORITES' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -532,6 +592,54 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                             </div>
                         </div>
                     ))}
+                </div>
+            </div>
+        )}
+
+        {/* --- NUEVA PESTAÑA DE INTERFAZ (UI) --- */}
+        {activeTab === 'UI' && (
+            <div className="grid grid-cols-1 gap-10 animate-in fade-in slide-in-from-bottom-4">
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Palette className="text-indigo-600"/> Personalización Visual</h3>
+                    
+                    <div className="space-y-6">
+                        <div className="flex flex-col md:flex-row items-center gap-8">
+                            <div className="flex-shrink-0 text-center">
+                                <div className="w-32 h-32 bg-slate-50 border-4 border-white shadow-xl rounded-3xl flex items-center justify-center overflow-hidden mb-3">
+                                    <img 
+                                        src={customLogoPreview || '/contamiki.jpg'} 
+                                        className="w-full h-full object-cover" 
+                                        onError={(e) => e.currentTarget.src = "https://cdn-icons-png.flaticon.com/512/2910/2910296.png"}
+                                        alt="Logo Preview"
+                                    />
+                                </div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logo Actual</p>
+                            </div>
+                            
+                            <div className="flex-1 space-y-4 w-full">
+                                <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
+                                    <h4 className="text-sm font-black text-indigo-900 uppercase mb-2">Subir Logo Personalizado</h4>
+                                    <p className="text-xs text-indigo-600/80 mb-4">Sube una imagen para reemplazar el logo de ContaMiki. Se guardará localmente en este navegador.</p>
+                                    
+                                    <div className="flex gap-3">
+                                        <button onClick={() => logoUploadRef.current?.click()} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
+                                            <Upload size={14}/> Seleccionar Imagen
+                                        </button>
+                                        {customLogoPreview && (
+                                            <button onClick={handleRemoveLogo} className="px-6 py-3 bg-white text-rose-500 border border-rose-100 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-sm hover:bg-rose-50 transition-all flex items-center gap-2">
+                                                <Trash2 size={14}/> Restaurar Original
+                                            </button>
+                                        )}
+                                        <input type="file" ref={logoUploadRef} className="hidden" accept="image/*" onChange={handleLogoUpload} />
+                                    </div>
+                                </div>
+                                <div className="text-[10px] text-slate-400">
+                                    <p>• Recomendado: Imagen cuadrada (1:1), formato PNG o JPG.</p>
+                                    <p>• La imagen se redimensionará automáticamente para optimizar el rendimiento.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         )}

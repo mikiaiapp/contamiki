@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { login, register, loginAsGuest } from './services/authService';
 import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles } from 'lucide-react';
 
@@ -14,6 +14,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [loading, setLoading] = useState(false);
+    const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('contamiki_custom_logo'));
+
+    useEffect(() => {
+        const handleLogoChange = () => {
+            setCustomLogo(localStorage.getItem('contamiki_custom_logo'));
+        };
+        window.addEventListener('contamiki_logo_changed', handleLogoChange);
+        return () => window.removeEventListener('contamiki_logo_changed', handleLogoChange);
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -50,9 +59,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     <div className="absolute top-0 left-0 w-full h-full bg-indigo-600/10 mix-blend-overlay"></div>
                     <div className="relative z-10">
                         <img 
-                            src="/contamiki.jpg" 
+                            src={customLogo || "/contamiki.jpg"} 
                             className="mx-auto w-32 h-32 mb-6 drop-shadow-2xl animate-in zoom-in duration-700 hover:scale-105 transition-transform rounded-3xl shadow-xl object-cover border-4 border-white/10 bg-white"
                             alt="ContaMiki Logo"
+                            onError={(e) => {
+                                if (customLogo) return;
+                                const target = e.currentTarget;
+                                const src = target.src;
+                                // Estrategia de reintentos en cascada para encontrar el logo
+                                if (src.endsWith('/contamiki.jpg')) {
+                                    target.src = '/ContaMiki.jpg'; // Probar CamelCase
+                                } else if (src.endsWith('/ContaMiki.jpg')) {
+                                    target.src = '/contamiki.png'; // Probar PNG
+                                } else if (src.endsWith('/contamiki.png')) {
+                                     target.src = '/logo.jpg'; // Probar nombre genérico
+                                } else {
+                                    // Último recurso: icono genérico
+                                    target.src = "https://cdn-icons-png.flaticon.com/512/2910/2910296.png";
+                                }
+                            }}
                         />
                         <h1 className="text-3xl font-black text-white tracking-tighter">ContaMiki</h1>
                         <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em] mt-3">Soberanía Financiera</p>
