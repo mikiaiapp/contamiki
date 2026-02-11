@@ -84,34 +84,54 @@ const sanitizeAppState = (data: any): AppState => {
 
 // REPARACIÓN PROFUNDA: Asegura que todos los libros tengan datos válidos
 const validateAndRepairState = (state: MultiBookState): MultiBookState => {
-    if (!state || !state.booksData || !state.booksMetadata || !Array.isArray(state.booksMetadata)) {
-        return createInitialMultiBookState();
-    }
+    if (!state) return createInitialMultiBookState();
     
+    // Inicializar propiedades si faltan
+    if (!state.booksData) state.booksData = {};
+    if (!state.booksMetadata || !Array.isArray(state.booksMetadata)) state.booksMetadata = [];
+
+    // 1. RECONSTRUCCIÓN DE HUÉRFANOS (Critical Recovery)
+    // Si existen datos en `booksData` pero no están en `metadata`, los recreamos.
+    const dataKeys = Object.keys(state.booksData);
+    const metaIds = new Set(state.booksMetadata.map(b => b.id));
+    
+    dataKeys.forEach(dataId => {
+        if (!metaIds.has(dataId)) {
+            console.warn(`DataService: Recuperando libro huérfano ID ${dataId}`);
+            state.booksMetadata.push({
+                id: dataId,
+                name: `Libro Recuperado (${dataId.substring(0,4)})`,
+                color: 'VIOLET',
+                currency: 'EUR'
+            });
+        }
+    });
+
+    // 2. Si después de esto no hay libros, resetear todo
     if (state.booksMetadata.length === 0) return createInitialMultiBookState();
 
-    // Reparar CADA libro definido en metadata
+    // 3. Reparar CADA libro definido en metadata
     const repairedBooksData: Record<string, AppState> = {};
-    let hasChanges = false;
     
     state.booksMetadata.forEach(book => {
         const existingData = state.booksData[book.id];
-        // Si falta data o está incompleta, sanitizeAppState la rellena
         repairedBooksData[book.id] = sanitizeAppState(existingData);
-        if (!existingData) hasChanges = true;
     });
 
-    // Verificar libro actual
+    // 4. Verificar libro actual
     let currentId = state.currentBookId;
     const metaExists = state.booksMetadata.find(b => b.id === currentId);
 
     if (!metaExists) {
-        console.warn("DataService: Libro actual no existe. Reseteando al primero.");
-        currentId = state.booksMetadata[0].id;
-        hasChanges = true;
+        // Intentar recuperar el primer libro disponible
+        if (state.booksMetadata.length > 0) {
+            console.warn("DataService: Libro actual no existe. Reseteando al primero disponible.");
+            currentId = state.booksMetadata[0].id;
+        } else {
+             return createInitialMultiBookState();
+        }
     }
 
-    // Si hubo reparaciones, devolvemos nuevo objeto, si no, el original (para eficiencia de React)
     return {
         ...state,
         currentBookId: currentId,
@@ -149,11 +169,17 @@ export const loadData = async (): Promise<MultiBookState> => {
 
   if (!rawData || Object.keys(rawData).length === 0) {
       finalState = createInitialMultiBookState();
-  } else if (rawData.booksMetadata && Array.isArray(rawData.booksMetadata)) {
-      finalState = rawData as MultiBookState;
   } else {
-      console.log("Migrando datos antiguos a estructura Multi-Libro...");
-      finalState = createInitialMultiBookState(sanitizeAppState(rawData));
+      // Detección de formato Multi-Libro más permisiva
+      // Si tiene 'booksData' O 'booksMetadata', es Multi-Libro.
+      const isMultiBook = (rawData.booksMetadata && Array.isArray(rawData.booksMetadata)) || (rawData.booksData && typeof rawData.booksData === 'object');
+      
+      if (isMultiBook) {
+          finalState = rawData as MultiBookState;
+      } else {
+          console.log("Migrando datos antiguos a estructura Multi-Libro...");
+          finalState = createInitialMultiBookState(sanitizeAppState(rawData));
+      }
   }
 
   return validateAndRepairState(finalState);
@@ -164,10 +190,10 @@ export const saveData = async (state: MultiBookState) => {
   const username = getUsername();
   if (!token || !username) return;
 
-  // SOPORTE MODO GUEST/LOCAL: Evita errores 403/500 en logs
+  // SOPORTE MODO GUEST/LOCAL
   if (token.startsWith('guest_') || token.startsWith('local_')) {
       localStorage.setItem(DATA_KEY_PREFIX + username, JSON.stringify(state));
-      await new Promise(r => setTimeout(r, 400)); // Simular red
+      await new Promise(r => setTimeout(r, 400));
       return;
   }
 

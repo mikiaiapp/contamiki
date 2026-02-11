@@ -14,7 +14,6 @@ const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_master_key_conta_miki';
 
 // DEFINICIÓN DE DIRECTORIO DE DATOS ROBUSTA
-// Permite definir DATA_DIR externamente (Docker) o usa fallback relativo
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
@@ -99,10 +98,6 @@ app.get('/api/data', authenticateToken, async (req, res) => {
         const data = await fs.readFile(userFile, 'utf-8');
         res.json(JSON.parse(data));
     } catch (err) {
-        // SEGURIDAD CRÍTICA:
-        // Solo devolvemos objeto vacío si el archivo NO EXISTE (usuario nuevo).
-        // Si hay otro error (permisos, disco lleno, fallo de montaje), devolvemos 500
-        // para que el Frontend NO sobreescriba los datos existentes con un libro vacío.
         if (err.code === 'ENOENT') {
             console.log(`New user data file initialized for: ${req.user.username}`);
             res.json({}); 
@@ -116,7 +111,13 @@ app.get('/api/data', authenticateToken, async (req, res) => {
 app.post('/api/data', authenticateToken, async (req, res) => {
     try {
         const userFile = getUserDataFile(req.user.username);
-        await fs.writeFile(userFile, JSON.stringify(req.body, null, 2));
+        // ESCRITURA ATÓMICA: Escribir en .tmp y luego renombrar.
+        // Esto evita archivos corruptos si el contenedor muere durante la escritura.
+        const tempFile = `${userFile}.tmp`;
+        
+        await fs.writeFile(tempFile, JSON.stringify(req.body, null, 2));
+        await fs.rename(tempFile, userFile);
+        
         res.json({ success: true });
     } catch (err) { 
         console.error(`ERROR SAVING DATA for ${req.user.username}:`, err);
@@ -128,9 +129,7 @@ app.get('/api/config', authenticateToken, (req, res) => {
     res.json({ apiKey: process.env.API_KEY || '' });
 });
 
-// Wildcard optimizado para no capturar archivos inexistentes
 app.get('*', (req, res) => {
-    // Si la ruta parece un archivo (tiene extensión), devolvemos 404 real
     if (req.path.includes('.')) {
         return res.status(404).send('Not found');
     }

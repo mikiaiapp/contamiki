@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
 import { logout } from './services/authService';
 
@@ -14,7 +14,8 @@ interface LayoutProps {
   onSwitchBook: (bookId: string) => void;
   onCreateBook: () => void;
   onEditBook: () => void;
-  syncStatus?: 'SAVED' | 'SAVING' | 'ERROR'; // Nuevo prop para estado
+  syncStatus?: 'SAVED' | 'SAVING' | 'ERROR';
+  onManualSave?: () => void; // Nueva prop
 }
 
 const THEME_COLORS: Record<string, string> = {
@@ -35,7 +36,7 @@ const THEME_ACCENTS: Record<string, string> = {
     VIOLET: 'text-violet-200 hover:bg-white/10',
 };
 
-export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED' }) => {
+export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED', onManualSave }) => {
   const [isBookMenuOpen, setIsBookMenuOpen] = useState(false);
 
   const pendingRecurrentsCount = useMemo(() => {
@@ -134,12 +135,12 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
 
   const SyncIndicator = () => {
       if (syncStatus === 'SAVING') {
-          return <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-full text-white/80"><RefreshCw size={14} className="animate-spin"/><span className="text-[9px] font-black uppercase tracking-wider">Guardando...</span></div>;
+          return <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-full text-white/80 select-none"><RefreshCw size={14} className="animate-spin"/><span className="text-[9px] font-black uppercase tracking-wider">Guardando...</span></div>;
       }
       if (syncStatus === 'ERROR') {
-          return <div className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/20 text-white rounded-full border border-rose-500/50"><CloudOff size={14} /><span className="text-[9px] font-black uppercase tracking-wider">Error Sync</span></div>;
+          return <button onClick={onManualSave} className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/20 text-white rounded-full border border-rose-500/50 hover:bg-rose-500 hover:text-white transition-all active:scale-95"><CloudOff size={14} /><span className="text-[9px] font-black uppercase tracking-wider">Reintentar</span></button>;
       }
-      return <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full text-white/40"><Cloud size={14} /><span className="text-[9px] font-black uppercase tracking-wider">Guardado</span></div>;
+      return <button onClick={onManualSave} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/20 rounded-full text-white/40 hover:text-white transition-all active:scale-95" title="Forzar guardado"><Cloud size={14} /><span className="text-[9px] font-black uppercase tracking-wider">Guardado</span></button>;
   };
 
   return (

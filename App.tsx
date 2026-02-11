@@ -21,9 +21,7 @@ const App: React.FC = () => {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   
-  // Nuevo estado para la UI de Sync
   const [syncStatus, setSyncStatus] = useState<'SAVED' | 'SAVING' | 'ERROR'>('SAVED');
-  // Referencia para el último estado guardado (Dirty Checking)
   const lastSavedState = useRef<string>('');
   
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
@@ -46,8 +44,6 @@ const App: React.FC = () => {
         loadData()
             .then(fetchedData => {
                 setMultiState(fetchedData);
-                // Inicializamos el "estado base" con lo que viene del servidor.
-                // Esto evita que el Auto-Save se dispare nada más entrar.
                 lastSavedState.current = JSON.stringify(fetchedData);
                 setDataLoaded(true);
             })
@@ -62,28 +58,27 @@ const App: React.FC = () => {
     }
   }, [isLoggedIn]);
 
+  const performSave = async (stateToSave: MultiBookState) => {
+      setSyncStatus('SAVING');
+      try {
+          await saveData(stateToSave);
+          setSyncStatus('SAVED');
+          lastSavedState.current = JSON.stringify(stateToSave);
+      } catch (err) {
+          setSyncStatus('ERROR');
+          console.error(err);
+      }
+  };
+
   useEffect(() => {
-    // CRITICO: Solo guardar si hay datos cargados, no hay error de carga
     if (isLoggedIn && dataLoaded && !loadError) {
       const currentStateStr = JSON.stringify(multiState);
-      
-      // DIRTY CHECK: Si el estado actual es idéntico al último guardado, NO hacemos nada.
-      // Esto previene guardados infinitos al cargar, y guardados innecesarios al cambiar de vista.
-      if (currentStateStr === lastSavedState.current) {
-          return;
-      }
+      if (currentStateStr === lastSavedState.current) return;
 
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       
       setSyncStatus('SAVING');
-      saveTimeoutRef.current = window.setTimeout(() => {
-        saveData(multiState)
-            .then(() => {
-                setSyncStatus('SAVED');
-                lastSavedState.current = currentStateStr; // Actualizamos la referencia de éxito
-            })
-            .catch(() => setSyncStatus('ERROR'));
-      }, 1500);
+      saveTimeoutRef.current = window.setTimeout(() => performSave(multiState), 1500);
     }
   }, [multiState, dataLoaded, isLoggedIn, loadError]);
 
@@ -159,7 +154,6 @@ const App: React.FC = () => {
               return { ...prev, booksMetadata: prev.booksMetadata.map(b => b.id === editingBookId ? { ...b, name: tempBookName, color: tempBookColor } : b) };
           } else {
               const newId = Math.random().toString(36).substring(2, 15);
-              // Inicializar explícitamente los datos del nuevo libro
               return { 
                   ...prev, 
                   booksMetadata: [...prev.booksMetadata, { id: newId, name: tempBookName, color: tempBookColor, currency: 'EUR' }], 
@@ -206,6 +200,7 @@ const App: React.FC = () => {
         onCreateBook={() => { setEditingBookId(null); setTempBookName(''); setTempBookColor('BLACK'); setIsBookModalOpen(true); }}
         onEditBook={() => { setEditingBookId(currentBookMeta.id); setTempBookName(currentBookMeta.name); setTempBookColor(currentBookMeta.color); setIsBookModalOpen(true); }}
         syncStatus={syncStatus}
+        onManualSave={() => performSave(multiState)}
     >
       {currentView === 'RESUMEN' && (
         <Dashboard 
