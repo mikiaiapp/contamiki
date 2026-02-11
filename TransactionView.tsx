@@ -706,7 +706,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                         ))
                     ) : (
                         groupedCategories.map(f => (
-                            <optgroup key={f.family.id} label={`${f.family.icon} ${f.family.name}`}>
+                            <optgroup key={f.family.id} label={f.family.name}>
                                 {f.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </optgroup>
                         ))
