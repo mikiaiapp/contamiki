@@ -34,7 +34,6 @@ interface ProposedTransaction {
 const generateId = () => Math.random().toString(36).substring(2, 15);
 const numberFormatter = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// Fix: Destructure onUpdateData from props
 export const TransactionView: React.FC<TransactionViewProps> = ({ 
   data, 
   onAddTransaction, 
@@ -107,17 +106,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     }
   }, [initialSpecificFilters, indices, data.accounts]);
 
-  // --- LÓGICA DE SIMILITUD PARA CATEGORÍAS ---
+  // Lógica de búsqueda de categoría sugerida para importación
   const findSuggestedCategory = (desc: string): string => {
     const text = desc.toLowerCase();
-    // 1. Buscar coincidencias exactas o parciales en el historial
-    const match = data.transactions.find(t => t.description.toLowerCase().includes(text) || text.includes(t.description.toLowerCase()));
+    const match = data.transactions.find(t => t.description.toLowerCase().includes(text));
     if (match) return match.categoryId;
-    
-    // 2. Buscar por palabras clave en nombres de categorías
     const catMatch = data.categories.find(c => text.includes(c.name.toLowerCase()));
     if (catMatch) return catMatch.id;
-
     return '';
   };
 
@@ -125,18 +120,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     if (!rawData.trim()) return;
     const lines = rawData.split('\n').filter(l => l.trim());
     const props: ProposedTransaction[] = [];
-
     lines.forEach(line => {
       const parts = line.split(/[;\t,]/).map(p => p.trim());
       if (parts.length < 2) return;
-
-      const dateStr = parts[0]; // Asumimos primer campo es fecha
-      const concept = parts[1]; // Segundo es concepto
-      const amountStr = parts[parts.length - 1].replace(',', '.'); // Último suele ser importe
+      const dateStr = parts[0];
+      const concept = parts[1];
+      const amountStr = parts[parts.length - 1].replace(',', '.');
       const amount = parseFloat(amountStr);
-
       if (isNaN(amount)) return;
-
       props.push({
         id: generateId(),
         date: dateStr.includes('/') ? dateStr.split('/').reverse().join('-') : dateStr,
@@ -148,7 +139,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         isValidated: false
       });
     });
-
     setProposedTransactions(props);
     setImportStep(3);
   };
@@ -156,7 +146,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const handleFinalImport = () => {
     const validOnes = proposedTransactions.filter(p => !p.isValidated);
     if (validOnes.length === 0) { setIsImportModalOpen(false); return; }
-
     const newTxs: Transaction[] = validOnes.map(p => ({
       id: generateId(),
       date: p.date,
@@ -167,8 +156,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       categoryId: p.categoryId,
       familyId: indices.cat.get(p.categoryId)?.familyId || ''
     }));
-
-    // Inyectamos de golpe
     onUpdateData({ transactions: [...newTxs, ...data.transactions] });
     setIsImportModalOpen(false);
     resetForm();
@@ -262,15 +249,18 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const openEditor = (t?: Transaction) => { if (t) { setEditingTx(t); setFType(t.type); setFAmount(Math.abs(t.amount).toString()); setFDesc(t.description); setFDate(t.date); setFAcc(t.accountId); setFCat(t.categoryId); setFTransferDest(t.transferAccountId || ''); setFAttachment(t.attachment); } else resetForm(); setIsModalOpen(true); };
   const handleSave = () => { if (!fAmount || !fDesc || !fAcc || (fType !== 'TRANSFER' && !fCat)) return; let amt = Math.abs(parseFloat(fAmount)); if (fType === 'EXPENSE' || fType === 'TRANSFER') amt = -amt; const cat = indices.cat.get(fCat); const tx: Transaction = { id: editingTx ? editingTx.id : generateId(), date: fDate, amount: amt, description: fDesc, accountId: fAcc, type: fType, categoryId: fCat, familyId: cat?.familyId || '', attachment: fAttachment, transferAccountId: fType === 'TRANSFER' ? fTransferDest : undefined }; if (editingTx) onUpdateTransaction(tx); else onAddTransaction(tx); setIsModalOpen(false); resetForm(); };
 
-  const formatDateDisplay = (dateStr: string) => { if (!dateStr) return '--/--/--'; const [y, m, d] = dateStr.split('-'); return `${d}/${m}/${y.slice(-2)}`; };
+  const formatDateDisplay = (dateStr: string) => { if (!dateStr) return '--/--'; const [y, m, d] = dateStr.split('-'); return `${d}/${m}`; };
   const formatCurrency = (amount: number) => `${numberFormatter.format(amount)} €`;
   const getAmountColor = (amount: number) => amount > 0 ? 'text-emerald-600' : amount < 0 ? 'text-rose-600' : 'text-slate-400';
-  const renderIcon = (iconStr: string, className = "w-6 h-6") => { if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />; return <span className="text-sm">{iconStr || '📂'}</span>; }
+  const renderIcon = (iconStr: string, className = "w-4 h-4") => { if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />; return <span className="text-xs">{iconStr || '📂'}</span>; }
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <ArrowUpDown size={12} className="opacity-20" />;
-    return sortDirection === 'ASC' ? <SortAsc size={12} className="text-indigo-600" /> : <SortDesc size={12} className="text-indigo-600" />;
+    if (sortField !== field) return <ArrowUpDown size={8} className="opacity-40" />;
+    return sortDirection === 'ASC' ? <SortAsc size={8} className="text-indigo-600" /> : <SortDesc size={8} className="text-indigo-600" />;
   };
+
+  // Grid Config optimizado para seguir el formato: Fecha, Debe, Concepto, Clip, Haber e Importe
+  const gridClasses = "grid grid-cols-[45px_1fr_1.2fr_20px_1fr_75px_30px] md:grid-cols-[100px_1fr_1.5fr_40px_1fr_120px_90px] gap-1.5 md:gap-4 items-center";
 
   return (
     <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500">
@@ -280,25 +270,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
             <div className="flex items-center gap-1">
-              <button onClick={() => { const d = new Date(filter.referenceDate); d.setMonth(d.getMonth() - 1); onUpdateFilter({ ...filter, referenceDate: d }); }} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm"><ChevronLeft size={20} /></button>
-              <button onClick={() => { const d = new Date(filter.referenceDate); d.setMonth(d.getMonth() + 1); onUpdateFilter({ ...filter, referenceDate: d }); }} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm"><ChevronRight size={20} /></button>
-            </div>
-            <div className="flex gap-2 items-center">
-              {filter.timeRange === 'MONTH' && (
-                <div className="flex gap-2">
-                  <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs" value={filter.referenceDate.getFullYear()} onChange={e => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
-                    {Array.from({length: 10}, (_, i) => 2020 + i).map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                  <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs" value={filter.referenceDate.getMonth()} onChange={e => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
-                    {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map((m, i) => <option key={i} value={i}>{m}</option>)}
-                  </select>
-                </div>
-              )}
+              <button onClick={() => { const d = new Date(filter.referenceDate); d.setMonth(d.getMonth() - 1); onUpdateFilter({ ...filter, referenceDate: d }); }} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90"><ChevronLeft size={20} /></button>
+              <button onClick={() => { const d = new Date(filter.referenceDate); d.setMonth(d.getMonth() + 1); onUpdateFilter({ ...filter, referenceDate: d }); }} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90"><ChevronRight size={20} /></button>
             </div>
             <div className="flex gap-2">
               <button onClick={() => { setImportAccount(data.accounts[0]?.id || ''); setImportStep(1); setIsImportModalOpen(true); }} className="bg-indigo-50 text-indigo-600 border border-indigo-100 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm hover:bg-indigo-100"><Bot size={16} /></button>
               <button onClick={() => setShowFavoritesMenu(!showFavoritesMenu)} className="bg-white text-indigo-600 border border-slate-200 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm"><Heart size={16} /></button>
-              <button onClick={() => openEditor()} className="bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg"><Plus size={16} /> Nuevo</button>
+              <button onClick={() => openEditor()} className="bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg active:scale-95"><Plus size={16} /> Nuevo</button>
             </div>
           </div>
         </div>
@@ -311,7 +289,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
       {/* BARRA DE FILTROS ACTIVA */}
       {activeFiltersChips.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 p-3 px-6 bg-white rounded-[2rem] border border-slate-100 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 p-3 px-6 bg-white rounded-2xl border border-slate-100 shadow-sm">
           <span className="text-[9px] font-black text-slate-400 uppercase mr-2 flex items-center gap-1"><Filter size={12}/> Filtros:</span>
           {activeFiltersChips.map(c => (
             <div key={c.id} className="flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100">
@@ -323,117 +301,137 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         </div>
       )}
 
-      {/* OPERATIVA DE FILTROS RESPONSIVA (CABECERA) */}
-      <div className="bg-slate-50/50 p-4 lg:p-6 rounded-[2rem] lg:rounded-[2.5rem] border border-slate-100 shadow-sm grid grid-cols-2 md:grid-cols-4 lg:grid-cols-[100px_180px_1fr_60px_180px_180px_100px] gap-4 items-end">
-        <div className="space-y-2">
-          <button onClick={() => { if(sortField==='DATE') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('DATE'); }} className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1">Fecha <SortIcon field="DATE"/></button>
-        </div>
-        <div className="space-y-2">
-          <span className="text-[9px] font-black text-slate-400 uppercase">E/Cat</span>
-          <select className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold outline-none" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)}>
-            <option value="ALL">TODAS</option>
-            <optgroup label="Categorías">{data.categories.filter(c => activeFilterOptions.activeEntryIds.has(c.id)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
-            <optgroup label="Cuentas">{data.accounts.filter(a => activeFilterOptions.activeEntryIds.has(a.id)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</optgroup>
-          </select>
-        </div>
-        <div className="col-span-2 md:col-span-1 space-y-2">
-          <span className="text-[9px] font-black text-slate-400 uppercase">Concepto</span>
-          <input type="text" placeholder="Buscar..." className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold outline-none" value={colFilterDesc} onChange={e => setColFilterDesc(e.target.value)} />
-        </div>
-        <div className="hidden lg:block space-y-2">
-          <span className="text-[9px] font-black text-slate-400 uppercase text-center block">Clip</span>
-          <select className="w-full px-1 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold outline-none" value={colFilterClip} onChange={e => setColFilterClip(e.target.value as any)}><option value="ALL">...</option><option value="YES">SÍ</option><option value="NO">NO</option></select>
-        </div>
-        <div className="space-y-2">
-          <span className="text-[9px] font-black text-slate-400 uppercase">Cuenta</span>
-          <select className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold outline-none" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}>
-            <option value="ALL">TODAS</option>
-            <optgroup label="Cuentas">{data.accounts.filter(a => activeFilterOptions.activeExitIds.has(a.id)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</optgroup>
-            <optgroup label="Categorías">{data.categories.filter(c => activeFilterOptions.activeExitIds.has(c.id)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
-          </select>
-        </div>
-        <div className="space-y-2">
-          <button onClick={() => { if(sortField==='AMOUNT') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('AMOUNT'); }} className="text-[9px] font-black text-slate-400 uppercase flex items-center justify-end gap-1 w-full">Importe <SortIcon field="AMOUNT"/></button>
-          <div className="flex gap-1">
-            <select className="flex-1 px-1 py-2 bg-white border border-slate-200 rounded-xl text-[8px] font-black uppercase outline-none" value={colFilterAmountOp} onChange={e => setColFilterAmountOp(e.target.value as any)}><option value="ALL">...</option><option value="GT">{">"}</option><option value="LT">{"<"}</option></select>
-            {colFilterAmountOp !== 'ALL' && <input type="number" className="w-16 px-2 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold outline-none" value={colFilterAmountVal1} onChange={e => setColFilterAmountVal1(e.target.value)} />}
+      {/* CABECERA DE FILTROS - FORMATO ASIENTO CONTABLE UNIFICADO */}
+      <div className={`bg-slate-900/5 p-2 md:p-4 rounded-2xl border border-slate-100 ${gridClasses}`}>
+          {/* 1. FECHA */}
+          <div className="flex flex-col">
+              <button onClick={() => { if(sortField==='DATE') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('DATE'); }} className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest inline-flex items-center gap-0.5">Fec <SortIcon field="DATE"/></button>
+              <span className="h-4"></span>
           </div>
-        </div>
-        <div className="flex justify-center items-center pb-1 lg:pb-0">
-          <button onClick={clearAllFilters} className="p-2 text-slate-300 hover:text-rose-500"><Eraser size={18}/></button>
-        </div>
+          {/* 2. DEBE (Categoría Entrada) */}
+          <div className="flex flex-col">
+              <span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Debe</span>
+              <select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)}><option value="ALL">...</option>{data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+          </div>
+          {/* 3. CONCEPTO */}
+          <div className="flex flex-col">
+              <span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Concepto</span>
+              <input type="text" className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 px-1 md:px-2 outline-none" placeholder="..." value={colFilterDesc} onChange={e => setColFilterDesc(e.target.value)} />
+          </div>
+          {/* 4. CLIP (Filtro Adjunto) */}
+          <div className="flex flex-col">
+              <span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Clip</span>
+              <select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none" value={colFilterClip} onChange={e => setColFilterClip(e.target.value as any)}><option value="ALL">...</option><option value="YES">SÍ</option><option value="NO">NO</option></select>
+          </div>
+          {/* 5. HABER (Cuenta Salida) */}
+          <div className="flex flex-col">
+              <span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Haber</span>
+              <select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}><option value="ALL">...</option>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+          </div>
+          {/* 6. IMPORTE (Último lugar en operativa mobile) */}
+          <div className="flex flex-col">
+              <button onClick={() => { if(sortField==='AMOUNT') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('AMOUNT'); }} className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-end gap-0.5">Imp <SortIcon field="AMOUNT"/></button>
+              <select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none" value={colFilterAmountOp} onChange={e => setColFilterAmountOp(e.target.value as any)}><option value="ALL">...</option><option value="GT">{">"}</option><option value="LT">{"<"}</option></select>
+          </div>
+          {/* 7. RESET / ACCIONES */}
+          <div className="flex justify-center">
+              <button onClick={clearAllFilters} className="text-slate-300 hover:text-rose-500 transition-colors p-1"><Eraser size={14}/></button>
+          </div>
       </div>
 
-      {/* LISTA DE MOVIMIENTOS RESPONSIVA */}
-      <div className="space-y-3">
+      {/* LISTADO DE MOVIMIENTOS - ÚNICA LÍNEA RESPONSIVA */}
+      <div className="space-y-1.5 md:space-y-2.5">
         {paginatedTransactions.map(t => {
           const srcAcc = indices.acc.get(t.accountId);
           const dstAcc = t.transferAccountId ? indices.acc.get(t.transferAccountId) : null;
           const cat = indices.cat.get(t.categoryId);
-          let entryNode, exitNode;
+          
+          let debitNode, creditNode;
           if (t.type === 'TRANSFER') {
-            entryNode = <div onClick={() => setColFilterEntry(dstAcc?.id || 'ALL')} className="flex items-center gap-2 text-indigo-600 font-bold truncate cursor-pointer">{renderIcon(dstAcc?.icon || '🏦', "w-4 h-4")} {dstAcc?.name}</div>;
-            exitNode = <div onClick={() => setColFilterExit(srcAcc?.id || 'ALL')} className="flex items-center gap-2 text-slate-500 font-bold truncate cursor-pointer">{renderIcon(srcAcc?.icon || '🏦', "w-4 h-4")} {srcAcc?.name}</div>;
+            debitNode = <div className="flex items-center gap-1 text-indigo-600 font-bold truncate leading-none">{renderIcon(dstAcc?.icon || '🏦')} <span className="truncate">{dstAcc?.name}</span></div>;
+            creditNode = <div className="flex items-center gap-1 text-slate-500 font-bold truncate leading-none">{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
           } else if (t.type === 'INCOME') {
-            entryNode = <div onClick={() => setColFilterEntry(srcAcc?.id || 'ALL')} className="flex items-center gap-2 text-emerald-600 font-bold truncate cursor-pointer">{renderIcon(srcAcc?.icon || '🏦', "w-4 h-4")} {srcAcc?.name}</div>;
-            exitNode = <div onClick={() => setColFilterExit(cat?.id || 'ALL')} className="flex items-center gap-2 text-slate-400 italic truncate cursor-pointer">{cat ? renderIcon(cat.icon, "w-3 h-3") : <Tag size={12}/>} {cat?.name || 'S/C'}</div>;
+            debitNode = <div className="flex items-center gap-1 text-emerald-600 font-bold truncate leading-none">{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
+            creditNode = <div className="flex items-center gap-1 text-slate-400 italic truncate leading-none">{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name || 'S/C'}</span></div>;
           } else {
-            entryNode = <div onClick={() => setColFilterEntry(cat?.id || 'ALL')} className="flex items-center gap-2 text-rose-500 font-bold truncate cursor-pointer">{renderIcon(cat?.icon || '🏷️', "w-4 h-4")} {cat?.name}</div>;
-            exitNode = <div onClick={() => setColFilterExit(srcAcc?.id || 'ALL')} className="flex items-center gap-2 text-slate-500 font-bold truncate cursor-pointer">{renderIcon(srcAcc?.icon || '🏦', "w-4 h-4")} {srcAcc?.name}</div>;
+            debitNode = <div className="flex items-center gap-1 text-rose-500 font-bold truncate leading-none">{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name}</span></div>;
+            creditNode = <div className="flex items-center gap-1 text-slate-500 font-bold truncate leading-none">{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
           }
 
           return (
-            <div key={t.id} className="group bg-white p-4 lg:px-10 rounded-[1.5rem] lg:rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-xl transition-all relative overflow-hidden">
-              <div className="grid grid-cols-[80px_1fr_100px] lg:grid-cols-[100px_180px_1fr_60px_180px_180px_100px] items-center gap-4 lg:gap-6">
-                <div className="text-[10px] lg:text-[11px] font-black text-slate-400 uppercase tracking-tighter">{formatDateDisplay(t.date)}</div>
-                
-                <div className="flex flex-col lg:block min-w-0">
-                  <div className="text-[10px] lg:text-xs uppercase">{entryNode}</div>
-                  <div className="lg:hidden mt-1 flex items-center gap-2 min-w-0">
-                    <span onClick={() => setColFilterDesc(t.description)} className="text-xs font-black text-slate-800 truncate uppercase cursor-pointer hover:text-indigo-600">{t.description}</span>
-                    {t.attachment && <Paperclip size={10} className="text-indigo-400 flex-shrink-0"/>}
-                  </div>
-                  <div className="lg:hidden text-[10px] uppercase mt-0.5">{exitNode}</div>
+            <div key={t.id} className="group bg-white p-2 md:p-4 md:px-6 rounded-2xl border border-slate-100 hover:shadow-lg transition-all relative overflow-hidden">
+                <div className={gridClasses}>
+                    {/* 1. FECHA */}
+                    <div className="text-left text-[8px] md:text-sm font-black text-slate-400 uppercase tracking-tighter leading-none truncate">
+                        {formatDateDisplay(t.date)}
+                    </div>
+
+                    {/* 2. DEBE */}
+                    <div className="min-w-0 text-[8px] md:text-sm">{debitNode}</div>
+
+                    {/* 3. CONCEPTO */}
+                    <div className="min-w-0 text-[8px] md:text-sm font-bold text-slate-800 uppercase truncate leading-tight cursor-pointer hover:text-indigo-600" onClick={() => setColFilterDesc(t.description)}>
+                        {t.description}
+                    </div>
+
+                    {/* 4. CLIP */}
+                    <div className="flex justify-center">
+                        {t.attachment ? <Paperclip size={10} className="text-indigo-500 md:size-4"/> : <div className="w-2 md:w-4" />}
+                    </div>
+
+                    {/* 5. HABER */}
+                    <div className="min-w-0 text-[8px] md:text-sm">{creditNode}</div>
+
+                    {/* 6. IMPORTE (Último lugar) */}
+                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(t.amount)}`}>
+                        {formatCurrency(t.amount)}
+                    </div>
+
+                    {/* 7. ACCIONES */}
+                    <div className="flex justify-end gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => openEditor(t)} className="p-0.5 md:p-1 text-slate-300 hover:text-indigo-600"><Edit3 size={14} className="size-3 md:size-5"/></button>
+                        <button onClick={() => setDeleteConfirmId(t.id)} className="p-0.5 md:p-1 text-slate-300 hover:text-rose-500"><Trash2 size={14} className="size-3 md:size-5"/></button>
+                    </div>
                 </div>
 
-                <div className="hidden lg:block text-sm font-black text-slate-800 truncate uppercase tracking-tight cursor-pointer hover:text-indigo-600" onClick={() => setColFilterDesc(t.description)}>{t.description}</div>
-                
-                <div className="hidden lg:flex justify-center">
-                  {t.attachment ? <div className="bg-indigo-600 text-white p-2.5 rounded-xl shadow-lg"><Link2 size={18} /></div> : <div className="text-slate-100 p-2.5"><Link2Off size={18} /></div>}
-                </div>
-
-                <div className="hidden lg:block text-xs uppercase">{exitNode}</div>
-                
-                <div className={`text-right text-sm lg:text-xl font-black tracking-tighter ${getAmountColor(t.amount)}`}>
-                  {formatCurrency(t.amount)}
-                </div>
-
-                <div className="flex justify-center gap-1 lg:opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => openEditor(t)} className="p-2 lg:p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600"><Edit3 size={16}/></button>
-                  <button onClick={() => setDeleteConfirmId(t.id)} className="p-2 lg:p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600"><Trash2 size={16}/></button>
-                </div>
-              </div>
-
-              {deleteConfirmId === t.id && (
-                <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-10 flex items-center justify-center gap-6 animate-in zoom-in-95 p-4 text-center">
-                  <p className="text-[10px] font-black text-slate-900 uppercase">¿Borrar?</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => { onDeleteTransaction(t.id); setDeleteConfirmId(null); }} className="bg-rose-600 text-white px-4 py-2 rounded-xl font-black text-[9px] uppercase shadow-xl">Eliminar</button>
-                    <button onClick={() => setDeleteConfirmId(null)} className="bg-slate-100 text-slate-500 px-4 py-2 rounded-xl font-black text-[9px] uppercase">No</button>
-                  </div>
-                </div>
-              )}
+                {deleteConfirmId === t.id && (
+                    <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-10 flex items-center justify-center gap-4 animate-in zoom-in-95 p-4 text-center">
+                        <p className="text-[10px] md:text-sm font-black uppercase text-slate-900">¿Borrar?</p>
+                        <div className="flex gap-2">
+                            <button onClick={() => { onDeleteTransaction(t.id); setDeleteConfirmId(null); }} className="bg-rose-600 text-white px-3 py-1 md:px-5 md:py-2 rounded-xl font-black text-[9px] uppercase shadow-xl">Sí</button>
+                            <button onClick={() => setDeleteConfirmId(null)} className="bg-slate-100 text-slate-500 px-3 py-1 md:px-5 md:py-2 rounded-xl font-black text-[9px] uppercase">No</button>
+                        </div>
+                    </div>
+                )}
             </div>
           );
         })}
+        {totalItems === 0 && (
+            <div className="py-20 text-center space-y-4">
+                <div className="mx-auto w-16 h-16 bg-slate-50 rounded-3xl flex items-center justify-center text-slate-200"><Search size={32}/></div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sin apuntes en este periodo</p>
+                <button onClick={clearAllFilters} className="text-indigo-600 text-[10px] font-black uppercase underline">Limpiar filtros</button>
+            </div>
+        )}
       </div>
+
+      {/* PAGINACIÓN */}
+      {totalItems > itemsPerPage && itemsPerPage !== -1 && (
+          <div className="flex justify-between items-center bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+              <span className="text-[10px] md:text-xs font-black text-slate-400 uppercase">{totalItems} REGISTROS</span>
+              <div className="flex items-center gap-2">
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} className="p-2 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors"><ChevronLeft size={20}/></button>
+                  <span className="text-[10px] md:text-sm font-black">PÁG {currentPage} / {totalPages}</span>
+                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} className="p-2 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors"><ChevronRight size={20}/></button>
+              </div>
+          </div>
+      )}
 
       {/* MODAL IMPORTACIÓN INTELIGENTE */}
       {isImportModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[250] p-4 animate-in fade-in duration-500">
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-[250] p-4 animate-in fade-in duration-500">
           <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl p-8 lg:p-12 relative max-h-[90vh] flex flex-col border border-white/20">
             <button onClick={() => setIsImportModalOpen(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
-            
             <div className="flex items-center gap-4 mb-8 flex-none">
               <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Bot size={28} /></div>
               <div>
@@ -441,7 +439,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Mapeo inteligente de extractos</p>
               </div>
             </div>
-
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
               {importStep === 1 && (
                 <div className="space-y-8 animate-in slide-in-from-right-4">
@@ -453,7 +450,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                           <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">{renderIcon(acc.icon, "w-6 h-6")}</div>
                           <div>
                             <span className="block font-black text-slate-900 uppercase text-[11px]">{acc.name}</span>
-                            <span className="block text-[9px] font-bold text-slate-400 uppercase">Seleccionar esta cuenta</span>
                           </div>
                         </button>
                       ))}
@@ -461,79 +457,34 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                   </div>
                 </div>
               )}
-
               {importStep === 2 && (
                 <div className="space-y-8 animate-in slide-in-from-right-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-4">
-                      <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Opción A: Pegar Datos</label>
-                      <textarea className="w-full h-64 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-[11px] outline-none focus:border-indigo-500 transition-all shadow-inner" placeholder="Fecha; Concepto; Importe..." value={importRawText} onChange={e => setImportRawText(e.target.value)} />
-                      <button onClick={() => handleStartAnalysis(importRawText)} className="w-full py-6 bg-indigo-600 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-widest shadow-xl">Analizar Texto</button>
-                    </div>
-                    <div className="space-y-4">
-                      <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Opción B: Subir Archivo</label>
-                      <div onClick={() => importFileRef.current?.click()} className="h-64 border-4 border-dashed border-slate-100 rounded-[2rem] flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-indigo-50 transition-all group">
-                        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform"><FileSpreadsheet className="text-indigo-400" size={32}/></div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase text-center">CSV / Excel<br/><span className="text-indigo-600">Click para seleccionar</span></p>
-                        <input type="file" ref={importFileRef} className="hidden" onChange={e => {
-                          const file = e.target.files?.[0]; if(!file) return;
-                          const reader = new FileReader();
-                          reader.onload = ev => {
-                            const bstr = ev.target?.result;
-                            const wb = XLSX.read(bstr, { type: 'binary' });
-                            const dataJson = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }) as any[][];
-                            const lines = dataJson.map(row => row.join(';')).join('\n');
-                            handleStartAnalysis(lines);
-                          };
-                          reader.readAsBinaryString(file);
-                        }} />
-                      </div>
-                    </div>
-                  </div>
-                  <button onClick={() => setImportStep(1)} className="text-[10px] font-black text-slate-400 uppercase hover:text-rose-500">Volver a selección de cuenta</button>
+                  <textarea className="w-full h-64 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-[11px] outline-none focus:border-indigo-500 transition-all shadow-inner" placeholder="Fecha; Concepto; Importe..." value={importRawText} onChange={e => setImportRawText(e.target.value)} />
+                  <button onClick={() => handleStartAnalysis(importRawText)} className="w-full py-6 bg-indigo-600 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-widest shadow-xl">Analizar Texto</button>
                 </div>
               )}
-
               {importStep === 3 && (
                 <div className="space-y-6 animate-in zoom-in-95">
-                  <div className="flex justify-between items-center bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100">
-                    <div className="flex items-center gap-3">
-                      <Sparkles className="text-indigo-600" size={24}/>
-                      <span className="text-xs font-black text-slate-900 uppercase">Previsualización Inteligente</span>
-                    </div>
-                    <div className="text-[10px] font-black text-indigo-400 uppercase">{proposedTransactions.length} Movimientos propuestos</div>
-                  </div>
-                  
                   <div className="space-y-3">
                     {proposedTransactions.map(p => (
                       <div key={p.id} className={`bg-white p-4 lg:px-8 rounded-[1.5rem] border transition-all flex flex-col lg:flex-row items-center gap-4 ${p.isValidated ? 'opacity-40 grayscale pointer-events-none' : 'border-slate-100 hover:border-indigo-300 shadow-sm'}`}>
-                        <input type="date" className="bg-transparent font-bold text-[10px] text-slate-400 w-32 border-none p-0 outline-none" value={p.date} onChange={e => setProposedTransactions(prev => prev.map(x => x.id === p.id ? { ...x, date: e.target.value } : x))} />
-                        
+                        <span className="text-[10px] font-bold text-slate-400 w-32">{p.date}</span>
                         <div className="flex-1 flex flex-col lg:flex-row gap-4 items-center w-full">
-                          <input type="text" className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-2 text-xs font-black uppercase outline-none focus:ring-1 ring-indigo-200" value={p.description} onChange={e => setProposedTransactions(prev => prev.map(x => x.id === p.id ? { ...x, description: e.target.value } : x))} />
-                          
-                          <div className="w-full lg:w-48">
-                            <select className={`w-full bg-slate-50 border-none rounded-xl px-4 py-2 text-[10px] font-bold outline-none cursor-pointer ${!p.categoryId ? 'text-rose-500' : 'text-slate-700'}`} value={p.categoryId} onChange={e => setProposedTransactions(prev => prev.map(x => x.id === p.id ? { ...x, categoryId: e.target.value } : x))}>
-                              <option value="">¿Categoría?</option>
-                              {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                          </div>
-
-                          <div className="w-24">
-                             <input type="number" step="0.01" className={`w-full bg-transparent border-none text-right font-black text-lg outline-none ${getAmountColor(p.amount)}`} value={p.amount} onChange={e => setProposedTransactions(prev => prev.map(x => x.id === p.id ? { ...x, amount: parseFloat(e.target.value) || 0, type: parseFloat(e.target.value) < 0 ? 'EXPENSE' : 'INCOME' } : x))} />
-                          </div>
+                          <span className="flex-1 text-xs font-black uppercase truncate">{p.description}</span>
+                          <select className="bg-slate-50 border-none rounded-xl px-4 py-2 text-[10px] font-bold outline-none cursor-pointer" value={p.categoryId} onChange={e => setProposedTransactions(prev => prev.map(x => x.id === p.id ? { ...x, categoryId: e.target.value } : x))}>
+                            <option value="">¿Cat?</option>
+                            {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                          <span className={`w-24 text-right font-black text-lg ${getAmountColor(p.amount)}`}>{formatCurrency(p.amount)}</span>
                         </div>
-
                         <button onClick={() => setProposedTransactions(prev => prev.map(x => x.id === p.id ? { ...x, isValidated: !x.isValidated } : x))} className={`p-3 rounded-xl transition-all ${p.isValidated ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50'}`}>
                           <Check size={18} />
                         </button>
                       </div>
                     ))}
                   </div>
-
                   <div className="sticky bottom-0 bg-white pt-6 flex gap-4">
-                    <button onClick={() => setImportStep(2)} className="flex-1 py-6 bg-slate-100 text-slate-500 rounded-[2rem] font-black uppercase text-[11px] hover:bg-slate-200 transition-all">Descartar y Volver</button>
-                    <button onClick={handleFinalImport} className="flex-[2] py-6 bg-slate-950 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-widest shadow-2xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-3"><CheckCircle2 size={18}/> Validar todos los movimientos</button>
+                    <button onClick={handleFinalImport} className="w-full py-6 bg-slate-950 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all"><CheckCircle2 size={18}/> Validar Importación</button>
                   </div>
                 </div>
               )}
@@ -542,14 +493,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         </div>
       )}
 
-      {/* MODAL EDITOR NORMAL SE MANTIENE... */}
+      {/* MODAL EDITOR NORMAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500">
           <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-white/20">
             <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
             <div className="flex items-center gap-4 mb-10">
               <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Receipt size={28} /></div>
-              <div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">{editingTx ? 'Editar' : 'Nuevo'}</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Registro de Movimiento</p></div>
+              <div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">{editingTx ? 'Editar' : 'Nuevo'}</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Asiento Diario</p></div>
             </div>
             <div className="space-y-8">
               <div className="bg-slate-100 p-2 rounded-[1.5rem] flex gap-2">
@@ -581,23 +532,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </div>
-                {fType === 'TRANSFER' ? (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Destino</label>
-                    <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={fTransferDest} onChange={e => setFTransferDest(e.target.value)}>
-                      <option value="">Destino...</option>
-                      {data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label>
-                    <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={fCat} onChange={e => setFCat(e.target.value)}>
-                      <option value="">Seleccionar...</option>
-                      {data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">{fType === 'TRANSFER' ? 'Destino' : 'Categoría'}</label>
+                  <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={fType === 'TRANSFER' ? fTransferDest : fCat} onChange={e => fType === 'TRANSFER' ? setFTransferDest(e.target.value) : setFCat(e.target.value)}>
+                    <option value="">Seleccionar...</option>
+                    {fType === 'TRANSFER' ? data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>) : data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2"><Paperclip size={14} /> Adjunto</label>
@@ -609,7 +550,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                 </div>
                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={e => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = ev => setFAttachment(ev.target?.result as string); reader.readAsDataURL(file); }}} />
               </div>
-              <button onClick={handleSave} className="w-full py-7 bg-slate-950 text-white rounded-[2.5rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-indigo-600 transition-all mt-10">Guardar Movimiento</button>
+              <button onClick={handleSave} className="w-full py-7 bg-slate-950 text-white rounded-[2.5rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-indigo-600 active:scale-95 transition-all mt-10">Guardar Asiento Contable</button>
             </div>
           </div>
         </div>
