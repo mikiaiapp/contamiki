@@ -192,9 +192,14 @@ export const saveData = async (state: MultiBookState) => {
 
   // SOPORTE MODO GUEST/LOCAL
   if (token.startsWith('guest_') || token.startsWith('local_')) {
-      localStorage.setItem(DATA_KEY_PREFIX + username, JSON.stringify(state));
-      await new Promise(r => setTimeout(r, 400));
-      return;
+      try {
+          localStorage.setItem(DATA_KEY_PREFIX + username, JSON.stringify(state));
+          await new Promise(r => setTimeout(r, 400));
+          return;
+      } catch (e) {
+          console.error("LocalStorage Quota Exceeded for Guest", e);
+          throw new Error("Memoria llena. Borra adjuntos para guardar.");
+      }
   }
 
   try {
@@ -234,7 +239,14 @@ export const saveData = async (state: MultiBookState) => {
       }
       
       // Actualizamos backup local completo por seguridad
-      localStorage.setItem(DATA_KEY_PREFIX + username, JSON.stringify(state));
+      // IMPORTANTE: Envolvemos en try/catch para ignorar errores de 'QuotaExceeded'
+      // Si el servidor guardó bien, no queremos mostrar un error al usuario solo porque 
+      // la caché local está llena.
+      try {
+          localStorage.setItem(DATA_KEY_PREFIX + username, JSON.stringify(state));
+      } catch (storageError) {
+          console.warn("WARN: LocalStorage quota exceeded. Backup skipped, but Server Sync was SUCCESSFUL.");
+      }
   } catch (e) {
       console.error("Error guardando datos:", e);
       throw e;
