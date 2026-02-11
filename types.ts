@@ -59,6 +59,7 @@ export interface RecurrentMovement {
   interval: number;
   startDate: string;
   nextDueDate: string;
+  endDate?: string; // Fecha fin opcional
   active: boolean;
 }
 
@@ -124,4 +125,5 @@ export interface SettingsViewProps {
   onUpdateData: (newData: Partial<AppState>) => void;
   onNavigateToTransactions?: (filters: any) => void;
   onCreateBookFromImport?: (data: AppState, name: string) => void;
+  onDeleteBook?: () => void;
 }

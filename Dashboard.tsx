@@ -204,6 +204,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
   const handleProcessRecurrent = (r: RecurrentMovement) => {
     const nextDate = calculateNextDate(r.nextDueDate, r.frequency, r.interval);
+    let isActive = true;
+
+    // Verificar si ha superado la fecha final
+    if (r.endDate && nextDate > r.endDate) {
+        isActive = false;
+    }
+
     const newTx: Transaction = {
         id: Math.random().toString(36).substring(2, 15),
         date: r.nextDueDate,
@@ -217,7 +224,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         isFromRecurrence: r.id
     };
     onAddTransaction(newTx);
-    onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, nextDueDate: nextDate } : item) });
+    onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, nextDueDate: nextDate, active: isActive } : item) });
   };
 
   const calculateNextDate = (current: string, frequency: string, interval: number) => {
@@ -271,9 +278,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     </button>
 
                     {/* AÑO */}
-                    <div className={`px-4 py-2 rounded-xl transition-all flex items-center ${filter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>
+                    <div className={`px-5 py-3 rounded-xl transition-all flex items-center ${filter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>
                          {filter.timeRange === 'YEAR' ? (
-                            <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'YEAR', referenceDate: d}); }}>
+                            <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[60px]" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'YEAR', referenceDate: d}); }}>
                                 {years.map(y => <option key={y} value={y}>{y}</option>)}
                             </select>
                          ) : (
@@ -282,14 +289,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     </div>
 
                     {/* MES */}
-                    <div className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1 ${filter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>
+                    <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-1 ${filter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>
                         {filter.timeRange === 'MONTH' ? (
                             <div className="flex items-center gap-2">
-                                <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
+                                <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[80px]" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
                                     {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
                                 </select>
                                 <span className="text-slate-300 text-xs font-black">/</span>
-                                <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
+                                <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[70px]" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
                                     {years.map(y => <option key={y} value={y}>{y}</option>)}
                                 </select>
                             </div>
@@ -299,12 +306,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     </div>
 
                     {/* PERSONALIZADO */}
-                    <div className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${filter.timeRange === 'CUSTOM' ? 'bg-white shadow-sm' : ''}`}>
+                    <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-2 ${filter.timeRange === 'CUSTOM' ? 'bg-white shadow-sm' : ''}`}>
                         {filter.timeRange === 'CUSTOM' ? (
                             <div className="flex items-center gap-2">
-                                <input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-24 sm:w-28 cursor-pointer py-1" value={filter.customStart} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customStart: e.target.value})} />
+                                <input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-28 sm:w-32 cursor-pointer py-1" value={filter.customStart} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customStart: e.target.value})} />
                                 <span className="text-slate-300 text-[10px] font-black">➡</span>
-                                <input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-24 sm:w-28 cursor-pointer py-1" value={filter.customEnd} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customEnd: e.target.value})} />
+                                <input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-28 sm:w-32 cursor-pointer py-1" value={filter.customEnd} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customEnd: e.target.value})} />
                             </div>
                         ) : (
                             <button onClick={() => onUpdateFilter({...filter, timeRange: 'CUSTOM'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Pers.</button>

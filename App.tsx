@@ -93,6 +93,34 @@ const App: React.FC = () => {
       setCurrentView('RESUMEN');
   };
 
+  const handleDeleteBook = () => {
+      setMultiState(prev => {
+          if (prev.booksMetadata.length <= 1) {
+              // Si es el último libro, no lo borramos, lo reseteamos a valores por defecto
+              const currentId = prev.currentBookId;
+              return {
+                  ...prev,
+                  booksData: { ...prev.booksData, [currentId]: { ...defaultAppState, transactions: [], recurrents: [], favorites: [] } }
+              };
+          } else {
+              // Borrar libro y cambiar al siguiente
+              const remainingBooks = prev.booksMetadata.filter(b => b.id !== prev.currentBookId);
+              const newCurrentId = remainingBooks[0].id;
+              
+              // Crear nuevo objeto de datos sin la clave del libro borrado
+              const { [prev.currentBookId]: deleted, ...remainingData } = prev.booksData;
+
+              return {
+                  ...prev,
+                  booksMetadata: remainingBooks,
+                  currentBookId: newCurrentId,
+                  booksData: remainingData
+              };
+          }
+      });
+      setCurrentView('RESUMEN');
+  };
+
   const handleAddTransaction = (t: Transaction) => updateCurrentBookData({ transactions: [t, ...currentAppData.transactions] });
   const handleUpdateTransaction = (t: Transaction) => updateCurrentBookData({ transactions: currentAppData.transactions.map(tx => tx.id === t.id ? t : tx) });
   const handleDeleteTransaction = (id: string) => updateCurrentBookData({ transactions: currentAppData.transactions.filter(tx => tx.id !== id) });
@@ -154,6 +182,7 @@ const App: React.FC = () => {
           onUpdateData={updateCurrentBookData} 
           onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }}
           onCreateBookFromImport={handleCreateBookFromImport}
+          onDeleteBook={handleDeleteBook}
         />
       )}
       {currentView === 'AI_INSIGHTS' && <AIInsights data={currentAppData} />}
