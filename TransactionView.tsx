@@ -112,6 +112,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     return { acc, cat, fam, grp };
   }, [data.accounts, data.categories, data.families, data.accountGroups]);
 
+  // RESET PAGE ON FILTER CHANGE
+  useEffect(() => {
+      setCurrentPage(1);
+  }, [colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, colFilterAmountVal1, filter]);
+
   useEffect(() => {
     if (initialSpecificFilters) {
       if (initialSpecificFilters.action === 'NEW' && initialSpecificFilters.categoryId) {
@@ -507,22 +512,27 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           
           let debitNode, creditNode;
           let debitId = '', creditId = '';
+          
+          // Lógica de color unificada: Gasto=Rojo, Ingreso=Verde, Traspaso=Negro/Pizarra
+          let typeColorClass = 'text-slate-900'; // Default black/slate for Transfer
+          if (t.type === 'EXPENSE') typeColorClass = 'text-rose-600';
+          else if (t.type === 'INCOME') typeColorClass = 'text-emerald-600';
 
           if (t.type === 'TRANSFER') {
             debitId = t.transferAccountId || '';
             creditId = t.accountId;
-            debitNode = <div className="flex items-center gap-1 text-indigo-600 font-bold truncate leading-none cursor-pointer hover:underline" onClick={() => setColFilterEntry(debitId)}>{renderIcon(dstAcc?.icon || '🏦')} <span className="truncate">{dstAcc?.name}</span></div>;
-            creditNode = <div className="flex items-center gap-1 text-slate-500 font-bold truncate leading-none cursor-pointer hover:underline" onClick={() => setColFilterExit(creditId)}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
+            debitNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={() => setColFilterEntry(debitId)}>{renderIcon(dstAcc?.icon || '🏦')} <span className="truncate">{dstAcc?.name}</span></div>;
+            creditNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={() => setColFilterExit(creditId)}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
           } else if (t.type === 'INCOME') {
             debitId = t.accountId;
             creditId = t.categoryId;
-            debitNode = <div className="flex items-center gap-1 text-emerald-600 font-bold truncate leading-none cursor-pointer hover:underline" onClick={() => setColFilterEntry(debitId)}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
-            creditNode = <div className="flex items-center gap-1 text-slate-400 italic truncate leading-none cursor-pointer hover:underline" onClick={() => setColFilterExit(creditId)}>{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name || 'S/C'}</span></div>;
+            debitNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={() => setColFilterEntry(debitId)}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
+            creditNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={() => setColFilterExit(creditId)}>{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name || 'S/C'}</span></div>;
           } else {
             debitId = t.categoryId;
             creditId = t.accountId;
-            debitNode = <div className="flex items-center gap-1 text-rose-500 font-bold truncate leading-none cursor-pointer hover:underline" onClick={() => setColFilterEntry(debitId)}>{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name}</span></div>;
-            creditNode = <div className="flex items-center gap-1 text-slate-500 font-bold truncate leading-none cursor-pointer hover:underline" onClick={() => setColFilterExit(creditId)}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
+            debitNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={() => setColFilterEntry(debitId)}>{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name}</span></div>;
+            creditNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={() => setColFilterExit(creditId)}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
           }
 
           return (
@@ -569,17 +579,32 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         )}
       </div>
 
-      {/* PAGINACIÓN */}
-      {totalItems > itemsPerPage && itemsPerPage !== -1 && (
-          <div className="flex justify-between items-center bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
-              <span className="text-[10px] md:text-xs font-black text-slate-400 uppercase">{totalItems} REGISTROS</span>
+      {/* PAGINACIÓN Y SELECTOR DE ITEMS POR PÁGINA */}
+      <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-3xl border border-slate-100 shadow-sm gap-4">
+          <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase">Mostrar:</span>
+              <select 
+                  value={itemsPerPage} 
+                  onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-black rounded-lg py-1 px-2 outline-none cursor-pointer"
+              >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={-1}>Todos</option>
+              </select>
+              <span className="text-[10px] md:text-xs font-black text-slate-400 uppercase ml-2 border-l border-slate-200 pl-3">{totalItems} TOTAL</span>
+          </div>
+
+          {totalItems > itemsPerPage && itemsPerPage !== -1 && (
               <div className="flex items-center gap-2">
                   <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} className="p-2 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors"><ChevronLeft size={20}/></button>
                   <span className="text-[10px] md:text-sm font-black">PÁG {currentPage} / {totalPages}</span>
                   <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} className="p-2 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors"><ChevronRight size={20}/></button>
               </div>
-          </div>
-      )}
+          )}
+      </div>
 
       {/* MODAL EDITOR NORMAL */}
       {isModalOpen && (
