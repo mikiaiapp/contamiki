@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category, Family } from './types';
-import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown } from 'lucide-react';
+import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown, Calendar } from 'lucide-react';
 
 interface DashboardProps {
   data: AppState;
@@ -254,63 +254,64 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     </button>
                 )}
             </div>
+            
             <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
                 <div className="flex items-center gap-1">
                     <button onClick={() => navigatePeriod('prev')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={20} /></button>
                     <button onClick={() => navigatePeriod('next')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={20} /></button>
                 </div>
-                
-                <div className="flex gap-2 items-center flex-wrap justify-center">
-                    {filter.timeRange === 'CUSTOM' ? (
-                        <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border-2 border-indigo-100 shadow-sm animate-in fade-in zoom-in duration-200">
-                            <div className="flex flex-col px-2">
-                                <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Desde</span>
-                                <input 
-                                    type="date" 
-                                    className="text-xs font-bold outline-none text-slate-700 bg-transparent cursor-pointer"
-                                    value={filter.customStart}
-                                    onChange={(e) => onUpdateFilter({...filter, customStart: e.target.value})}
-                                />
-                            </div>
-                            <div className="w-px h-6 bg-slate-200"></div>
-                            <div className="flex flex-col px-2">
-                                <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Hasta</span>
-                                <input 
-                                    type="date" 
-                                    className="text-xs font-bold outline-none text-slate-700 bg-transparent cursor-pointer"
-                                    value={filter.customEnd}
-                                    onChange={(e) => onUpdateFilter({...filter, customEnd: e.target.value})}
-                                />
-                            </div>
-                        </div>
-                    ) : (
-                        <>
-                            {filter.timeRange !== 'ALL' && (
-                                <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
-                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
-                                </select>
-                            )}
-                            {filter.timeRange === 'MONTH' && (
-                                <select className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 shadow-sm cursor-pointer" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, referenceDate: d}); }}>
+
+                <div className="bg-slate-100 p-1 rounded-2xl flex flex-wrap gap-1 shadow-inner border border-slate-200/50">
+                    {/* TODO */}
+                    <button 
+                        onClick={() => onUpdateFilter({...filter, timeRange: 'ALL'})} 
+                        className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                        Todo
+                    </button>
+
+                    {/* AÑO */}
+                    <div className={`px-2 py-1 rounded-xl transition-all flex items-center ${filter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>
+                         {filter.timeRange === 'YEAR' ? (
+                            <select className="bg-transparent text-[10px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'YEAR', referenceDate: d}); }}>
+                                {years.map(y => <option key={y} value={y}>{y}</option>)}
+                            </select>
+                         ) : (
+                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'YEAR'})} className="px-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>
+                         )}
+                    </div>
+
+                    {/* MES */}
+                    <div className={`px-2 py-1 rounded-xl transition-all flex items-center gap-1 ${filter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>
+                        {filter.timeRange === 'MONTH' ? (
+                            <>
+                                <select className="bg-transparent text-[10px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
                                     {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
                                 </select>
-                            )}
-                        </>
-                    )}
+                                <span className="text-slate-300 text-[8px] font-black">/</span>
+                                <select className="bg-transparent text-[10px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
+                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            </>
+                        ) : (
+                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'MONTH'})} className="px-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Mes</button>
+                        )}
+                    </div>
+
+                    {/* PERSONALIZADO */}
+                    <div className={`px-2 py-1 rounded-xl transition-all flex items-center gap-2 ${filter.timeRange === 'CUSTOM' ? 'bg-white shadow-sm' : ''}`}>
+                        {filter.timeRange === 'CUSTOM' ? (
+                            <div className="flex items-center gap-2">
+                                <input type="date" className="bg-transparent text-[10px] font-bold text-slate-700 outline-none w-20 cursor-pointer" value={filter.customStart} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customStart: e.target.value})} />
+                                <span className="text-slate-300 text-[8px] font-black">➡</span>
+                                <input type="date" className="bg-transparent text-[10px] font-bold text-slate-700 outline-none w-20 cursor-pointer" value={filter.customEnd} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customEnd: e.target.value})} />
+                            </div>
+                        ) : (
+                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'CUSTOM'})} className="px-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Pers.</button>
+                        )}
+                    </div>
                 </div>
             </div>
-        </div>
-        <div className="bg-slate-100/80 p-1.5 rounded-2xl flex flex-wrap justify-center gap-1 shadow-inner border border-slate-200/50 w-full sm:w-fit mx-auto xl:mx-0">
-            {[
-                { id: 'ALL', label: 'Todo' },
-                { id: 'MONTH', label: 'Mes' },
-                { id: 'YEAR', label: 'Año' },
-                { id: 'CUSTOM', label: 'Pers' }
-            ].map((range) => (
-                <button key={range.id} onClick={() => onUpdateFilter({...filter, timeRange: range.id as any})} className={`flex-1 sm:flex-none px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === range.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                    {range.label}
-                </button>
-            ))}
         </div>
       </div>
 

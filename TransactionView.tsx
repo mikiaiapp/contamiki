@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, Category, Account } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Heart, Bot, Check, AlertTriangle, RefreshCw, Filter, Eraser, Calendar, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Link2, Link2Off, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, FileDown, FileSpreadsheet, Heart, Bot, Check, AlertTriangle, RefreshCw, Filter, Eraser, Calendar, Sparkles, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
@@ -324,19 +324,21 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const getAmountColor = (amount: number) => amount > 0 ? 'text-emerald-600' : amount < 0 ? 'text-rose-600' : 'text-slate-400';
   const renderIcon = (iconStr: string, className = "w-4 h-4") => { if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />; return <span className="text-xs">{iconStr || '📂'}</span>; }
   
-  const getFilterLabel = () => {
-    if (filter.timeRange === 'ALL') return 'Todo el Historial';
-    if (filter.timeRange === 'CUSTOM') return `${formatDateDisplay(filter.customStart)} - ${formatDateDisplay(filter.customEnd)}`;
-    const d = new Date(filter.referenceDate);
-    if (filter.timeRange === 'YEAR') return `Año ${d.getFullYear()}`;
-    const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-    return `${months[d.getMonth()]} ${d.getFullYear()}`;
-  };
-
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return <ArrowUpDown size={8} className="opacity-40" />;
     return sortDirection === 'ASC' ? <SortAsc size={8} className="text-indigo-600" /> : <SortDesc size={8} className="text-indigo-600" />;
   };
+
+  const navigatePeriod = (direction: 'prev' | 'next') => {
+    const newDate = new Date(filter.referenceDate);
+    const step = direction === 'next' ? 1 : -1;
+    if (filter.timeRange === 'MONTH') newDate.setMonth(newDate.getMonth() + step);
+    else if (filter.timeRange === 'YEAR') newDate.setFullYear(newDate.getFullYear() + step);
+    onUpdateFilter({ ...filter, referenceDate: newDate });
+  };
+
+  const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
+  const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
   // Grid Config optimizado para mobile (Asiento Contable - Una línea y Importe al final)
   // Cols: Date | Debit | Concept | Clip | Credit | Actions | Amount (LAST)
@@ -350,9 +352,61 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
             <div className="flex items-center gap-1">
-              <button onClick={() => { const d = new Date(filter.referenceDate); d.setMonth(d.getMonth() - 1); onUpdateFilter({ ...filter, referenceDate: d }); }} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90"><ChevronLeft size={20} /></button>
-              <button onClick={() => { const d = new Date(filter.referenceDate); d.setMonth(d.getMonth() + 1); onUpdateFilter({ ...filter, referenceDate: d }); }} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90"><ChevronRight size={20} /></button>
+              <button onClick={() => navigatePeriod('prev')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={20} /></button>
+              <button onClick={() => navigatePeriod('next')} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={20} /></button>
             </div>
+
+            <div className="bg-slate-100 p-1 rounded-2xl flex flex-wrap gap-1 shadow-inner border border-slate-200/50">
+                    {/* TODO */}
+                    <button 
+                        onClick={() => onUpdateFilter({...filter, timeRange: 'ALL'})} 
+                        className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                        Todo
+                    </button>
+
+                    {/* AÑO */}
+                    <div className={`px-2 py-1 rounded-xl transition-all flex items-center ${filter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>
+                         {filter.timeRange === 'YEAR' ? (
+                            <select className="bg-transparent text-[10px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'YEAR', referenceDate: d}); }}>
+                                {years.map(y => <option key={y} value={y}>{y}</option>)}
+                            </select>
+                         ) : (
+                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'YEAR'})} className="px-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>
+                         )}
+                    </div>
+
+                    {/* MES */}
+                    <div className={`px-2 py-1 rounded-xl transition-all flex items-center gap-1 ${filter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>
+                        {filter.timeRange === 'MONTH' ? (
+                            <>
+                                <select className="bg-transparent text-[10px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
+                                    {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                </select>
+                                <span className="text-slate-300 text-[8px] font-black">/</span>
+                                <select className="bg-transparent text-[10px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
+                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            </>
+                        ) : (
+                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'MONTH'})} className="px-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Mes</button>
+                        )}
+                    </div>
+
+                    {/* PERSONALIZADO */}
+                    <div className={`px-2 py-1 rounded-xl transition-all flex items-center gap-2 ${filter.timeRange === 'CUSTOM' ? 'bg-white shadow-sm' : ''}`}>
+                        {filter.timeRange === 'CUSTOM' ? (
+                            <div className="flex items-center gap-2">
+                                <input type="date" className="bg-transparent text-[10px] font-bold text-slate-700 outline-none w-20 cursor-pointer" value={filter.customStart} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customStart: e.target.value})} />
+                                <span className="text-slate-300 text-[8px] font-black">➡</span>
+                                <input type="date" className="bg-transparent text-[10px] font-bold text-slate-700 outline-none w-20 cursor-pointer" value={filter.customEnd} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customEnd: e.target.value})} />
+                            </div>
+                        ) : (
+                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'CUSTOM'})} className="px-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Pers.</button>
+                        )}
+                    </div>
+            </div>
+
             <div className="flex gap-2">
               <button onClick={() => { setImportAccount(data.accounts[0]?.id || ''); setImportStep(1); setIsImportModalOpen(true); }} className="bg-indigo-50 text-indigo-600 border border-indigo-100 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm hover:bg-indigo-100"><Bot size={16} /></button>
               <button onClick={() => setShowFavoritesMenu(!showFavoritesMenu)} className="bg-white text-indigo-600 border border-slate-200 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm"><Heart size={16} /></button>
@@ -360,19 +414,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
             </div>
           </div>
         </div>
-        <div className="bg-slate-100/80 p-1.5 rounded-2xl flex flex-wrap justify-center gap-1 shadow-inner border border-slate-200/50 w-full sm:w-fit">
-          {['ALL', 'MONTH', 'YEAR', 'CUSTOM'].map(r => (
-            <button key={r} onClick={() => onUpdateFilter({...filter, timeRange: r as any})} className={`flex-1 sm:flex-none px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === r ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>{r === 'ALL' ? 'Todo' : r === 'MONTH' ? 'Mes' : r === 'YEAR' ? 'Año' : 'Pers'}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* INDICADOR DE FILTRO TEMPORAL */}
-      <div className="flex justify-center -mb-4 relative z-10">
-          <div className="bg-white border border-slate-200 px-6 py-2 rounded-full shadow-sm text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
-            <Calendar size={12} className="text-indigo-500"/>
-            Viendo: <span className="text-slate-900">{getFilterLabel()}</span>
-          </div>
       </div>
 
       {/* BARRA DE FILTROS ACTIVA */}
