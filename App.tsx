@@ -74,6 +74,25 @@ const App: React.FC = () => {
       });
   };
 
+  const handleCreateBookFromImport = (importData: AppState, name: string) => {
+      const newId = Math.random().toString(36).substring(2, 15);
+      const newBook: BookMetadata = {
+          id: newId,
+          name: name || 'Libro Importado',
+          color: 'BLUE', // Color por defecto
+          currency: 'EUR'
+      };
+      
+      setMultiState(prev => ({
+          ...prev,
+          booksMetadata: [...prev.booksMetadata, newBook],
+          booksData: { ...prev.booksData, [newId]: importData },
+          currentBookId: newId
+      }));
+      // Cambiar vista al dashboard para ver los nuevos datos
+      setCurrentView('RESUMEN');
+  };
+
   const handleAddTransaction = (t: Transaction) => updateCurrentBookData({ transactions: [t, ...currentAppData.transactions] });
   const handleUpdateTransaction = (t: Transaction) => updateCurrentBookData({ transactions: currentAppData.transactions.map(tx => tx.id === t.id ? t : tx) });
   const handleDeleteTransaction = (id: string) => updateCurrentBookData({ transactions: currentAppData.transactions.filter(tx => tx.id !== id) });
@@ -134,6 +153,7 @@ const App: React.FC = () => {
           data={currentAppData} 
           onUpdateData={updateCurrentBookData} 
           onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }}
+          onCreateBookFromImport={handleCreateBookFromImport}
         />
       )}
       {currentView === 'AI_INSIGHTS' && <AIInsights data={currentAppData} />}

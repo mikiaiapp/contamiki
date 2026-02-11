@@ -118,3 +118,10 @@ export interface GlobalFilter {
   customStart: string;
   customEnd: string;
 }
+
+export interface SettingsViewProps {
+  data: AppState;
+  onUpdateData: (newData: Partial<AppState>) => void;
+  onNavigateToTransactions?: (filters: any) => void;
+  onCreateBookFromImport?: (data: AppState, name: string) => void;
+}

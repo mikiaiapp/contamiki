@@ -9,21 +9,22 @@ interface SettingsViewProps {
   data: AppState;
   onUpdateData: (newData: Partial<AppState>) => void;
   onNavigateToTransactions?: (filters: any) => void;
+  onCreateBookFromImport?: (data: AppState, name: string) => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
 const numberFormatter = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, onNavigateToTransactions }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, onNavigateToTransactions, onCreateBookFromImport }) => {
   const [activeTab, setActiveTab] = useState('ACC_GROUPS');
   const [importType, setImportType] = useState<'GROUPS' | 'ACCOUNTS' | 'FAMILIES' | 'CATEGORIES' | 'TRANSACTIONS' | 'TRANSFER'>('TRANSACTIONS');
   const [pasteData, setPasteData] = useState('');
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [structureReport, setStructureReport] = useState<{ added: number, type: string } | null>(null);
-  const [massDeleteYear, setMassDeleteYear] = useState('');
   
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [restoreReport, setRestoreReport] = useState<string | null>(null);
+  // Backup State
+  const [restoreFile, setRestoreFile] = useState<AppState | null>(null);
+  const [restoreFileName, setRestoreFileName] = useState('');
   
   const [webLogos, setWebLogos] = useState<{url: string, source: string}[]>([]);
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
@@ -81,7 +82,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
     setFavId(null); setFavName(''); setFavDesc(''); setFavAmount(''); setFavType('EXPENSE'); setFavAcc(data.accounts[0]?.id || ''); setFavCat(''); setFavIcon('⭐');
     setImportReport(null); setStructureReport(null); setPasteData('');
     setWebLogos([]);
-    setRestoreReport(null);
+    setRestoreFile(null); setRestoreFileName('');
   };
 
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
@@ -89,6 +90,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
     if (iconStr.startsWith('http') || iconStr.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
     return <span className="text-xl">{iconStr}</span>;
   }
+
+  const handleExportBackup = () => {
+      const jsonString = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `backup_contamiki_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+          try {
+              const content = JSON.parse(ev.target?.result as string);
+              if (content.transactions && Array.isArray(content.transactions)) {
+                  setRestoreFile(content);
+                  setRestoreFileName(file.name.replace('.json', ''));
+              } else {
+                  alert("El archivo no parece una copia de seguridad válida de ContaMiki.");
+              }
+          } catch (err) {
+              alert("Error al leer el archivo JSON.");
+          }
+      };
+      reader.readAsText(file);
+      e.target.value = ''; // Reset input
+  };
 
   const handleProcessImport = (rawData: string) => {
     if (!rawData.trim()) return;
@@ -199,6 +233,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
             {id: 'CATEGORIES', label: 'Categorías', icon: <Tag size={16}/>},
             {id: 'RECURRENTS', label: 'Recurrentes', icon: <CalendarClock size={16}/>},
             {id: 'FAVORITES', label: 'Favoritos', icon: <Heart size={16}/>},
+            {id: 'DATA', label: 'Datos', icon: <HardDriveDownload size={16}/>},
             {id: 'TOOLS', label: 'Herramientas', icon: <DatabaseZap size={16}/>}
         ].map(t => (
             <button key={t.id} className={`flex-1 flex items-center justify-center gap-2 px-6 py-3.5 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => { setActiveTab(t.id); resetForm(); }}>
@@ -224,7 +259,76 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
             </div>
         )}
 
-        {/* ... (Las demás pestañas se mantienen igual, simplificando TOOLS para añadir Smart Import) ... */}
+        {/* ... (Otras pestañas se omiten en la diff si no cambian) ... */}
+
+        {activeTab === 'DATA' && (
+            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="bg-indigo-50 p-10 rounded-[3rem] border border-indigo-100 space-y-6 text-center">
+                        <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm"><HardDriveDownload size={32}/></div>
+                        <div><h3 className="text-xl font-black text-indigo-900 uppercase">Exportar Datos</h3><p className="text-xs font-bold text-indigo-400 mt-2">Guarda una copia de seguridad completa del libro actual en tu dispositivo.</p></div>
+                        <button onClick={handleExportBackup} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-700 transition-all">Descargar JSON</button>
+                    </div>
+
+                    <div className="bg-slate-50 p-10 rounded-[3rem] border border-slate-100 space-y-6 text-center">
+                        <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-slate-600 shadow-sm"><HardDriveUpload size={32}/></div>
+                        <div><h3 className="text-xl font-black text-slate-900 uppercase">Restaurar Copia</h3><p className="text-xs font-bold text-slate-400 mt-2">Importa datos desde un archivo .json previamente exportado.</p></div>
+                        <button onClick={() => backupInputRef.current?.click()} className="w-full py-4 bg-white text-slate-900 border-2 border-slate-200 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-sm hover:border-indigo-500 hover:text-indigo-600 transition-all">Seleccionar Archivo</button>
+                        <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={handleFileSelect} />
+                    </div>
+                </div>
+
+                {restoreFile && (
+                    <div className="bg-white p-10 rounded-[3rem] border-2 border-indigo-100 shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-8 opacity-5"><Archive size={160}/></div>
+                        <div className="relative z-10 space-y-8">
+                             <div className="flex items-center gap-4">
+                                <div className="bg-emerald-100 text-emerald-600 p-3 rounded-2xl"><CheckCircle2 size={24}/></div>
+                                <div><h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Archivo Cargado</h3><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{restoreFileName}</p></div>
+                             </div>
+                             
+                             <div className="bg-slate-50 rounded-2xl p-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                 <div><p className="text-[10px] font-black text-slate-400 uppercase">Movimientos</p><p className="text-xl font-black text-slate-800">{restoreFile.transactions?.length || 0}</p></div>
+                                 <div><p className="text-[10px] font-black text-slate-400 uppercase">Cuentas</p><p className="text-xl font-black text-slate-800">{restoreFile.accounts?.length || 0}</p></div>
+                                 <div><p className="text-[10px] font-black text-slate-400 uppercase">Familias</p><p className="text-xl font-black text-slate-800">{restoreFile.families?.length || 0}</p></div>
+                                 <div><p className="text-[10px] font-black text-slate-400 uppercase">Categorías</p><p className="text-xl font-black text-slate-800">{restoreFile.categories?.length || 0}</p></div>
+                             </div>
+
+                             <div className="space-y-3 pt-4">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mb-2">¿Cómo deseas proceder?</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <button 
+                                        onClick={() => { 
+                                            if(window.confirm('¿Estás seguro? Esto borrará todos los datos del libro actual.')) { 
+                                                onUpdateData(restoreFile); 
+                                                alert('Datos restaurados correctamente en el libro actual.'); 
+                                                resetForm(); 
+                                            } 
+                                        }} 
+                                        className="py-5 bg-white border-2 border-slate-200 text-slate-600 rounded-2xl font-black uppercase text-[11px] hover:border-rose-500 hover:text-rose-500 transition-all"
+                                    >
+                                        Sobrescribir Libro Actual
+                                    </button>
+                                    <button 
+                                        onClick={() => { 
+                                            if(onCreateBookFromImport) {
+                                                onCreateBookFromImport(restoreFile, restoreFileName || 'Importado');
+                                                alert('Se ha creado un nuevo libro con los datos importados.');
+                                                resetForm();
+                                            }
+                                        }} 
+                                        className="py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] shadow-xl hover:bg-indigo-700 transition-all"
+                                    >
+                                        Crear como Nuevo Libro
+                                    </button>
+                                </div>
+                             </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
+
         {activeTab === 'TOOLS' && (
             <div className="space-y-12">
                 <div className="bg-indigo-600 p-10 rounded-[3rem] text-white space-y-8 shadow-2xl relative overflow-hidden group">
