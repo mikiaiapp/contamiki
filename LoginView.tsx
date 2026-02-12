@@ -73,8 +73,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         setError('');
         setSuccessMsg('');
         
-        // Validar formato email siempre
-        if (!validateEmail(email)) {
+        // Validar formato email SOLO si NO estamos en reset password (ya que ahí el input está oculto)
+        if (mode !== 'RESET_PASSWORD' && !validateEmail(email)) {
             setError("Por favor introduce un email válido.");
             return;
         }
