@@ -15,7 +15,7 @@ services:
       - /volume1/docker/contamiki/data:/app/data
     # Comando: Reconstruye el frontend (bundle.js) y luego arranca el servidor cada vez que se reinicia
     #command: sh -c "npm run build && npm start"
-    environment:
+#    environment:
       # Tu API Key de Google Gemini
       #- API_KEY=AIzaSyByt2qp5UYhL-bhf1me82AM81PEJ7MJyYE
       # Clave secreta para las sesiones (Cámbiala por seguridad)
