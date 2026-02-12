@@ -165,8 +165,19 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
          setImportStep(1);
          setIsImportModalOpen(true);
       } else {
-          if (initialSpecificFilters.filterCategory) setColFilterEntry(initialSpecificFilters.filterCategory);
-          if (initialSpecificFilters.filterAccount) setColFilterExit(initialSpecificFilters.filterAccount);
+          // Lógica Mejorada: Si venimos filtrando por categoría o cuenta, aplicamos el filtro en AMBAS columnas.
+          // Junto con la lógica "OR" del filtrado, esto mostrará ingresos y gastos relacionados.
+          if (initialSpecificFilters.filterCategory) {
+              setColFilterEntry(initialSpecificFilters.filterCategory);
+              setColFilterExit(initialSpecificFilters.filterCategory);
+          } else if (initialSpecificFilters.filterAccount) {
+              setColFilterEntry(initialSpecificFilters.filterAccount);
+              setColFilterExit(initialSpecificFilters.filterAccount);
+          } else {
+              // Fallback por si acaso
+              if (initialSpecificFilters.filterCategory) setColFilterEntry(initialSpecificFilters.filterCategory);
+              if (initialSpecificFilters.filterAccount) setColFilterExit(initialSpecificFilters.filterAccount);
+          }
       }
       if (clearSpecificFilters) clearSpecificFilters();
     }
@@ -297,20 +308,33 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     const descPattern = colFilterDesc.trim().toLowerCase();
     const v1 = parseFloat(colFilterAmountVal1);
     return timeFilteredList.filter(t => {
-      if (colFilterEntry !== 'ALL') {
-        let match = false;
-        if (t.type === 'EXPENSE' && t.categoryId === colFilterEntry) match = true;
-        else if (t.type === 'INCOME' && t.accountId === colFilterEntry) match = true;
-        else if (t.type === 'TRANSFER' && t.transferAccountId === colFilterEntry) match = true;
-        if (!match) return false;
+      // LOGICA DE COLUMNAS DEBE / HABER EN MODO "OR"
+      const hasEntryFilter = colFilterEntry !== 'ALL';
+      const hasExitFilter = colFilterExit !== 'ALL';
+
+      // Si hay algún filtro de columna activo, evaluamos.
+      if (hasEntryFilter || hasExitFilter) {
+          let matchEntry = false;
+          let matchExit = false;
+
+          if (hasEntryFilter) {
+             if (t.type === 'EXPENSE' && t.categoryId === colFilterEntry) matchEntry = true;
+             else if (t.type === 'INCOME' && t.accountId === colFilterEntry) matchEntry = true;
+             else if (t.type === 'TRANSFER' && t.transferAccountId === colFilterEntry) matchEntry = true;
+          }
+
+          if (hasExitFilter) {
+             if (t.type === 'EXPENSE' && t.accountId === colFilterExit) matchExit = true;
+             else if (t.type === 'INCOME' && t.categoryId === colFilterExit) matchExit = true;
+             else if (t.type === 'TRANSFER' && t.accountId === colFilterExit) matchExit = true;
+          }
+
+          // La lógica es OR: Debe coincidir en entrada O en salida.
+          // Si solo hay filtro de entrada, matchExit será false, y viceversa.
+          // Si ambos filtros están puestos, basta con que uno coincida.
+          if (!matchEntry && !matchExit) return false;
       }
-      if (colFilterExit !== 'ALL') {
-        let match = false;
-        if (t.type === 'EXPENSE' && t.accountId === colFilterExit) match = true;
-        else if (t.type === 'INCOME' && t.categoryId === colFilterExit) match = true;
-        else if (t.type === 'TRANSFER' && t.accountId === colFilterExit) match = true;
-        if (!match) return false;
-      }
+
       if (descPattern && !t.description.toLowerCase().includes(descPattern)) return false;
       if (colFilterClip === 'YES' && !t.attachment) return false;
       if (colFilterClip === 'NO' && t.attachment) return false;
