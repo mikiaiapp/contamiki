@@ -124,8 +124,10 @@ export interface GlobalFilter {
 
 export interface SettingsViewProps {
   data: AppState;
+  books: BookMetadata[]; // Nuevo: Lista de libros para el selector de exportación
   onUpdateData: (newData: Partial<AppState>) => void;
   onNavigateToTransactions?: (filters: any) => void;
   onCreateBookFromImport?: (data: AppState, name: string) => void;
   onDeleteBook?: () => void;
+  onExportData: (targetId: string) => void; // Nuevo: Callback para exportar
 }

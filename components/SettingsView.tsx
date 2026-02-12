@@ -1,15 +1,17 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar, Archive, RefreshCw, X, HardDriveDownload, HardDriveUpload, Bot, ShieldAlert, Monitor, Palette, Eye, EyeOff, Plus } from 'lucide-react';
+import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, BookMetadata } from '../types';
+import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar, Archive, RefreshCw, X, HardDriveDownload, HardDriveUpload, Bot, ShieldAlert, Monitor, Palette, Eye, EyeOff, Plus, ChevronDown } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import * as XLSX from 'xlsx';
 
 interface SettingsViewProps {
   data: AppState;
+  books: BookMetadata[];
   onUpdateData: (newData: Partial<AppState>) => void;
   onNavigateToTransactions?: (filters: any) => void;
   onCreateBookFromImport?: (data: AppState, name: string) => void;
   onDeleteBook?: () => void;
+  onExportData: (targetId: string) => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
@@ -47,7 +49,7 @@ const compressLogo = async (file: File): Promise<string> => {
     });
 };
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, onNavigateToTransactions, onCreateBookFromImport, onDeleteBook }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdateData, onNavigateToTransactions, onCreateBookFromImport, onDeleteBook, onExportData }) => {
   const [activeTab, setActiveTab] = useState('ACC_GROUPS');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
@@ -60,6 +62,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
   // Backup State
   const [restoreFile, setRestoreFile] = useState<AppState | null>(null);
   const [restoreFileName, setRestoreFileName] = useState('');
+  const [exportTarget, setExportTarget] = useState<string>('ALL');
   
   // Delete State
   const [yearToDelete, setYearToDelete] = useState<string>('');
@@ -139,6 +142,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
     setWebLogos([]);
     setRestoreFile(null); setRestoreFileName('');
     setYearToDelete(availableYears[0] || '');
+    setExportTarget('ALL');
     setVerificationModal(null); setVerificationInput('');
     setIsEditModalOpen(false);
   };
@@ -174,18 +178,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
       if (confirm('¿Borrar categoría permanentemente?')) {
           onUpdateData({categories: data.categories.filter(x => x.id !== category.id)});
       }
-  };
-
-  const handleExportBackup = () => {
-      const jsonString = JSON.stringify(data, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `backup_contamiki_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -326,6 +318,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
       </nav>
 
       <div className="max-w-4xl mx-auto">
+        {/* ... CODIGO EXISTENTE PARA ACC_GROUPS, ACCOUNTS, FAMILIES, ETC (Se mantiene igual) ... */}
         {activeTab === 'ACC_GROUPS' && (
             <div className="space-y-6">
                 <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nuevo Grupo</button>
@@ -435,6 +428,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
             </div>
         )}
 
+        {/* ... FAMILIES, CATEGORIES, RECURRENTS, FAVORITES, UI ... */}
+        {/* REPLICAR EL CODIGO EXISTENTE PARA ESTOS BLOQUES */}
+        
         {activeTab === 'FAMILIES' && (
              <div className="space-y-6">
                 <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nueva Familia</button>
@@ -555,9 +551,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                 )}
             </div>
         )}
-        
-        {/* ... RESTO DE COMPONENTES SIN CAMBIOS (RECURRENTS, FAVORITES, UI, DATA, TOOLS) ... */}
-        
+
         {activeTab === 'RECURRENTS' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -674,7 +668,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
             </div>
         )}
 
-        {/* --- PESTAÑAS UI, DATA, TOOLS (Renderizado simplificado, ya que no cambian lógica, solo la reutilizan) --- */}
         {activeTab === 'UI' && (
             <div className="grid grid-cols-1 gap-10 animate-in fade-in slide-in-from-bottom-4">
                  <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -723,8 +716,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="bg-indigo-50 p-10 rounded-[3rem] border border-indigo-100 space-y-6 text-center">
                         <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm"><HardDriveDownload size={32}/></div>
-                        <div><h3 className="text-xl font-black text-indigo-900 uppercase">Exportar Datos</h3><p className="text-xs font-bold text-indigo-400 mt-2">Guarda una copia de seguridad completa del libro actual en tu dispositivo.</p></div>
-                        <button onClick={handleExportBackup} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-700 transition-all">Descargar JSON</button>
+                        <div><h3 className="text-xl font-black text-indigo-900 uppercase">Exportar Datos</h3><p className="text-xs font-bold text-indigo-400 mt-2">Guarda una copia de seguridad completa o de un libro específico.</p></div>
+                        
+                        <div className="space-y-2 text-left">
+                            <label className="text-[10px] font-black text-indigo-400 uppercase ml-1">Alcance de la copia</label>
+                            <div className="relative">
+                                <select 
+                                    className="w-full px-4 py-3 bg-white border-2 border-indigo-200 rounded-xl font-bold text-xs text-indigo-900 outline-none appearance-none"
+                                    value={exportTarget}
+                                    onChange={(e) => setExportTarget(e.target.value)}
+                                >
+                                    <option value="ALL">Copia Completa (Todos los Libros)</option>
+                                    {books.map(b => (
+                                        <option key={b.id} value={b.id}>Libro: {b.name}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-300 pointer-events-none" size={16}/>
+                            </div>
+                        </div>
+
+                        <button onClick={() => onExportData(exportTarget)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-700 transition-all">Descargar JSON</button>
                     </div>
 
                     <div className="bg-slate-50 p-10 rounded-[3rem] border border-slate-100 space-y-6 text-center">

@@ -145,6 +145,40 @@ const App: React.FC = () => {
       setCurrentView('RESUMEN');
   };
 
+  // NUEVA FUNCIONALIDAD DE EXPORTACIÓN
+  const handleExportData = (targetId: string) => {
+      let dataToExport: any;
+      let fileName = '';
+      const today = new Date().toISOString().split('T')[0];
+
+      if (targetId === 'ALL') {
+          dataToExport = multiState;
+          fileName = `backup_completo_contamiki_${today}.json`;
+      } else {
+          const book = multiState.booksMetadata.find(b => b.id === targetId);
+          const bookData = multiState.booksData[targetId];
+          
+          if (!book || !bookData) {
+              alert("No se encontraron datos para el libro seleccionado.");
+              return;
+          }
+
+          // Exportamos como un AppState individual
+          dataToExport = bookData;
+          fileName = `backup_${book.name.replace(/\s+/g, '_')}_${today}.json`;
+      }
+
+      const jsonString = JSON.stringify(dataToExport, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
+
   const handleAddTransaction = (t: Transaction) => updateCurrentBookData({ transactions: [t, ...currentAppData.transactions] });
   const handleUpdateTransaction = (t: Transaction) => updateCurrentBookData({ transactions: currentAppData.transactions.map(tx => tx.id === t.id ? t : tx) });
   const handleDeleteTransaction = (id: string) => updateCurrentBookData({ transactions: currentAppData.transactions.filter(tx => tx.id !== id) });
@@ -232,10 +266,12 @@ const App: React.FC = () => {
       {currentView === 'SETTINGS' && (
         <SettingsView 
           data={currentAppData} 
+          books={multiState.booksMetadata} // Nuevo: Pasamos metadatos de todos los libros
           onUpdateData={updateCurrentBookData} 
           onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }}
           onCreateBookFromImport={handleCreateBookFromImport}
           onDeleteBook={handleDeleteBook}
+          onExportData={handleExportData} // Nuevo: Pasamos handler de exportación
         />
       )}
 
