@@ -1,19 +1,24 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { login, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification } from './services/authService';
-import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles, Check, XCircle, CheckCircle2, Mail, ArrowLeft, KeyRound, Send } from 'lucide-react';
+import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification } from './services/authService';
+import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles, Check, XCircle, CheckCircle2, Mail, ArrowLeft, KeyRound, Send, ShieldCheck } from 'lucide-react';
 
 interface LoginViewProps {
     onLoginSuccess: () => void;
 }
 
-type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT' | 'RESET_PASSWORD';
+type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT' | 'RESET_PASSWORD' | 'TWO_FACTOR';
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const [mode, setMode] = useState<AuthMode>('LOGIN');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    
+    // 2FA State
+    const [twoFactorCode, setTwoFactorCode] = useState('');
+    const [tempToken, setTempToken] = useState<string | null>(null);
+
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [loading, setLoading] = useState(false);
@@ -75,7 +80,26 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         setSuccessMsg('');
         setShowResend(false);
         
-        // Validar formato email SOLO si NO estamos en reset password (ya que ahí el input está oculto)
+        // 1. Manejo especial para 2FA
+        if (mode === 'TWO_FACTOR') {
+            if (!twoFactorCode || twoFactorCode.length < 6) {
+                setError("Introduce el código de 6 dígitos");
+                return;
+            }
+            setLoading(true);
+            try {
+                await login2FA(tempToken!, twoFactorCode);
+                onLoginSuccess();
+            } catch (err: any) {
+                setError(err.message);
+                setTwoFactorCode(''); // Limpiar para reintentar
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+
+        // 2. Validación estándar
         if (mode !== 'RESET_PASSWORD' && !validateEmail(email)) {
             setError("Por favor introduce un email válido.");
             return;
@@ -96,8 +120,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
         try {
             if (mode === 'LOGIN') {
-                await login(email, password);
-                onLoginSuccess();
+                const result = await login(email, password);
+                if (result.requires2fa) {
+                    setTempToken(result.tempToken);
+                    setMode('TWO_FACTOR');
+                    setSuccessMsg('');
+                } else {
+                    onLoginSuccess();
+                }
             } else if (mode === 'REGISTER') {
                 await register(email, password);
                 setSuccessMsg('Te hemos enviado un correo de verificación. Revisa tu bandeja de entrada (o la consola del servidor si estás en local).');
@@ -152,6 +182,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         setPassword('');
         setConfirmPassword('');
         setShowResend(false);
+        setTwoFactorCode('');
     };
 
     return (
@@ -179,7 +210,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     </div>
                 </div>
                 
-                {mode !== 'RESET_PASSWORD' && mode !== 'FORGOT' && (
+                {mode !== 'RESET_PASSWORD' && mode !== 'FORGOT' && mode !== 'TWO_FACTOR' && (
                     <div className="flex bg-slate-50 p-1.5 mx-10 mt-8 rounded-2xl border border-slate-100">
                         <button 
                             className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl ${mode === 'LOGIN' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400'}`}
@@ -209,6 +240,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             <p className="text-xs text-slate-500 mt-1">Introduce tu nueva clave segura.</p>
                         </div>
                     )}
+                    {mode === 'TWO_FACTOR' && (
+                         <div className="text-center mb-4 animate-in slide-in-from-right">
+                            <ShieldCheck className="w-12 h-12 text-indigo-600 mx-auto mb-3" />
+                            <h3 className="text-lg font-black text-slate-900 uppercase">Seguridad 2FA</h3>
+                            <p className="text-xs text-slate-500 mt-1">Introduce el código de Google Authenticator</p>
+                        </div>
+                    )}
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {error && (
@@ -231,7 +269,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             </div>
                         )}
                         
-                        {mode !== 'RESET_PASSWORD' && (
+                        {mode !== 'RESET_PASSWORD' && mode !== 'TWO_FACTOR' && (
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
                                 <div className="relative group">
@@ -249,7 +287,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             </div>
                         )}
 
-                        {mode !== 'FORGOT' && (
+                        {mode !== 'FORGOT' && mode !== 'TWO_FACTOR' && (
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex justify-between">
                                     <span>Contraseña</span>
@@ -282,6 +320,31 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                                         ))}
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {mode === 'TWO_FACTOR' && (
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Código de Seguridad</label>
+                                <div className="relative group">
+                                    <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={20} />
+                                    <input 
+                                        type="text" 
+                                        required
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        autoComplete="one-time-code"
+                                        maxLength={6}
+                                        className="w-full pl-14 pr-6 py-5 bg-slate-50 border-2 border-transparent rounded-2xl focus:outline-none focus:bg-white focus:border-indigo-500 transition-all font-bold text-2xl tracking-[0.5em] text-center text-slate-800"
+                                        placeholder="000000"
+                                        value={twoFactorCode}
+                                        onChange={e => {
+                                            const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
+                                            setTwoFactorCode(val);
+                                        }}
+                                        autoFocus
+                                    />
+                                </div>
                             </div>
                         )}
 
@@ -318,6 +381,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             ) : (
                                 <>
                                     {mode === 'LOGIN' && <><LogIn size={18} /> Desbloquear</>}
+                                    {mode === 'TWO_FACTOR' && <><ShieldCheck size={18} /> Verificar</>}
                                     {mode === 'REGISTER' && <><UserPlus size={18} /> Registrarse</>}
                                     {mode === 'FORGOT' && <><Mail size={18} /> Enviar Enlace</>}
                                     {mode === 'RESET_PASSWORD' && <><KeyRound size={18} /> Cambiar Clave</>}
@@ -333,7 +397,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                                 ¿Olvidaste tu contraseña?
                             </button>
                         )}
-                        {(mode === 'FORGOT' || mode === 'RESET_PASSWORD') && (
+                        {(mode === 'FORGOT' || mode === 'RESET_PASSWORD' || mode === 'TWO_FACTOR') && (
                             <button onClick={() => resetState('LOGIN')} className="w-full text-center text-[9px] font-black text-slate-400 hover:text-slate-600 uppercase tracking-widest transition-colors flex items-center justify-center gap-2">
                                 <ArrowLeft size={12}/> Volver al Login
                             </button>
@@ -360,7 +424,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     )}
                     
                     <p className="text-center text-slate-300 text-[9px] font-bold uppercase tracking-widest mt-4">
-                        Sistema Seguro v1.4.0
+                        Sistema Seguro v1.5.0
                     </p>
                 </div>
             </div>

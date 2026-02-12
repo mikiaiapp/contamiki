@@ -7,6 +7,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+import speakeasy from 'speakeasy';
+import QRCode from 'qrcode';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -272,6 +274,9 @@ const authenticateToken = (req, res, next) => {
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.status(403).json({ error: "Token inválido" });
+    // Si es un token de pre-autenticación (2FA pendiente), no dar acceso a rutas protegidas
+    if (user.isPreAuth) return res.status(403).json({ error: "2FA Requerido" });
+    
     req.user = user;
     next();
   });
@@ -369,6 +374,7 @@ app.post('/api/verify', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Error server" }); }
 });
 
+// LOGIN MEJORADO CON 2FA
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     try {
@@ -376,13 +382,58 @@ app.post('/api/login', async (req, res) => {
         const user = users.find(u => u.username === username);
         
         if (!user || !(await bcrypt.compare(password, user.password))) return res.status(401).json({ error: "Credenciales inválidas" });
-        
-        // Bloqueo estricto si no está verificado
         if (user.isVerified === false) return res.status(403).json({ error: "Cuenta no verificada. Revisa tu email." });
 
+        // VERIFICACIÓN 2FA
+        if (user.twoFactorEnabled && user.twoFactorSecret) {
+            // Generar token temporal de pre-autorización (solo vale para endpoint /api/login/2fa)
+            const tempToken = jwt.sign(
+                { username: user.username, isPreAuth: true }, 
+                JWT_SECRET, 
+                { expiresIn: '5m' } // 5 minutos para poner el código
+            );
+            return res.json({ 
+                requires2fa: true, 
+                tempToken: tempToken 
+            });
+        }
+
+        // Login normal si no hay 2FA
         const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '30d' });
         res.json({ token, username: user.username });
     } catch (err) { res.status(500).json({ error: "Error server" }); }
+});
+
+// SEGUNDO PASO DE LOGIN (VALIDAR CÓDIGO)
+app.post('/api/login/2fa', async (req, res) => {
+    const { tempToken, code } = req.body;
+    
+    try {
+        // Verificar el token temporal
+        const decoded = jwt.verify(tempToken, JWT_SECRET);
+        if (!decoded.isPreAuth) return res.status(401).json({ error: "Token inválido para 2FA" });
+        
+        const users = await readUsers();
+        const user = users.find(u => u.username === decoded.username);
+        
+        if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+        
+        // Verificar código TOTP
+        const verified = speakeasy.totp.verify({
+            secret: user.twoFactorSecret,
+            encoding: 'base32',
+            token: code
+        });
+        
+        if (!verified) return res.status(401).json({ error: "Código 2FA incorrecto" });
+        
+        // Todo OK: Generar token final
+        const finalToken = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '30d' });
+        res.json({ token: finalToken, username: user.username });
+        
+    } catch (err) {
+        return res.status(401).json({ error: "Sesión 2FA expirada o inválida" });
+    }
 });
 
 app.post('/api/forgot-password', async (req, res) => {
@@ -475,6 +526,92 @@ app.post('/api/delete-account', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Error al eliminar cuenta" });
+    }
+});
+
+// --- 2FA SETUP ROUTES ---
+
+// Iniciar configuración 2FA (Generar secreto y QR)
+app.post('/api/2fa/setup', authenticateToken, async (req, res) => {
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.username === req.user.username);
+        if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+
+        const secret = speakeasy.generateSecret({
+            name: `ContaMiki (${user.username})`
+        });
+
+        // Guardar secreto temporalmente (aún no confirmado)
+        user.tempTwoFactorSecret = secret.base32;
+        await saveUsers(users);
+
+        // Generar QR
+        const qrCodeDataUrl = await QRCode.toDataURL(secret.otpauth_url);
+
+        res.json({ 
+            secret: secret.base32, 
+            qrCode: qrCodeDataUrl 
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error configurando 2FA" });
+    }
+});
+
+// Confirmar y Activar 2FA
+app.post('/api/2fa/verify-setup', authenticateToken, async (req, res) => {
+    const { token } = req.body;
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.username === req.user.username);
+        
+        if (!user || !user.tempTwoFactorSecret) return res.status(400).json({ error: "No hay configuración 2FA pendiente" });
+
+        const verified = speakeasy.totp.verify({
+            secret: user.tempTwoFactorSecret,
+            encoding: 'base32',
+            token: token
+        });
+
+        if (verified) {
+            user.twoFactorSecret = user.tempTwoFactorSecret;
+            user.twoFactorEnabled = true;
+            user.tempTwoFactorSecret = null;
+            await saveUsers(users);
+            res.json({ success: true });
+        } else {
+            res.status(400).json({ error: "Código incorrecto" });
+        }
+    } catch (err) {
+        res.status(500).json({ error: "Error verificando 2FA" });
+    }
+});
+
+// Desactivar 2FA
+app.post('/api/2fa/disable', authenticateToken, async (req, res) => {
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.username === req.user.username);
+        
+        if (user) {
+            user.twoFactorEnabled = false;
+            user.twoFactorSecret = null;
+            await saveUsers(users);
+        }
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Error desactivando 2FA" });
+    }
+});
+
+app.get('/api/2fa/status', authenticateToken, async (req, res) => {
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.username === req.user.username);
+        res.json({ enabled: !!user?.twoFactorEnabled });
+    } catch (err) {
+        res.status(500).json({ error: "Error obteniendo estado 2FA" });
     }
 });
 

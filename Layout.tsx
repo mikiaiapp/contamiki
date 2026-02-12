@@ -1,8 +1,8 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle, ShieldCheck, QrCode } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
-import { logout, getUsername, changePassword, deleteAccount } from './services/authService';
+import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus } from './services/authService';
 
 interface LayoutProps {
   currentView: View;
@@ -46,6 +46,14 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
   const [isChangePassModalOpen, setIsChangePassModalOpen] = useState(false);
   const [isDeleteAccountModalOpen, setIsDeleteAccountModalOpen] = useState(false);
   
+  // 2FA States
+  const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
+  const [twoFactorStep, setTwoFactorStep] = useState<'INITIAL' | 'SETUP' | 'VERIFY'>('INITIAL');
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
+  const [setupCode, setSetupCode] = useState('');
+  const [setupError, setSetupError] = useState('');
+
   // Change Pass Inputs
   const [currentPass, setCurrentPass] = useState('');
   const [newPass, setNewPass] = useState('');
@@ -124,6 +132,52 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
           // Logout se maneja dentro del servicio
       } catch (err: any) {
           setDeleteError(err.message);
+      }
+  };
+
+  // 2FA HANDLERS
+  const open2FAModal = async () => {
+      setIs2FAModalOpen(true);
+      setTwoFactorStep('INITIAL');
+      setSetupError('');
+      try {
+          const status = await get2FAStatus();
+          setTwoFactorEnabled(status.enabled);
+      } catch (e) {
+          console.error(e);
+      }
+  };
+
+  const start2FASetup = async () => {
+      try {
+          const { qrCode } = await setup2FA();
+          setQrCodeUrl(qrCode);
+          setTwoFactorStep('SETUP');
+          setSetupCode('');
+          setSetupError('');
+      } catch (e) {
+          setSetupError("Error al iniciar configuración");
+      }
+  };
+
+  const verify2FASetup = async () => {
+      try {
+          await verifySetup2FA(setupCode);
+          setTwoFactorEnabled(true);
+          setTwoFactorStep('INITIAL');
+          alert("2FA Activado Correctamente");
+      } catch (e: any) {
+          setSetupError(e.message);
+      }
+  };
+
+  const handleDisable2FA = async () => {
+      if (!confirm("¿Seguro que quieres desactivar la protección de doble factor?")) return;
+      try {
+          await disable2FA();
+          setTwoFactorEnabled(false);
+      } catch (e) {
+          alert("Error desactivando 2FA");
       }
   };
 
@@ -286,6 +340,9 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                     <div className="fixed inset-0 z-10" onClick={() => setIsUserMenuOpen(false)}></div>
                     <div className="absolute bottom-full left-0 mb-2 w-full bg-white text-slate-900 rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-20 animate-in slide-in-from-bottom-2 fade-in">
                         <div className="p-2 space-y-1">
+                             <button onClick={() => { setIsUserMenuOpen(false); open2FAModal(); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 transition-all text-slate-600">
+                                <ShieldCheck size={16} className="text-emerald-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Seguridad 2FA</span>
+                            </button>
                             <button onClick={() => { setIsUserMenuOpen(false); setIsChangePassModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 transition-all text-slate-600">
                                 <Key size={16} className="text-amber-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cambiar Clave</span>
                             </button>
@@ -342,6 +399,57 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
           </button>
         ))}
       </nav>
+
+      {/* MODAL 2FA */}
+      {is2FAModalOpen && (
+          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 text-center relative">
+                  <button onClick={() => setIs2FAModalOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full hover:bg-slate-100"><X size={20}/></button>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-2 flex items-center justify-center gap-2"><ShieldCheck className="text-emerald-500"/> Seguridad 2FA</h3>
+                  
+                  {twoFactorStep === 'INITIAL' && (
+                      <div className="space-y-6 mt-6">
+                           <div className={`p-4 rounded-2xl border ${twoFactorEnabled ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
+                               <p className="text-xs font-bold">{twoFactorEnabled ? 'Autenticación Activada' : 'Autenticación Desactivada'}</p>
+                           </div>
+                           
+                           {twoFactorEnabled ? (
+                               <button onClick={handleDisable2FA} className="w-full py-4 bg-rose-50 text-rose-500 border border-rose-100 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-rose-100 transition-all">Desactivar 2FA</button>
+                           ) : (
+                               <button onClick={start2FASetup} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-600 shadow-xl">Configurar Ahora</button>
+                           )}
+                           
+                           <p className="text-[10px] text-slate-400">Compatible con Google Authenticator, Microsoft Auth y otros.</p>
+                      </div>
+                  )}
+
+                  {twoFactorStep === 'SETUP' && (
+                      <div className="space-y-6 mt-6 animate-in slide-in-from-right">
+                          <p className="text-xs text-slate-500 font-medium">1. Escanea este código en tu app de autenticación:</p>
+                          <div className="bg-white p-2 rounded-xl border-2 border-slate-100 inline-block">
+                              <img src={qrCodeUrl} className="w-40 h-40" alt="QR Code" />
+                          </div>
+                          
+                          <div className="space-y-2">
+                              <p className="text-xs text-slate-500 font-medium">2. Introduce el código de 6 dígitos:</p>
+                              <input 
+                                  type="text" 
+                                  className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-center tracking-[0.5em] text-xl outline-none focus:border-indigo-500" 
+                                  placeholder="000000" 
+                                  maxLength={6}
+                                  value={setupCode}
+                                  onChange={e => setSetupCode(e.target.value.replace(/[^0-9]/g, '').slice(0,6))}
+                              />
+                          </div>
+
+                          {setupError && <p className="text-rose-500 text-xs font-bold">{setupError}</p>}
+
+                          <button onClick={verify2FASetup} className="w-full py-4 bg-emerald-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-600 shadow-xl">Verificar y Activar</button>
+                      </div>
+                  )}
+              </div>
+          </div>
+      )}
 
       {/* MODAL CAMBIO CONTRASEÑA */}
       {isChangePassModalOpen && (

@@ -21,6 +21,12 @@ export const login = async (username, password) => {
 
         if (response.ok) {
             const data = await response.json();
+            
+            // Si requiere 2FA, retornamos la info especial pero NO guardamos sesión aún
+            if (data.requires2fa) {
+                return { requires2fa: true, tempToken: data.tempToken };
+            }
+
             setSession(data.token, data.username);
             return data;
         } else {
@@ -36,6 +42,23 @@ export const login = async (username, password) => {
             return { token: 'local_token_' + username, username };
         }
         throw new Error(err.message || "Credenciales inválidas o servidor no disponible.");
+    }
+};
+
+export const login2FA = async (tempToken: string, code: string) => {
+    const response = await fetch('/api/login/2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tempToken, code })
+    });
+
+    if (response.ok) {
+        const data = await response.json();
+        setSession(data.token, data.username);
+        return data;
+    } else {
+        const err = await response.json();
+        throw new Error(err.error || "Código incorrecto");
     }
 };
 
@@ -192,4 +215,52 @@ export const deleteAccount = async () => {
         }
         throw e;
     }
+};
+
+// 2FA METHODS
+
+export const get2FAStatus = async () => {
+    const token = getToken();
+    if (token?.startsWith('local_') || token?.startsWith('guest_')) return { enabled: false };
+    const res = await fetch('/api/2fa/status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return await res.json();
+};
+
+export const setup2FA = async () => {
+    const token = getToken();
+    const res = await fetch('/api/2fa/setup', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Error iniciando 2FA");
+    return await res.json(); // { secret, qrCode }
+};
+
+export const verifySetup2FA = async (code: string) => {
+    const token = getToken();
+    const res = await fetch('/api/2fa/verify-setup', {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ token: code })
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Código inválido");
+    }
+    return true;
+};
+
+export const disable2FA = async () => {
+    const token = getToken();
+    const res = await fetch('/api/2fa/disable', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Error desactivando 2FA");
+    return true;
 };
