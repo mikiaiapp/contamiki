@@ -1,9 +1,7 @@
-
-import React, { useState, useRef, useMemo } from 'react';
-import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport, RecurrentMovement, FavoriteMovement, RecurrenceFrequency } from '../types';
-import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar, Archive, RefreshCw, X, HardDriveDownload, HardDriveUpload, Bot, ShieldAlert, Monitor, Palette, Eye, EyeOff, Plus } from 'lucide-react';
-import { searchInternetLogos } from '../services/iconService';
-import * as XLSX from 'xlsx';
+import React, { useState } from 'react';
+import { AppState, Category, Account, AccountGroup, Family } from '../types';
+import { Settings, Wallet, Tags, Layers, Bot, Database, AlertCircle, Plus, Trash2, Edit2, Save, X, Check, Archive, Download, Upload } from 'lucide-react';
+import { parseMigrationData } from '../services/geminiService';
 
 interface SettingsViewProps {
   data: AppState;
@@ -13,760 +11,125 @@ interface SettingsViewProps {
   onDeleteBook?: () => void;
 }
 
-const generateId = () => Math.random().toString(36).substring(2, 15);
-const numberFormatter = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+type SettingsTab = 'GENERAL' | 'CATEGORIES' | 'ACCOUNTS' | 'TOOLS' | 'DATA';
 
-// Utility para comprimir logo
-const compressLogo = async (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target?.result as string;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                // Limitamos tamaño para localStorage
-                const MAX_WIDTH = 512; 
-                let width = img.width;
-                let height = img.height;
-                
-                if (width > MAX_WIDTH) {
-                    height *= MAX_WIDTH / width;
-                    width = MAX_WIDTH;
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx?.drawImage(img, 0, 0, width, height);
-                resolve(canvas.toDataURL('image/png'));
-            };
-            img.onerror = (err) => reject(err);
-        };
-        reader.onerror = (err) => reject(err);
-    });
-};
-
-export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, onNavigateToTransactions, onCreateBookFromImport, onDeleteBook }) => {
-  const [activeTab, setActiveTab] = useState('ACC_GROUPS');
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+export const SettingsView: React.FC<SettingsViewProps> = ({ 
+    data, 
+    onUpdateData, 
+    onNavigateToTransactions,
+    onCreateBookFromImport,
+    onDeleteBook
+}) => {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('GENERAL');
   
-  // Data & Import States
-  const [importType, setImportType] = useState<'GROUPS' | 'ACCOUNTS' | 'FAMILIES' | 'CATEGORIES' | 'TRANSACTIONS' | 'TRANSFER'>('TRANSACTIONS');
-  const [pasteData, setPasteData] = useState('');
-  const [importReport, setImportReport] = useState<ImportReport | null>(null);
-  const [structureReport, setStructureReport] = useState<{ added: number, type: string } | null>(null);
-  
-  // Backup State
-  const [restoreFile, setRestoreFile] = useState<AppState | null>(null);
-  const [restoreFileName, setRestoreFileName] = useState('');
-  
-  // Delete State
-  const [yearToDelete, setYearToDelete] = useState<string>('');
-  const [verificationModal, setVerificationModal] = useState<{ type: 'YEAR' | 'ALL_TX' | 'BOOK', payload?: any } | null>(null);
-  const [verificationInput, setVerificationInput] = useState('');
-  
-  // Icon Search State
-  const [webLogos, setWebLogos] = useState<{url: string, source: string}[]>([]);
-  const [isSearchingWeb, setIsSearchingWeb] = useState(false);
-  
-  // Custom Logo State
-  const [customLogoPreview, setCustomLogoPreview] = useState<string>(localStorage.getItem('contamiki_custom_logo') || '');
+  // States for Data Import/Migration
+  const [migrationText, setMigrationText] = useState('');
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [newBookName, setNewBookName] = useState('');
 
-  // Refs
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const backupInputRef = useRef<HTMLInputElement>(null);
-  const iconUploadRef = useRef<HTMLInputElement>(null);
-  const logoUploadRef = useRef<HTMLInputElement>(null);
-
-  // Form States
-  const [grpId, setGrpId] = useState<string | null>(null);
-  const [grpName, setGrpName] = useState('');
-  const [grpIcon, setGrpIcon] = useState('🗂️');
-
-  const [accId, setAccId] = useState<string | null>(null);
-  const [accName, setAccName] = useState('');
-  const [accBalance, setAccBalance] = useState('');
-  const [accIcon, setAccIcon] = useState('🏦');
-  const [accGroupId, setAccGroupId] = useState('');
-  const [accActive, setAccActive] = useState(true);
-
-  const [famId, setFamId] = useState<string | null>(null);
-  const [famName, setFamName] = useState('');
-  const [famType, setFamType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
-  const [famIcon, setFamIcon] = useState('📂');
-
-  const [catId, setCatId] = useState<string | null>(null);
-  const [catName, setCatName] = useState('');
-  const [catParent, setCatParent] = useState('');
-  const [catIcon, setCatIcon] = useState('🏷️');
-  const [catActive, setCatActive] = useState(true);
-
-  const [recId, setRecId] = useState<string | null>(null);
-  const [recDesc, setRecDesc] = useState('');
-  const [recAmount, setRecAmount] = useState('');
-  const [recType, setRecType] = useState<TransactionType>('EXPENSE');
-  const [recAcc, setRecAcc] = useState('');
-  const [recCat, setRecCat] = useState('');
-  const [recFreq, setRecFreq] = useState<RecurrenceFrequency>('MONTHLY');
-  const [recInterval, setRecInterval] = useState('1');
-  const [recStart, setRecStart] = useState(new Date().toISOString().split('T')[0]);
-  const [recEnd, setRecEnd] = useState('');
-
-  const [favId, setFavId] = useState<string | null>(null);
-  const [favName, setFavName] = useState('');
-  const [favDesc, setFavDesc] = useState('');
-  const [favAmount, setFavAmount] = useState('');
-  const [favType, setFavType] = useState<TransactionType>('EXPENSE');
-  const [favAcc, setFavAcc] = useState('');
-  const [favCat, setFavCat] = useState('');
-  const [favIcon, setFavIcon] = useState('⭐');
-
-  // Computed
-  const availableYears = useMemo(() => {
-    const years = new Set(data.transactions.map(t => t.date.substring(0, 4)));
-    return Array.from(years).sort().reverse();
-  }, [data.transactions]);
-
-  const resetForm = () => {
-    setGrpId(null); setGrpName(''); setGrpIcon('🗂️');
-    setAccId(null); setAccName(''); setAccBalance(''); setAccIcon('🏦'); setAccGroupId(data.accountGroups[0]?.id || ''); setAccActive(true);
-    setFamId(null); setFamName(''); setFamIcon('📂'); setFamType('EXPENSE');
-    setCatId(null); setCatName(''); setCatIcon('🏷️'); setCatParent(data.families[0]?.id || ''); setCatActive(true);
-    setRecId(null); setRecDesc(''); setRecAmount(''); setRecType('EXPENSE'); setRecAcc(data.accounts[0]?.id || ''); setRecCat(''); setRecFreq('MONTHLY'); setRecInterval('1'); setRecStart(new Date().toISOString().split('T')[0]); setRecEnd('');
-    setFavId(null); setFavName(''); setFavDesc(''); setFavAmount(''); setFavType('EXPENSE'); setFavAcc(data.accounts[0]?.id || ''); setFavCat(''); setFavIcon('⭐');
-    setImportReport(null); setStructureReport(null); setPasteData('');
-    setWebLogos([]);
-    setRestoreFile(null); setRestoreFileName('');
-    setYearToDelete(availableYears[0] || '');
-    setVerificationModal(null); setVerificationInput('');
-    setIsEditModalOpen(false);
-  };
-
-  const openEditor = () => {
-      setIsEditModalOpen(true);
-  };
-
-  const renderIcon = (iconStr: string, className = "w-10 h-10") => {
-    if (!iconStr) return <span className="text-xl">📂</span>;
-    if (iconStr.startsWith('http') || iconStr.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
-    return <span className="text-xl">{iconStr}</span>;
-  }
-
-  // --- DELETE PROTECTORS ---
-  const attemptDeleteAccount = (account: Account) => {
-      const usageCount = data.transactions.filter(t => t.accountId === account.id || t.transferAccountId === account.id).length;
-      if (usageCount > 0) {
-          alert(`No se puede borrar esta cuenta porque tiene ${usageCount} movimientos asociados. Edítala y desactívala (Archivar) para ocultarla sin perder datos.`);
-          return;
-      }
-      if (confirm('¿Borrar cuenta permanentemente?')) {
-          onUpdateData({accounts: data.accounts.filter(x => x.id !== account.id)});
-      }
-  };
-
-  const attemptDeleteCategory = (category: Category) => {
-      const usageCount = data.transactions.filter(t => t.categoryId === category.id).length;
-      if (usageCount > 0) {
-          alert(`No se puede borrar esta categoría porque tiene ${usageCount} movimientos asociados. Edítala y desactívala (Archivar) para ocultarla sin perder datos.`);
-          return;
-      }
-      if (confirm('¿Borrar categoría permanentemente?')) {
-          onUpdateData({categories: data.categories.filter(x => x.id !== category.id)});
-      }
-  };
-
-  const handleExportBackup = () => {
-      const jsonString = JSON.stringify(data, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `backup_contamiki_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-          try {
-              const content = JSON.parse(ev.target?.result as string);
-              if (content.transactions && Array.isArray(content.transactions)) {
-                  setRestoreFile(content);
-                  setRestoreFileName(file.name.replace('.json', ''));
-              } else {
-                  alert("El archivo no parece una copia de seguridad válida de ContaMiki.");
-              }
-          } catch (err) {
-              alert("Error al leer el archivo JSON.");
-          }
-      };
-      reader.readAsText(file);
-      e.target.value = ''; // Reset input
-  };
-
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+  const handleMigration = async () => {
+      if (!migrationText || !newBookName) return;
+      setIsMigrating(true);
       try {
-          const base64 = await compressLogo(file);
-          localStorage.setItem('contamiki_custom_logo', base64);
-          setCustomLogoPreview(base64);
-          // Disparar evento para que Layout y Login se actualicen
-          window.dispatchEvent(new Event('contamiki_logo_changed'));
-          alert("Logo actualizado correctamente.");
-      } catch (err) {
-          console.error(err);
-          alert("Error al procesar la imagen.");
+          const result = await parseMigrationData(migrationText);
+          
+          // Construct a fresh AppState from parsed data
+          const newState: AppState = {
+              accountGroups: [
+                { id: 'g1', name: 'Bancos', icon: '🏦' },
+                { id: 'g2', name: 'Otros', icon: '📦' }
+              ],
+              accounts: result.accounts.map((a: any, i: number) => ({
+                  id: `acc_${i}`,
+                  name: a.name,
+                  initialBalance: a.balance || 0,
+                  currency: a.currency || 'EUR',
+                  icon: a.icon || '🏦',
+                  groupId: 'g1',
+                  active: true
+              })),
+              families: result.families.map((f: any, i: number) => ({
+                  id: `fam_${i}`,
+                  name: f.name,
+                  type: f.type || 'EXPENSE',
+                  icon: f.icon || '🏷️'
+              })),
+              categories: [], // Needed logic to map categories to families
+              transactions: [],
+              recurrents: [],
+              favorites: []
+          };
+          
+          // Populate categories linking to created families
+          let catIndex = 0;
+          result.categories.forEach((c: any) => {
+              const fam = newState.families.find(f => f.name === c.familyName);
+              if (fam) {
+                  newState.categories.push({
+                      id: `cat_${catIndex++}`,
+                      name: c.name,
+                      familyId: fam.id,
+                      icon: c.icon || '🔹',
+                      active: true
+                  });
+              }
+          });
+
+          if (onCreateBookFromImport) {
+              onCreateBookFromImport(newState, newBookName);
+              setMigrationText('');
+              setNewBookName('');
+              alert("Nueva contabilidad creada con los datos importados.");
+          }
+      } catch (e) {
+          console.error(e);
+          alert("Error en la migración.");
+      } finally {
+          setIsMigrating(false);
       }
-      e.target.value = '';
   };
 
-  const handleRemoveLogo = () => {
-      localStorage.removeItem('contamiki_custom_logo');
-      setCustomLogoPreview('');
-      window.dispatchEvent(new Event('contamiki_logo_changed'));
-  };
-
-  const openVerification = (type: 'YEAR' | 'ALL_TX' | 'BOOK', payload?: any) => {
-      setVerificationModal({ type, payload });
-      setVerificationInput('');
-  };
-
-  const executeDangerousAction = () => {
-      if (verificationInput !== 'BORRAR') return;
-      if (verificationModal?.type === 'YEAR') { const yr = verificationModal.payload; const filtered = data.transactions.filter(t => !t.date.startsWith(yr)); onUpdateData({ transactions: filtered }); } 
-      else if (verificationModal?.type === 'ALL_TX') { onUpdateData({ transactions: [] }); }
-      else if (verificationModal?.type === 'BOOK') { if (onDeleteBook) onDeleteBook(); }
-      resetForm();
-  };
-
-  const handleProcessImport = (rawData: string) => {
-    if (!rawData.trim()) return;
-    const lines = rawData.split('\n').filter(l => l.trim());
-    const localGroups = [...data.accountGroups]; const localAccs = [...data.accounts];
-    const localFamilies = [...data.families]; const localCategories = [...data.categories];
-    const localTxs = [...data.transactions];
-    let addedCount = 0; const txReport: ImportReport = { added: 0, newAccounts: [], newCategories: [], errors: [] };
-    lines.forEach(line => {
-      const parts = line.split(';').map(p => p.trim());
-      if (parts.length < 2) return;
-      switch (importType) {
-        case 'GROUPS': if (!localGroups.find(g => g.name.toLowerCase() === parts[0].toLowerCase())) { localGroups.push({ id: generateId(), name: parts[0], icon: parts[1] || '🗂️' }); addedCount++; } break;
-        case 'ACCOUNTS': const accGrp = localGroups.find(g => g.name.toLowerCase() === parts[1]?.toLowerCase()) || localGroups[0]; if (!localAccs.find(a => a.name.toLowerCase() === parts[0].toLowerCase())) { localAccs.push({ id: generateId(), name: parts[0], initialBalance: parseFloat(parts[2]) || 0, currency: 'EUR', icon: parts[3] || '🏦', groupId: accGrp?.id || 'g1', active: true }); addedCount++; } break;
-        case 'FAMILIES': const fType = parts[1]?.toUpperCase() === 'INCOME' ? 'INCOME' : 'EXPENSE'; if (!localFamilies.find(f => f.name.toLowerCase() === parts[0].toLowerCase())) { localFamilies.push({ id: generateId(), name: parts[0], type: fType, icon: parts[2] || '📂' }); addedCount++; } break;
-        case 'CATEGORIES': const fParent = localFamilies.find(f => f.name.toLowerCase() === parts[1]?.toLowerCase()) || localFamilies[0]; if (!localCategories.find(c => c.name.toLowerCase() === parts[0].toLowerCase())) { localCategories.push({ id: generateId(), name: parts[0], familyId: fParent?.id || 'f1', icon: parts[2] || '🏷️', active: true }); addedCount++; } break;
-        case 'TRANSACTIONS': const amountVal = parseFloat(parts[4].replace(',', '.')); if (isNaN(amountVal)) return; let txAcc = localAccs.find(a => a.name.toLowerCase() === parts[2].toLowerCase()); if (!txAcc) { txAcc = { id: generateId(), name: parts[2], initialBalance: 0, currency: 'EUR', icon: '🏦', groupId: localGroups[0]?.id || 'g1', active: true }; localAccs.push(txAcc); txReport.newAccounts.push(parts[2]); } let txCat = localCategories.find(c => c.name.toLowerCase() === parts[1].toLowerCase()); if (!txCat) { txCat = { id: generateId(), name: parts[1], familyId: localFamilies[0]?.id || 'f1', icon: '🏷️', active: true }; localCategories.push(txCat); txReport.newCategories.push(parts[1]); } localTxs.push({ id: generateId(), date: parts[0], description: parts[3], amount: amountVal, type: amountVal < 0 ? 'EXPENSE' : 'INCOME', accountId: txAcc.id, categoryId: txCat.id, familyId: txCat.familyId }); txReport.added++; break;
-      }
-    });
-    if (['GROUPS', 'ACCOUNTS', 'FAMILIES', 'CATEGORIES'].includes(importType)) { setStructureReport({ added: addedCount, type: importType }); onUpdateData({ accountGroups: localGroups, accounts: localAccs, families: localFamilies, categories: localCategories }); } else { setImportReport(txReport); onUpdateData({ transactions: localTxs, accounts: localAccs, categories: localCategories }); }
-  };
-
-  const renderIconInput = (icon: string, setIcon: (s: string) => void, currentName: string) => (
-    <div className="space-y-4 w-full">
-        <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 p-4 sm:p-6 rounded-[2rem] border border-slate-100 shadow-inner">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 flex items-center justify-center border-4 border-white rounded-[1.5rem] bg-white overflow-hidden shadow-lg transition-transform hover:scale-105">
-                {renderIcon(icon, "w-10 h-10 sm:w-12 sm:h-12")}
-            </div>
-            <div className="flex-1 space-y-3 w-full">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center sm:text-left">Identidad Visual</p>
-                <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                    <button onClick={async () => { if(!currentName) { alert("Escribe un nombre primero para buscar."); return; } setIsSearchingWeb(true); const results = await searchInternetLogos(currentName); setWebLogos(results); setIsSearchingWeb(false); }} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-950 transition-all flex items-center gap-2 shadow-lg">{isSearchingWeb ? <Loader2 size={14} className="animate-spin"/> : <Sparkles size={14}/>} IA Search</button>
-                    <button onClick={() => iconUploadRef.current?.click()} className="px-5 py-3 bg-white text-slate-900 border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"><ImageIcon size={14}/> Subir</button>
-                    <input type="file" ref={iconUploadRef} className="hidden" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = ev => setIcon(ev.target?.result as string); reader.readAsDataURL(file); } }} />
-                    <input type="text" className="w-16 px-2 py-3 bg-white border border-slate-200 rounded-xl font-bold text-center text-sm shadow-sm" value={icon.length < 5 ? icon : '📂'} onChange={e => setIcon(e.target.value)} placeholder="Emoji"/>
-                </div>
-            </div>
-        </div>
-        {webLogos.length > 0 && (
-          <div className="bg-white p-6 rounded-[2.5rem] border-2 border-indigo-100 shadow-2xl space-y-5 animate-in slide-in-from-top-4 z-[300] relative">
-              <div className="flex justify-between items-center">
-                  <span className="text-[11px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><Sparkles size={14}/> Resultados Encontrados</span>
-                  <button onClick={() => setWebLogos([])} className="text-slate-300 hover:text-rose-500"><XCircle size={20}/></button>
-              </div>
-              <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 max-h-64 overflow-y-auto p-2 custom-scrollbar">
-                  {webLogos.map((l, i) => (
-                      <button key={i} onClick={() => { setIcon(l.url); setWebLogos([]); }} className="aspect-square bg-slate-50 rounded-2xl border-2 border-transparent hover:border-indigo-500 p-2 transition-all flex items-center justify-center overflow-hidden shadow-sm group">
-                          <img src={l.url} className="w-full h-full object-contain group-hover:scale-110 transition-transform" />
-                      </button>
-                  ))}
-              </div>
-          </div>
-        )}
-    </div>
-  );
+  const tabs: {id: SettingsTab, label: string, icon: React.ReactNode}[] = [
+      { id: 'GENERAL', label: 'General', icon: <Settings size={18}/> },
+      { id: 'ACCOUNTS', label: 'Cuentas', icon: <Wallet size={18}/> },
+      { id: 'CATEGORIES', label: 'Categorías', icon: <Tags size={18}/> },
+      { id: 'TOOLS', label: 'Herramientas', icon: <Bot size={18}/> },
+      { id: 'DATA', label: 'Datos', icon: <Database size={18}/> },
+  ];
 
   return (
-    <div className="space-y-12 max-w-full overflow-hidden pb-20">
-      <div className="text-center md:text-left space-y-2">
-        <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Ajustes.</h2>
-        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Personalización y Control Maestro</p>
+    <div className="space-y-8">
+      <div>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tighter">Ajustes</h2>
+          <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Configuración del Libro Contable</p>
       </div>
 
-      <nav className="flex md:flex-wrap bg-slate-100 p-1.5 rounded-2xl shadow-inner border border-slate-200/50 overflow-x-auto md:overflow-visible scrollbar-hide">
-        {[
-            {id: 'ACC_GROUPS', label: 'Grupos', icon: <BoxSelect size={16}/>},
-            {id: 'ACCOUNTS', label: 'Cuentas', icon: <Wallet size={16}/>},
-            {id: 'FAMILIES', label: 'Familias', icon: <Layers size={16}/>},
-            {id: 'CATEGORIES', label: 'Categorías', icon: <Tag size={16}/>},
-            {id: 'RECURRENTS', label: 'Recurrentes', icon: <CalendarClock size={16}/>},
-            {id: 'FAVORITES', label: 'Favoritos', icon: <Heart size={16}/>},
-            {id: 'UI', label: 'Interfaz', icon: <Palette size={16}/>},
-            {id: 'DATA', label: 'Datos', icon: <HardDriveDownload size={16}/>},
-            {id: 'TOOLS', label: 'Herramientas', icon: <DatabaseZap size={16}/>}
-        ].map(t => (
-            <button key={t.id} className={`flex-1 min-w-[70px] sm:min-w-[fit-content] flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 sm:px-6 py-2 sm:py-3.5 font-black text-[8px] sm:text-[10px] uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => { setActiveTab(t.id); resetForm(); }}>
-              {t.icon} <span className="block sm:inline mt-1 sm:mt-0">{t.label}</span>
-            </button>
-        ))}
-      </nav>
+      <div className="flex flex-wrap gap-2 pb-4 border-b border-slate-100">
+          {tabs.map(tab => (
+              <button 
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-5 py-3 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab.id ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+              >
+                  {tab.icon} {tab.label}
+              </button>
+          ))}
+      </div>
 
-      <div className="max-w-4xl mx-auto">
-        {activeTab === 'ACC_GROUPS' && (
-            <div className="space-y-6">
-                <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nuevo Grupo</button>
-                <div className="space-y-4">
-                    {data.accountGroups.map(g => (
-                        <div key={g.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100">{renderIcon(g.icon, "w-6 h-6")}</div>
-                                <span className="font-bold text-slate-700 uppercase text-xs">{g.name}</span>
-                            </div>
-                            <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                <button onClick={() => { setGrpId(g.id); setGrpName(g.name); setGrpIcon(g.icon); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
-                                <button onClick={() => { if(confirm('¿Borrar grupo?')) onUpdateData({accountGroups: data.accountGroups.filter(x => x.id !== g.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                {/* MODAL EDITOR GRUPOS */}
-                {isEditModalOpen && (
-                    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
-                        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20">
-                            <button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
-                            <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><BoxSelect className="text-indigo-600"/> {grpId ? 'Editar Grupo' : 'Nuevo Grupo'}</h3>
-                            <div className="space-y-6">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre Descriptivo</label>
-                                    <input type="text" placeholder="Ej: Bancos..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={grpName} onChange={e => setGrpName(e.target.value)} />
-                                </div>
-                                {renderIconInput(grpIcon, setGrpIcon, grpName)}
-                                <button onClick={() => { if(!grpName) return; if(grpId) onUpdateData({accountGroups: data.accountGroups.map(g=>g.id===grpId?{...g,name:grpName,icon:grpIcon}:g)}); else onUpdateData({accountGroups: [...data.accountGroups, {id:generateId(),name:grpName,icon:grpIcon}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Grupo</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-        )}
-
-        {activeTab === 'ACCOUNTS' && (
-            <div className="space-y-6">
-                <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nueva Cuenta</button>
-                <div className="space-y-4">
-                    {data.accounts.map(a => (
-                        <div key={a.id} className={`bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all ${a.active === false ? 'opacity-50 grayscale' : ''}`}>
-                             <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 relative">
-                                    {renderIcon(a.icon, "w-6 h-6")}
-                                    {a.active === false && <div className="absolute inset-0 bg-slate-100/50 backdrop-blur-[1px] rounded-2xl flex items-center justify-center"><EyeOff size={16} className="text-slate-400"/></div>}
-                                </div>
-                                <div>
-                                    <span className="block font-bold text-slate-700 uppercase text-xs">{a.name}</span>
-                                    <span className="text-[9px] font-black text-slate-400 uppercase">{data.accountGroups.find(g=>g.id===a.groupId)?.name} • {numberFormatter.format(a.initialBalance)}€</span>
-                                </div>
-                            </div>
-                            <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                <button onClick={() => { setAccId(a.id); setAccName(a.name); setAccBalance(a.initialBalance.toString()); setAccIcon(a.icon); setAccGroupId(a.groupId); setAccActive(a.active !== false); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
-                                <button onClick={() => attemptDeleteAccount(a)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                {/* MODAL EDITOR CUENTAS */}
-                {isEditModalOpen && (
-                    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
-                        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-10 relative border border-white/20 max-h-[90vh] overflow-y-auto custom-scrollbar">
-                            <button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
-                            <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Wallet className="text-indigo-600"/> {accId ? 'Editar Cuenta' : 'Nueva Cuenta'}</h3>
-                            <div className="space-y-6">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre</label>
-                                        <input type="text" placeholder="Ej: Principal..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accName} onChange={e => setAccName(e.target.value)} />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Saldo Inicial</label>
-                                        <input type="number" placeholder="0.00" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Estado</label>
-                                    <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                                        <button onClick={() => setAccActive(true)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${accActive ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}><Eye size={14}/> Activa</button>
-                                        <button onClick={() => setAccActive(false)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${!accActive ? 'bg-white shadow-sm text-slate-600' : 'text-slate-400'}`}><EyeOff size={14}/> Archivada</button>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Grupo de Cuentas</label>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                        {data.accountGroups.map(g => (
-                                            <button key={g.id} onClick={() => setAccGroupId(g.id)} className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${accGroupId === g.id ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-300'}`}>
-                                                {renderIcon(g.icon, "w-6 h-6")} <span className="text-[9px] font-black uppercase">{g.name}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                {renderIconInput(accIcon, setAccIcon, accName)}
-                                <button onClick={() => { 
-                                    if(!accName || !accGroupId) return; 
-                                    const bal = parseFloat(accBalance) || 0;
-                                    if(accId) onUpdateData({accounts: data.accounts.map(a=>a.id===accId?{...a,name:accName,initialBalance:bal,icon:accIcon,groupId:accGroupId, active: accActive}:a)}); 
-                                    else onUpdateData({accounts: [...data.accounts, {id:generateId(),name:accName,initialBalance:bal,currency:'EUR',icon:accIcon,groupId:accGroupId, active: true}]}); 
-                                    resetForm(); 
-                                }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Cuenta</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-        )}
-
-        {activeTab === 'FAMILIES' && (
-             <div className="space-y-6">
-                <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nueva Familia</button>
-                <div className="space-y-4">
-                    {data.families.map(f => (
-                         <div key={f.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all">
-                             <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100">{renderIcon(f.icon, "w-6 h-6")}</div>
-                                <div>
-                                    <span className="block font-bold text-slate-700 uppercase text-xs">{f.name}</span>
-                                    <span className={`text-[9px] font-black uppercase ${f.type === 'INCOME' ? 'text-emerald-500' : 'text-rose-500'}`}>{f.type === 'INCOME' ? 'Ingresos' : 'Gastos'}</span>
-                                </div>
-                            </div>
-                            <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                <button onClick={() => { setFamId(f.id); setFamName(f.name); setFamType(f.type); setFamIcon(f.icon); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
-                                <button onClick={() => { if(confirm('¿Borrar familia?')) onUpdateData({families: data.families.filter(x => x.id !== f.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                {/* MODAL EDITOR FAMILIAS */}
-                {isEditModalOpen && (
-                    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
-                        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20">
-                            <button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
-                            <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Layers className="text-indigo-600"/> {famId ? 'Editar Familia' : 'Nueva Familia'}</h3>
-                            <div className="space-y-6">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre</label>
-                                        <input type="text" placeholder="Ej: Vivienda..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={famName} onChange={e => setFamName(e.target.value)} />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tipo de Flujo</label>
-                                        <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                                            <button onClick={() => setFamType('EXPENSE')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${famType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-500' : 'text-slate-400'}`}>Gasto</button>
-                                            <button onClick={() => setFamType('INCOME')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${famType === 'INCOME' ? 'bg-white shadow-sm text-emerald-500' : 'text-slate-400'}`}>Ingreso</button>
-                                        </div>
-                                    </div>
-                                </div>
-                                {renderIconInput(famIcon, setFamIcon, famName)}
-                                <button onClick={() => { 
-                                    if(!famName) return; 
-                                    if(famId) onUpdateData({families: data.families.map(f=>f.id===famId?{...f,name:famName,type:famType,icon:famIcon}:f)}); 
-                                    else onUpdateData({families: [...data.families, {id:generateId(),name:famName,type:famType,icon:famIcon}]}); 
-                                    resetForm(); 
-                                }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Familia</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-        )}
-
-        {activeTab === 'CATEGORIES' && (
-            <div className="space-y-6">
-                <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nueva Categoría</button>
-                <div className="space-y-4">
-                    {data.categories.map(c => {
-                        const fam = data.families.find(f => f.id === c.familyId);
-                        return (
-                            <div key={c.id} className={`bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all ${c.active === false ? 'opacity-50 grayscale' : ''}`}>
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 relative">
-                                        {renderIcon(c.icon, "w-6 h-6")}
-                                        {c.active === false && <div className="absolute inset-0 bg-slate-100/50 backdrop-blur-[1px] rounded-2xl flex items-center justify-center"><EyeOff size={16} className="text-slate-400"/></div>}
-                                    </div>
-                                    <div>
-                                        <span className="block font-bold text-slate-700 uppercase text-xs">{c.name}</span>
-                                        <span className="text-[9px] font-black text-slate-400 uppercase">{fam?.name || 'Huérfana'}</span>
-                                    </div>
-                                </div>
-                                <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                    <button onClick={() => { setCatId(c.id); setCatName(c.name); setCatParent(c.familyId); setCatIcon(c.icon); setCatActive(c.active !== false); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button>
-                                    <button onClick={() => attemptDeleteCategory(c)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-                {/* MODAL EDITOR CATEGORÍAS */}
-                {isEditModalOpen && (
-                    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
-                        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-10 relative border border-white/20 max-h-[90vh] overflow-y-auto custom-scrollbar">
-                            <button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
-                            <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Tag className="text-indigo-600"/> {catId ? 'Editar Categoría' : 'Nueva Categoría'}</h3>
-                            <div className="space-y-6">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre</label>
-                                        <input type="text" placeholder="Ej: Supermercado..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={catName} onChange={e => setCatName(e.target.value)} />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Familia Principal</label>
-                                        <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none cursor-pointer appearance-none" value={catParent} onChange={e => setCatParent(e.target.value)}>
-                                            <option value="">Selecciona una familia...</option>
-                                            {data.families.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Estado</label>
-                                    <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                                        <button onClick={() => setCatActive(true)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${catActive ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}><Eye size={14}/> Activa</button>
-                                        <button onClick={() => setCatActive(false)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2 ${!catActive ? 'bg-white shadow-sm text-slate-600' : 'text-slate-400'}`}><EyeOff size={14}/> Archivada</button>
-                                    </div>
-                                </div>
-                                {renderIconInput(catIcon, setCatIcon, catName)}
-                                <button onClick={() => { 
-                                    if(!catName || !catParent) return; 
-                                    if(catId) onUpdateData({categories: data.categories.map(c=>c.id===catId?{...c,name:catName,familyId:catParent,icon:catIcon, active: catActive}:c)}); 
-                                    else onUpdateData({categories: [...data.categories, {id:generateId(),name:catName,familyId:catParent,icon:catIcon, active: true}]}); 
-                                    resetForm(); 
-                                }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Categoría</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-        )}
-        
-        {/* ... RESTO DE COMPONENTES SIN CAMBIOS (RECURRENTS, FAVORITES, UI, DATA, TOOLS) ... */}
-        
-        {activeTab === 'RECURRENTS' && (
-            <div className="grid grid-cols-1 gap-10">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                     <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><CalendarClock className="text-indigo-600"/> {recId ? 'Editar Recurrente' : 'Nuevo Recurrente'}</h3>
-                     <div className="space-y-6">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Descripción</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recDesc} onChange={e => setRecDesc(e.target.value)} /></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe</label><input type="number" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recAmount} onChange={e => setRecAmount(e.target.value)} /></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tipo</label><div className="flex bg-slate-100 p-1.5 rounded-2xl"><button onClick={() => setRecType('EXPENSE')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${recType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-500' : 'text-slate-400'}`}>Gasto</button><button onClick={() => setRecType('INCOME')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${recType === 'INCOME' ? 'bg-white shadow-sm text-emerald-500' : 'text-slate-400'}`}>Ingreso</button></div></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Frecuencia</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recFreq} onChange={e => setRecFreq(e.target.value as any)}><option value="DAYS">Días</option><option value="WEEKS">Semanas</option><option value="MONTHLY">Meses</option><option value="YEARS">Años</option></select></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Cuenta</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recAcc} onChange={e => setRecAcc(e.target.value)}>{data.accounts.filter(a => a.active !== false).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recCat} onChange={e => setRecCat(e.target.value)}><option value="">Select...</option>{data.categories.filter(c => c.active !== false).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Intervalo</label><input type="number" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recInterval} onChange={e => setRecInterval(e.target.value)} /></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Próximo Vencimiento</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recStart} onChange={e => setRecStart(e.target.value)} /></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha Final (Opcional)</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recEnd} onChange={e => setRecEnd(e.target.value)} /></div>
-                        </div>
-                        <button onClick={() => {
-                             if(!recDesc || !recAmount || !recAcc) return;
-                             const amt = parseFloat(recAmount);
-                             const famId = data.categories.find(c => c.id === recCat)?.familyId || '';
-                             const newRec: RecurrentMovement = {
-                                 id: recId || generateId(),
-                                 description: recDesc,
-                                 amount: amt,
-                                 type: recType,
-                                 accountId: recAcc,
-                                 categoryId: recCat,
-                                 familyId: famId,
-                                 frequency: recFreq,
-                                 interval: parseInt(recInterval) || 1,
-                                 startDate: recStart,
-                                 nextDueDate: recStart,
-                                 endDate: recEnd,
-                                 active: true
-                             };
-                             if(recId) onUpdateData({ recurrents: data.recurrents?.map(r => r.id === recId ? newRec : r) });
-                             else onUpdateData({ recurrents: [...(data.recurrents || []), newRec] });
-                             resetForm();
-                        }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Recurrente</button>
+      <div className="bg-white rounded-[2.5rem] p-8 sm:p-10 shadow-sm border border-slate-100 min-h-[400px]">
+         {activeTab === 'GENERAL' && (
+             <div className="space-y-8 max-w-xl">
+                 <div className="bg-rose-50 border border-rose-100 p-6 rounded-3xl space-y-4">
+                     <div className="flex items-center gap-3 text-rose-600">
+                         <AlertCircle size={24}/>
+                         <h3 className="font-black uppercase tracking-tight">Zona de Peligro</h3>
                      </div>
-                </div>
-                <div className="space-y-4">
-                    {data.recurrents?.map(r => (
-                        <div key={r.id} className={`bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between ${!r.active ? 'opacity-50' : ''}`}>
-                            <div className="flex flex-col">
-                                <span className="font-bold text-slate-700 text-xs uppercase">{r.description}</span>
-                                <span className="text-[9px] font-black text-slate-400 uppercase">
-                                    {r.active ? `Cada ${r.interval} ${r.frequency} • Próx: ${r.nextDueDate}` : 'INACTIVO'}
-                                    {r.endDate && ` • Fin: ${r.endDate}`}
-                                </span>
-                            </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => { setRecId(r.id); setRecDesc(r.description); setRecAmount(r.amount.toString()); setRecType(r.type); setRecAcc(r.accountId); setRecCat(r.categoryId); setRecFreq(r.frequency); setRecInterval(r.interval.toString()); setRecStart(r.nextDueDate); setRecEnd(r.endDate || ''); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Edit2 size={16}/></button>
-                                <button onClick={() => onUpdateData({ recurrents: data.recurrents?.filter(x => x.id !== r.id) })} className="p-3 bg-rose-50 text-rose-500 rounded-xl"><Trash2 size={16}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'FAVORITES' && (
-            <div className="grid grid-cols-1 gap-10">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                     <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Heart className="text-indigo-600"/> {favId ? 'Editar Favorito' : 'Nuevo Favorito'}</h3>
-                     <div className="space-y-6">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Alias (Botón)</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favName} onChange={e => setFavName(e.target.value)} /></div>
-                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Concepto Real</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favDesc} onChange={e => setFavDesc(e.target.value)} /></div>
-                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe (Opcional)</label><input type="number" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favAmount} onChange={e => setFavAmount(e.target.value)} /></div>
-                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tipo</label><div className="flex bg-slate-100 p-1.5 rounded-2xl"><button onClick={() => setFavType('EXPENSE')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${favType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-500' : 'text-slate-400'}`}>Gasto</button><button onClick={() => setFavType('INCOME')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all ${favType === 'INCOME' ? 'bg-white shadow-sm text-emerald-500' : 'text-slate-400'}`}>Ingreso</button></div></div>
-                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Cuenta</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favAcc} onChange={e => setFavAcc(e.target.value)}>{data.accounts.filter(a => a.active !== false).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favCat} onChange={e => setFavCat(e.target.value)}><option value="">Select...</option>{data.categories.filter(c => c.active !== false).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                        </div>
-                        {renderIconInput(favIcon, setFavIcon, favName)}
-                        <button onClick={() => {
-                             if(!favName || !favDesc || !favAcc) return;
-                             const amt = favAmount ? parseFloat(favAmount) : 0;
-                             const famId = data.categories.find(c => c.id === favCat)?.familyId || '';
-                             const newFav: FavoriteMovement = {
-                                 id: favId || generateId(),
-                                 name: favName,
-                                 description: favDesc,
-                                 amount: amt,
-                                 type: favType,
-                                 accountId: favAcc,
-                                 categoryId: favCat,
-                                 familyId: famId,
-                                 icon: favIcon
-                             };
-                             if(favId) onUpdateData({ favorites: data.favorites?.map(f => f.id === favId ? newFav : f) });
-                             else onUpdateData({ favorites: [...(data.favorites || []), newFav] });
-                             resetForm();
-                        }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Favorito</button>
-                     </div>
-                </div>
-                 <div className="space-y-4">
-                    {data.favorites?.map(f => (
-                        <div key={f.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100">{renderIcon(f.icon || '⭐', "w-6 h-6")}</div>
-                                <div className="flex flex-col">
-                                    <span className="font-bold text-slate-700 text-xs uppercase">{f.name}</span>
-                                    <span className="text-[9px] font-black text-slate-400 uppercase">{f.description} • {f.amount ? `${f.amount}€` : 'Manual'}</span>
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => { setFavId(f.id); setFavName(f.name); setFavDesc(f.description); setFavAmount(f.amount.toString()); setFavType(f.type); setFavAcc(f.accountId); setFavCat(f.categoryId); setFavIcon(f.icon || '⭐'); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Edit2 size={16}/></button>
-                                <button onClick={() => onUpdateData({ favorites: data.favorites?.filter(x => x.id !== f.id) })} className="p-3 bg-rose-50 text-rose-500 rounded-xl"><Trash2 size={16}/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {/* --- PESTAÑAS UI, DATA, TOOLS (Renderizado simplificado, ya que no cambian lógica, solo la reutilizan) --- */}
-        {activeTab === 'UI' && (
-            <div className="grid grid-cols-1 gap-10 animate-in fade-in slide-in-from-bottom-4">
-                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3"><Palette className="text-indigo-600"/> Personalización Visual</h3>
-                    
-                    <div className="space-y-6">
-                        <div className="flex flex-col md:flex-row items-center gap-8">
-                            <div className="flex-shrink-0 text-center">
-                                <div className="w-32 h-32 bg-slate-50 border-4 border-white shadow-xl rounded-3xl flex items-center justify-center overflow-hidden mb-3">
-                                    <img 
-                                        src={customLogoPreview || '/contamiki.jpg'} 
-                                        className="w-full h-full object-cover" 
-                                        onError={(e) => e.currentTarget.src = "https://cdn-icons-png.flaticon.com/512/2910/2910296.png"}
-                                        alt="Logo Preview"
-                                    />
-                                </div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logo Actual</p>
-                            </div>
-                            
-                            <div className="flex-1 space-y-4 w-full">
-                                <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
-                                    <h4 className="text-sm font-black text-indigo-900 uppercase mb-2">Subir Logo Personalizado</h4>
-                                    <p className="text-xs text-indigo-600/80 mb-4">Sube una imagen para reemplazar el logo de ContaMiki. Se guardará localmente en este navegador.</p>
-                                    
-                                    <div className="flex gap-3">
-                                        <button onClick={() => logoUploadRef.current?.click()} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2">
-                                            <Upload size={14}/> Seleccionar Imagen
-                                        </button>
-                                        {customLogoPreview && (
-                                            <button onClick={handleRemoveLogo} className="px-6 py-3 bg-white text-rose-500 border border-rose-100 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-sm hover:bg-rose-50 transition-all flex items-center gap-2">
-                                                <Trash2 size={14}/> Restaurar Original
-                                            </button>
-                                        )}
-                                        <input type="file" ref={logoUploadRef} className="hidden" accept="image/*" onChange={handleLogoUpload} />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-
-         {activeTab === 'DATA' && (
-            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="bg-indigo-50 p-10 rounded-[3rem] border border-indigo-100 space-y-6 text-center">
-                        <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm"><HardDriveDownload size={32}/></div>
-                        <div><h3 className="text-xl font-black text-indigo-900 uppercase">Exportar Datos</h3><p className="text-xs font-bold text-indigo-400 mt-2">Guarda una copia de seguridad completa del libro actual en tu dispositivo.</p></div>
-                        <button onClick={handleExportBackup} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-700 transition-all">Descargar JSON</button>
-                    </div>
-
-                    <div className="bg-slate-50 p-10 rounded-[3rem] border border-slate-100 space-y-6 text-center">
-                        <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-slate-600 shadow-sm"><HardDriveUpload size={32}/></div>
-                        <div><h3 className="text-xl font-black text-slate-900 uppercase">Restaurar Copia</h3><p className="text-xs font-bold text-slate-400 mt-2">Importa datos desde un archivo .json previamente exportado.</p></div>
-                        <button onClick={() => backupInputRef.current?.click()} className="w-full py-4 bg-white text-slate-900 border-2 border-slate-200 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-sm hover:border-indigo-500 hover:text-indigo-600 transition-all">Seleccionar Archivo</button>
-                        <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={handleFileSelect} />
-                    </div>
-                </div>
-                 {/* ZONA DE PELIGRO: Borrado */}
-                <div className="bg-rose-50 p-10 rounded-[3rem] border border-rose-100 space-y-6 text-center mt-8">
-                    <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-rose-600 shadow-sm"><ShieldAlert size={32}/></div>
-                    <div>
-                        <h3 className="text-xl font-black text-rose-900 uppercase">Zona de Peligro</h3>
-                        <p className="text-xs font-bold text-rose-400 mt-2">Acciones destructivas. Requieren verificación.</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                        <div className="p-6 bg-white rounded-[2rem] border border-rose-100 space-y-3 flex flex-col justify-center">
-                            <p className="text-[10px] font-black text-slate-400 uppercase">Borrar por Año</p>
-                            <div className="flex gap-2">
-                                <select className="w-full bg-slate-50 border border-slate-200 font-bold text-sm rounded-xl px-3 outline-none text-slate-700" value={yearToDelete} onChange={e => setYearToDelete(e.target.value)} >
-                                    <option value="" disabled>Año</option>
-                                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-                                </select>
-                                <button onClick={() => openVerification('YEAR', yearToDelete)} className="bg-rose-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase hover:bg-rose-700 shadow-lg disabled:opacity-50" disabled={!yearToDelete}>Borrar</button>
-                            </div>
-                        </div>
-
-                        <button onClick={() => openVerification('ALL_TX')} className="p-6 bg-white rounded-[2rem] border border-rose-100 flex flex-col items-center justify-center gap-2 hover:border-rose-300 hover:shadow-lg transition-all group">
-                            <Eraser size={24} className="text-rose-400 group-hover:text-rose-600 mb-1"/>
-                            <span className="text-[10px] font-black text-rose-600 uppercase">Borrar TODOS los Movimientos</span>
-                        </button>
-
-                         <button onClick={() => openVerification('BOOK')} className="p-6 bg-rose-600 text-white rounded-[2rem] border border-rose-600 flex flex-col items-center justify-center gap-2 hover:bg-rose-700 hover:shadow-xl transition-all group">
-                            <Trash2 size={24} className="text-white/80 group-hover:text-white mb-1"/>
-                            <span className="text-[10px] font-black text-white uppercase">Eliminar Libro Completo</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
+                     <p className="text-xs text-rose-800 font-medium">Estas acciones afectan solo a este libro contable.</p>
+                     <button onClick={() => { if(confirm("¿Seguro que quieres borrar este libro?")) onDeleteBook?.(); }} className="px-4 py-3 bg-white border border-rose-200 text-rose-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all">
+                         Eliminar Libro Actual
+                     </button>
+                 </div>
+             </div>
          )}
          
          {activeTab === 'TOOLS' && (
@@ -782,52 +145,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, onUpdateData, 
                     </div>
                 </div>
 
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3"><ClipboardPaste className="text-indigo-600" size={28}/> Importador Maestro</h3>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-4">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Pegar desde Portapapeles</label>
-                            <textarea className="w-full h-36 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-[10px] outline-none shadow-inner" placeholder="Pega las líneas aquí..." value={pasteData} onChange={e => setPasteData(e.target.value)} />
-                            <button onClick={() => handleProcessImport(pasteData)} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl">Procesar Datos</button>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100 space-y-6">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-white p-3 rounded-xl shadow-sm"><Upload size={20}/></div>
+                            <h3 className="text-lg font-black uppercase tracking-tight">Migrar desde otra App</h3>
                         </div>
+                        <p className="text-xs text-slate-500">Pega aquí el contenido CSV o texto de tu antigua app y la IA intentará reconstruir la estructura.</p>
+                        
+                        <input 
+                            type="text" 
+                            className="w-full p-3 rounded-xl border border-slate-200 text-sm font-bold" 
+                            placeholder="Nombre para el nuevo libro..."
+                            value={newBookName}
+                            onChange={e => setNewBookName(e.target.value)}
+                        />
+                        <textarea 
+                            className="w-full h-32 p-3 rounded-xl border border-slate-200 text-xs font-mono" 
+                            placeholder="Pega tus datos crudos aquí..."
+                            value={migrationText}
+                            onChange={e => setMigrationText(e.target.value)}
+                        ></textarea>
+                        
+                        <button 
+                            onClick={handleMigration}
+                            disabled={isMigrating || !migrationText || !newBookName}
+                            className="w-full py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-600 transition-all disabled:opacity-50"
+                        >
+                            {isMigrating ? 'Analizando...' : 'Crear Libro desde Datos'}
+                        </button>
                     </div>
                 </div>
             </div>
         )}
+
+        {(activeTab === 'CATEGORIES' || activeTab === 'ACCOUNTS' || activeTab === 'DATA') && (
+            <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                <Settings className="w-12 h-12 mb-4 opacity-20"/>
+                <p className="font-bold text-sm">Configuración avanzada disponible próximamente</p>
+            </div>
+        )}
       </div>
-
-      {verificationModal && (
-          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
-              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-10 text-center relative border border-white/20">
-                  <button onClick={() => setVerificationModal(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button>
-                  <div className="mx-auto w-20 h-20 bg-rose-50 rounded-3xl flex items-center justify-center border border-rose-100 mb-6 shadow-sm text-rose-500">
-                      <ShieldAlert size={40}/>
-                  </div>
-                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Confirmación de Seguridad</h3>
-                  <p className="text-xs font-medium text-slate-500 mb-6">
-                      Esta acción es irreversible. Para confirmar, escribe la palabra <span className="font-black text-rose-600">BORRAR</span> en el recuadro.
-                  </p>
-                  
-                  <input 
-                      type="text" 
-                      placeholder="Escribe BORRAR" 
-                      className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-center outline-none focus:border-rose-500 transition-all uppercase mb-6"
-                      value={verificationInput}
-                      onChange={e => setVerificationInput(e.target.value.toUpperCase())}
-                  />
-
-                  <button 
-                      onClick={executeDangerousAction}
-                      disabled={verificationInput !== 'BORRAR'}
-                      className={`w-full py-5 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl transition-all flex items-center justify-center gap-2 ${verificationInput === 'BORRAR' ? 'bg-rose-600 text-white hover:bg-rose-700 active:scale-95' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
-                  >
-                      <Trash2 size={16}/> Confirmar Eliminación
-                  </button>
-              </div>
-          </div>
-      )}
     </div>
   );
 };
