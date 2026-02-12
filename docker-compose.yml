@@ -1,40 +1,34 @@
-
-version: '3.8'
-
+version: '3'
 services:
   contamiki:
-    build: .
     container_name: contamiki
+    build: .
     restart: unless-stopped
     ports:
       - "4000:4000"
-    environment:
-      - NODE_ENV=production
-      - PORT=4000
-    #  - DATA_DIR=/app/data
-    #  - API_KEY=${API_KEY}
-    #  - JWT_SECRET=${JWT_SECRET:-clave_secreta_por_defecto_123}
-      
-      # Configuración de la URL de la App (Necesario para generar links de verificación correctos)
-      # Si usas dominio propio, ponlo aquí: https://mis-finanzas.com
-      - APP_URL=${APP_URL:-http://localhost:4000}
-
-      # Configuración de Correo (SMTP)
-      # Si se dejan vacíos, el servidor imprimirá los correos en la consola (Modo Debug)
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_SECURE=${SMTP_SECURE:-false}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASS=${SMTP_PASS}
     volumes:
-      # Usamos un volumen nombrado para que Docker lo gestione automáticamente
+# Ajusta la ruta de abajo según tu NAS
       - /volume1/docker/contamiki/data:/app/data
-    networks:
-      - contamiki_network
-
-volumes:
-  contamiki_data:
-
-networks:
-  contamiki_network:
-    driver: bridge
+    secrets:
+      - JWT_SECRET
+      - APP_URL
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_SECURE
+      - SMTP_USER
+      - SMTP_PASS
+secrets:
+  JWT_SECRET:
+    environment: JWT_SECRET
+  APP_URL:
+    environment: APP_URL
+  SMTP_HOST:
+    environment: SMTP_HOST
+  SMTP_PORT:
+    environment: SMTP_PORT
+  SMTP_SECURE:
+    environment: SMTP_SECURE
+  SMTP_USER:
+    environment: SMTP_USER
+  SMTP_PASS:
+    environment: SMTP_PASS
