@@ -5,6 +5,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import nodemailer from 'nodemailer';
+import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -12,6 +14,44 @@ const PORT = process.env.PORT || 4000;
 
 // Configs
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_master_key_conta_miki';
+const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
+
+// EMAIL CONFIGURATION
+const SMTP_CONFIG = {
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT || 587,
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+    },
+};
+
+// Transporter (o Mock si no hay config)
+const mailer = process.env.SMTP_HOST 
+    ? nodemailer.createTransport(SMTP_CONFIG)
+    : null;
+
+const sendEmail = async (to, subject, text, html) => {
+    if (mailer) {
+        try {
+            await mailer.sendMail({ from: `"ContaMiki Security" <${process.env.SMTP_USER || 'noreply@contamiki.local'}>`, to, subject, text, html });
+            console.log(`[EMAIL SENT] To: ${to} | Subject: ${subject}`);
+            return true;
+        } catch (error) {
+            console.error("[EMAIL ERROR]", error);
+            return false;
+        }
+    } else {
+        // MODO DESARROLLO / LOCAL: Imprimir en consola
+        console.log("==================================================");
+        console.log(`[MOCK EMAIL] To: ${to}`);
+        console.log(`Subject: ${subject}`);
+        console.log(`Content: ${text}`);
+        console.log("==================================================");
+        return true;
+    }
+};
 
 // DEFINICIÓN DE DIRECTORIO DE DATOS ROBUSTA
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -201,6 +241,10 @@ const readUsers = async () => {
     }
 };
 
+const saveUsers = async (users) => {
+    await fs.writeFile(GLOBAL_USERS_FILE, JSON.stringify(users, null, 2));
+};
+
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -214,20 +258,64 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+const validateEmail = (email) => {
+    return String(email)
+      .toLowerCase()
+      .match(
+        /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|.(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+      );
+};
+
 // --- Routes ---
 
 app.post('/api/register', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: "Datos incompletos" });
+    if (!validateEmail(username)) return res.status(400).json({ error: "El usuario debe ser un email válido" });
+    
     try {
         const users = await readUsers();
-        if (users.find(u => u.username === username)) return res.status(400).json({ error: "Usuario duplicado" });
-        const hashedPassword = await bcrypt.hash(password, 10);
-        users.push({ username, password: hashedPassword });
-        await fs.writeFile(GLOBAL_USERS_FILE, JSON.stringify(users, null, 2));
+        if (users.find(u => u.username === username)) return res.status(400).json({ error: "Usuario/Email ya registrado" });
         
-        // Crear carpeta de usuario
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        
+        users.push({ 
+            username, 
+            password: hashedPassword,
+            isVerified: false,
+            verificationToken
+        });
+        
+        await saveUsers(users);
         await fs.mkdir(getUserDir(username), { recursive: true });
+        
+        // Enviar Email Verificación
+        const link = `${APP_URL}?action=verify&token=${verificationToken}`;
+        await sendEmail(
+            username, 
+            "Verifica tu cuenta en ContaMiki", 
+            `Haz click en este enlace para activar tu cuenta: ${link}`,
+            `<p>Bienvenido a ContaMiki.</p><p>Para activar tu cuenta, haz clic aquí:</p><a href="${link}">${link}</a>`
+        );
+
+        res.json({ success: true, message: "Usuario creado. Revisa tu email (o la consola del servidor) para activar la cuenta." });
+    } catch (err) { res.status(500).json({ error: "Error server" }); }
+});
+
+app.post('/api/verify', async (req, res) => {
+    const { token } = req.body;
+    if(!token) return res.status(400).json({ error: "Token requerido" });
+    
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.verificationToken === token);
+        
+        if (!user) return res.status(400).json({ error: "Token inválido o expirado" });
+        
+        user.isVerified = true;
+        user.verificationToken = null;
+        await saveUsers(users);
         
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: "Error server" }); }
@@ -238,9 +326,57 @@ app.post('/api/login', async (req, res) => {
     try {
         const users = await readUsers();
         const user = users.find(u => u.username === username);
+        
         if (!user || !(await bcrypt.compare(password, user.password))) return res.status(401).json({ error: "Credenciales inválidas" });
+        
+        // Bloqueo estricto si no está verificado
+        if (user.isVerified === false) return res.status(403).json({ error: "Cuenta no verificada. Revisa tu email." });
+
         const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '30d' });
         res.json({ token, username: user.username });
+    } catch (err) { res.status(500).json({ error: "Error server" }); }
+});
+
+app.post('/api/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    if(!email) return res.status(400).json({ error: "Email requerido" });
+    
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.username === email);
+        if (!user) return res.json({ success: true }); // No revelar si existe o no por seguridad
+
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        user.resetToken = resetToken;
+        user.resetExpires = Date.now() + 3600000; // 1 hora
+        await saveUsers(users);
+
+        const link = `${APP_URL}?action=reset&token=${resetToken}`;
+        await sendEmail(
+            email, 
+            "Recuperación de Contraseña - ContaMiki", 
+            `Usa este enlace para cambiar tu contraseña: ${link}`,
+            `<p>Has solicitado recuperar tu contraseña.</p><p><a href="${link}">Haz clic aquí para resetearla</a></p><p>Este enlace expira en 1 hora.</p>`
+        );
+
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: "Error server" }); }
+});
+
+app.post('/api/reset-password', async (req, res) => {
+    const { token, newPassword } = req.body;
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.resetToken === token && u.resetExpires > Date.now());
+        
+        if (!user) return res.status(400).json({ error: "Enlace inválido o expirado" });
+        
+        user.password = await bcrypt.hash(newPassword, 10);
+        user.resetToken = null;
+        user.resetExpires = null;
+        await saveUsers(users);
+        
+        res.json({ success: true });
     } catch (err) { res.status(500).json({ error: "Error server" }); }
 });
 

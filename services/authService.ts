@@ -35,7 +35,7 @@ export const login = async (username, password) => {
             setSession('local_token_' + username, username);
             return { token: 'local_token_' + username, username };
         }
-        throw new Error("Credenciales inválidas o servidor no disponible. Intenta registrarte localmente.");
+        throw new Error(err.message || "Credenciales inválidas o servidor no disponible.");
     }
 };
 
@@ -51,13 +51,53 @@ export const register = async (username, password) => {
         const err = await response.json().catch(() => ({ error: 'Error de red' }));
         throw new Error(err.error || 'Error al registrarse');
     } catch (err: any) {
-        try {
-            saveLocalUser(username, password);
-            return { success: true, message: "Registrado localmente" };
-        } catch (localErr: any) {
-            throw new Error(localErr.message);
+        // Fallback local solo si es error de conexión, no si el servidor rechaza el email
+        if (err.message === 'Error de red' || err.message.includes('fetch')) {
+             try {
+                saveLocalUser(username, password);
+                return { success: true, message: "Registrado localmente (Sin verificación)" };
+            } catch (localErr: any) {
+                throw new Error(localErr.message);
+            }
         }
+        throw err;
     }
+};
+
+export const verifyEmail = async (token: string) => {
+    const response = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+    });
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error);
+    }
+    return await response.json();
+};
+
+export const requestPasswordReset = async (email: string) => {
+     const response = await fetch('/api/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+    });
+    if (!response.ok) throw new Error("Error al solicitar reset");
+    return true;
+};
+
+export const resetPassword = async (token: string, newPassword: string) => {
+    const response = await fetch('/api/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword })
+    });
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error);
+    }
+    return true;
 };
 
 export const loginAsGuest = () => {
