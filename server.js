@@ -322,6 +322,35 @@ app.post('/api/register', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Error server" }); }
 });
 
+app.post('/api/resend-verification', async (req, res) => {
+    const { username } = req.body;
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.username === username);
+
+        if (!user) return res.status(400).json({ error: "Usuario no encontrado" });
+        if (user.isVerified) return res.status(400).json({ error: "El usuario ya está verificado" });
+
+        // Regenerar token por si acaso
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        user.verificationToken = verificationToken;
+        await saveUsers(users);
+
+        const link = `${APP_URL}?action=verify&token=${verificationToken}`;
+        await sendEmail(
+            username, 
+            "Verifica tu cuenta en ContaMiki (Reenvío)", 
+            `Haz click en este enlace para activar tu cuenta: ${link}`,
+            `<p>Has solicitado reenviar el correo de validación.</p><p><a href="${link}">Activar cuenta ahora</a></p>`
+        );
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error al reenviar email" });
+    }
+});
+
 app.post('/api/verify', async (req, res) => {
     const { token } = req.body;
     if(!token) return res.status(400).json({ error: "Token requerido" });
@@ -397,6 +426,56 @@ app.post('/api/reset-password', async (req, res) => {
         
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: "Error server" }); }
+});
+
+app.post('/api/change-password', authenticateToken, async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.username === req.user.username);
+        
+        if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+        
+        // Verificar contraseña actual
+        if (!(await bcrypt.compare(currentPassword, user.password))) {
+            return res.status(401).json({ error: "La contraseña actual es incorrecta" });
+        }
+
+        user.password = await bcrypt.hash(newPassword, 10);
+        await saveUsers(users);
+        
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error al cambiar contraseña" });
+    }
+});
+
+app.post('/api/delete-account', authenticateToken, async (req, res) => {
+    try {
+        const users = await readUsers();
+        const newUsers = users.filter(u => u.username !== req.user.username);
+        
+        if (users.length === newUsers.length) return res.status(404).json({ error: "Usuario no encontrado" });
+
+        await saveUsers(newUsers);
+
+        // Borrar datos asociados
+        const userDir = getUserDir(req.user.username);
+        try {
+            await fs.rm(userDir, { recursive: true, force: true });
+            // Intentar borrar archivo legacy si existe
+            const legacyFile = path.join(DATA_DIR, `data_${getSafeUsername(req.user.username)}.json`);
+            await fs.unlink(legacyFile).catch(() => {});
+        } catch (e) {
+            console.error("Error borrando archivos de usuario:", e);
+        }
+        
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error al eliminar cuenta" });
+    }
 });
 
 app.get('/api/data', authenticateToken, async (req, res) => {

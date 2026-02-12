@@ -1,8 +1,8 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save } from 'lucide-react';
+import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
-import { logout } from './services/authService';
+import { logout, getUsername, changePassword, deleteAccount } from './services/authService';
 
 interface LayoutProps {
   currentView: View;
@@ -39,7 +39,24 @@ const THEME_ACCENTS: Record<string, string> = {
 
 export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED', syncError, onManualSave }) => {
   const [isBookMenuOpen, setIsBookMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('contamiki_custom_logo'));
+  
+  // Modals States
+  const [isChangePassModalOpen, setIsChangePassModalOpen] = useState(false);
+  const [isDeleteAccountModalOpen, setIsDeleteAccountModalOpen] = useState(false);
+  
+  // Change Pass Inputs
+  const [currentPass, setCurrentPass] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [passError, setPassError] = useState('');
+  const [passSuccess, setPassSuccess] = useState('');
+
+  // Delete Account Inputs
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+
+  const username = getUsername() || 'Usuario';
 
   useEffect(() => {
       const handleLogoChange = () => {
@@ -75,6 +92,38 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
            target.src = '/logo.jpg'; // Probar genérico
       } else {
           target.src = "https://cdn-icons-png.flaticon.com/512/2910/2910296.png";
+      }
+  };
+
+  const handleChangePassword = async () => {
+      if (!currentPass || !newPass) {
+          setPassError("Rellena ambos campos");
+          return;
+      }
+      try {
+          await changePassword(currentPass, newPass);
+          setPassSuccess("Contraseña cambiada correctamente");
+          setPassError("");
+          setTimeout(() => {
+              setIsChangePassModalOpen(false);
+              setCurrentPass('');
+              setNewPass('');
+              setPassSuccess('');
+          }, 1500);
+      } catch (err: any) {
+          setPassError(err.message);
+      }
+  };
+
+  const handleDeleteAccount = async () => {
+      if (deleteConfirmation !== 'DAR DE BAJA USUARIO') {
+          return;
+      }
+      try {
+          await deleteAccount();
+          // Logout se maneja dentro del servicio
+      } catch (err: any) {
+          setDeleteError(err.message);
       }
   };
 
@@ -216,15 +265,42 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
 
           <div className="h-px bg-white/10 mx-4 mb-4" />
           
-          <button 
-              onClick={logout}
-              className="w-full flex items-center gap-4 px-6 py-4 rounded-[1.25rem] text-white/50 hover:bg-white/10 hover:text-white transition-all font-black text-[10px] uppercase tracking-widest group"
-          >
-              <div className="group-hover:rotate-12 transition-transform">
-                <LogOut size={20} />
-              </div>
-              <span>Cerrar Sesión</span>
-          </button>
+          {/* USER MENU */}
+          <div className="relative">
+              <button 
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="w-full flex items-center gap-4 px-6 py-4 rounded-[1.25rem] text-white/70 hover:bg-white/10 hover:text-white transition-all font-bold text-[11px] group relative"
+              >
+                  <div className="bg-white/10 p-2 rounded-full group-hover:scale-110 transition-transform">
+                      <User size={18} />
+                  </div>
+                  <div className="flex flex-col items-start truncate">
+                      <span className="uppercase text-[9px] opacity-60">Usuario</span>
+                      <span className="truncate max-w-[140px]">{username}</span>
+                  </div>
+                  <ChevronDown className={`ml-auto transition-transform ${isUserMenuOpen ? 'rotate-180' : ''}`} size={16}/>
+              </button>
+
+              {isUserMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setIsUserMenuOpen(false)}></div>
+                    <div className="absolute bottom-full left-0 mb-2 w-full bg-white text-slate-900 rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-20 animate-in slide-in-from-bottom-2 fade-in">
+                        <div className="p-2 space-y-1">
+                            <button onClick={() => { setIsUserMenuOpen(false); setIsChangePassModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 transition-all text-slate-600">
+                                <Key size={16} className="text-amber-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cambiar Clave</span>
+                            </button>
+                            <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 transition-all text-slate-600">
+                                <LogOut size={16} className="text-indigo-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cerrar Sesión</span>
+                            </button>
+                            <div className="h-px bg-slate-100 my-1"/>
+                            <button onClick={() => { setIsUserMenuOpen(false); setIsDeleteAccountModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-rose-50 transition-all text-rose-500">
+                                <Trash2 size={16}/> <span className="text-[10px] font-black uppercase tracking-widest">Borrar Cuenta</span>
+                            </button>
+                        </div>
+                    </div>
+                  </>
+              )}
+          </div>
         </div>
       </aside>
 
@@ -266,6 +342,49 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
           </button>
         ))}
       </nav>
+
+      {/* MODAL CAMBIO CONTRASEÑA */}
+      {isChangePassModalOpen && (
+          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 text-center relative">
+                  <button onClick={() => setIsChangePassModalOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full hover:bg-slate-100"><X size={20}/></button>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-6 flex items-center justify-center gap-2"><Key className="text-amber-500"/> Cambiar Clave</h3>
+                  <div className="space-y-4">
+                      <input type="password" placeholder="Contraseña Actual" className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" value={currentPass} onChange={e => setCurrentPass(e.target.value)} />
+                      <input type="password" placeholder="Nueva Contraseña" className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" value={newPass} onChange={e => setNewPass(e.target.value)} />
+                      {passError && <p className="text-rose-500 text-xs font-bold">{passError}</p>}
+                      {passSuccess && <p className="text-emerald-500 text-xs font-bold">{passSuccess}</p>}
+                      <button onClick={handleChangePassword} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-600 shadow-xl">Actualizar</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL BORRAR CUENTA */}
+      {isDeleteAccountModalOpen && (
+          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 text-center relative border-4 border-rose-50">
+                  <button onClick={() => setIsDeleteAccountModalOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full hover:bg-slate-100"><X size={20}/></button>
+                  <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-rose-500"><AlertCircle size={32}/></div>
+                  <h3 className="text-xl font-black text-rose-600 uppercase tracking-tighter mb-2">¡Peligro!</h3>
+                  <p className="text-slate-500 text-xs font-medium mb-6">Esta acción borrará tu usuario y <strong>TODOS</strong> tus datos financieros. Es irreversible a menos que tengas una copia de seguridad local.</p>
+                  
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Escribe: DAR DE BAJA USUARIO</p>
+                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-center outline-none focus:border-rose-500 uppercase text-rose-900 mb-4" value={deleteConfirmation} onChange={e => setDeleteConfirmation(e.target.value.toUpperCase())} />
+                  
+                  {deleteError && <p className="text-rose-500 text-xs font-bold mb-4">{deleteError}</p>}
+
+                  <button 
+                    onClick={handleDeleteAccount}
+                    disabled={deleteConfirmation !== 'DAR DE BAJA USUARIO'}
+                    className={`w-full py-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all ${deleteConfirmation === 'DAR DE BAJA USUARIO' ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                  >
+                      Eliminar mi cuenta para siempre
+                  </button>
+              </div>
+          </div>
+      )}
+
     </div>
   );
 };

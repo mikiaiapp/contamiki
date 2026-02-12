@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { login, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword } from './services/authService';
-import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles, Check, XCircle, CheckCircle2, Mail, ArrowLeft, KeyRound } from 'lucide-react';
+import { login, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification } from './services/authService';
+import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles, Check, XCircle, CheckCircle2, Mail, ArrowLeft, KeyRound, Send } from 'lucide-react';
 
 interface LoginViewProps {
     onLoginSuccess: () => void;
@@ -19,6 +19,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const [loading, setLoading] = useState(false);
     const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('contamiki_custom_logo'));
     const [resetToken, setResetToken] = useState<string | null>(null);
+    const [showResend, setShowResend] = useState(false);
 
     // Detección de parámetros URL (Verificación / Reset)
     useEffect(() => {
@@ -72,6 +73,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         e.preventDefault();
         setError('');
         setSuccessMsg('');
+        setShowResend(false);
         
         // Validar formato email SOLO si NO estamos en reset password (ya que ahí el input está oculto)
         if (mode !== 'RESET_PASSWORD' && !validateEmail(email)) {
@@ -116,6 +118,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             }
         } catch (err: any) {
             setError(err.message);
+            // Activar botón de reenvío si el error es específico de verificación
+            if (mode === 'LOGIN' && err.message && err.message.includes('verificada')) {
+                setShowResend(true);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResend = async () => {
+        setLoading(true);
+        try {
+            await resendVerification(email);
+            setSuccessMsg("Correo reenviado. Revisa tu bandeja de entrada.");
+            setShowResend(false);
+        } catch (err: any) {
+            setError(err.message);
         } finally {
             setLoading(false);
         }
@@ -132,6 +151,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         setSuccessMsg('');
         setPassword('');
         setConfirmPassword('');
+        setShowResend(false);
     };
 
     return (
@@ -192,8 +212,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {error && (
-                            <div className="bg-rose-50 text-rose-600 p-4 rounded-2xl text-[10px] font-bold text-center border border-rose-100 flex items-center justify-center gap-2 animate-in slide-in-from-top-2">
-                                <AlertCircle size={14} /> {error}
+                            <div className="bg-rose-50 text-rose-600 p-4 rounded-2xl text-[10px] font-bold text-center border border-rose-100 flex flex-col items-center justify-center gap-2 animate-in slide-in-from-top-2">
+                                <div className="flex items-center gap-2"><AlertCircle size={14} /> {error}</div>
+                                {showResend && (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleResend}
+                                        className="mt-2 text-rose-700 underline hover:text-rose-900 flex items-center gap-1"
+                                    >
+                                        <Send size={12}/> Reenviar correo de verificación
+                                    </button>
+                                )}
                             </div>
                         )}
                         {successMsg && (

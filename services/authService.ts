@@ -64,6 +64,19 @@ export const register = async (username, password) => {
     }
 };
 
+export const resendVerification = async (username: string) => {
+    const response = await fetch('/api/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+    });
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error);
+    }
+    return true;
+};
+
 export const verifyEmail = async (token: string) => {
     const response = await fetch('/api/verify', {
         method: 'POST',
@@ -121,7 +134,7 @@ export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const getUsername = () => localStorage.getItem(USERNAME_KEY);
 export const isAuthenticated = () => !!localStorage.getItem(TOKEN_KEY);
 
-export const changePassword = async (newPassword) => {
+export const changePassword = async (currentPassword, newPassword) => {
     const token = getToken();
     try {
         const response = await fetch('/api/change-password', {
@@ -130,15 +143,53 @@ export const changePassword = async (newPassword) => {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ newPassword })
+            body: JSON.stringify({ currentPassword, newPassword })
         });
-        if(!response.ok) throw new Error("Error servidor");
-        return await response.json();
-    } catch (e) {
-        const user = getUsername();
-        const users = getLocalUsers();
-        const updated = users.map(u => u.username === user ? { ...u, password: newPassword } : u);
-        localStorage.setItem(MOCK_USERS_KEY, JSON.stringify(updated));
+        
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || "Error al cambiar contraseña");
+        }
         return { success: true };
+    } catch (e) {
+        if (token?.startsWith('local_')) {
+             const user = getUsername();
+             const users = getLocalUsers();
+             const updated = users.map(u => u.username === user ? { ...u, password: newPassword } : u);
+             localStorage.setItem(MOCK_USERS_KEY, JSON.stringify(updated));
+             return { success: true };
+        }
+        throw e;
+    }
+};
+
+export const deleteAccount = async () => {
+    const token = getToken();
+    try {
+        const response = await fetch('/api/delete-account', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || "Error al eliminar cuenta");
+        }
+        
+        logout(); // Limpiar localstorage y recargar
+        return { success: true };
+    } catch (e) {
+        if (token?.startsWith('local_')) {
+             const user = getUsername();
+             const users = getLocalUsers();
+             const updated = users.filter(u => u.username !== user);
+             localStorage.setItem(MOCK_USERS_KEY, JSON.stringify(updated));
+             logout();
+             return { success: true };
+        }
+        throw e;
     }
 };
