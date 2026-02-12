@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, RecurrentMovement, RecurrenceFrequency } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
@@ -28,6 +28,7 @@ interface ProposedTransaction {
   accountId: string;
   type: TransactionType;
   isValidated: boolean;
+  attachment?: string;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
@@ -96,6 +97,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const [favName, setFavName] = useState('');
   const [showFavoritesList, setShowFavoritesList] = useState(false);
 
+  // --- BULK ACTIONS STATE (MAIN VIEW) ---
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
+  const [bulkEditTarget, setBulkEditTarget] = useState<'DATE' | 'ACCOUNT' | 'CATEGORY' | 'DELETE'>('DATE');
+  const [bulkEditValue, setBulkEditValue] = useState('');
+
   // --- PREVIEW STATE ---
   const [previewAttachment, setPreviewAttachment] = useState<string | null>(null);
 
@@ -104,7 +111,15 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const [importStep, setImportStep] = useState<1 | 2 | 3>(1);
   const [importAccount, setImportAccount] = useState('');
   const [proposedTransactions, setProposedTransactions] = useState<ProposedTransaction[]>([]);
+  // Import Bulk Actions
+  const [selectedImportIds, setSelectedImportIds] = useState<Set<string>>(new Set());
+  const [bulkImportCategory, setBulkImportCategory] = useState('');
+  // Import Row Attachment
+  const [attachingImportId, setAttachingImportId] = useState<string | null>(null);
+  const rowImportFileRef = useRef<HTMLInputElement>(null);
+  
   const importFileRef = useRef<HTMLInputElement>(null);
+  const rawImportTextRef = useRef<HTMLTextAreaElement>(null);
 
   // Filters & Sort
   const [colFilterEntry, setColFilterEntry] = useState('ALL');
@@ -148,9 +163,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       }).filter(f => f.categories.length > 0);
   }, [data.families, data.categories, editingTx]);
 
-  // RESET PAGE ON FILTER CHANGE
+  // RESET PAGE ON FILTER CHANGE & CLEAR SELECTION
   useEffect(() => {
       setCurrentPage(1);
+      setSelectedIds(new Set());
   }, [colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, colFilterAmountVal1, filter]);
 
   useEffect(() => {
@@ -167,8 +183,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
          setImportStep(1);
          setIsImportModalOpen(true);
       } else {
-          // Lógica Mejorada: Si venimos filtrando por categoría o cuenta, aplicamos el filtro en AMBAS columnas.
-          // Junto con la lógica "OR" del filtrado, esto mostrará ingresos y gastos relacionados.
           if (initialSpecificFilters.filterCategory) {
               setColFilterEntry(initialSpecificFilters.filterCategory);
               setColFilterExit(initialSpecificFilters.filterCategory);
@@ -176,7 +190,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
               setColFilterEntry(initialSpecificFilters.filterAccount);
               setColFilterExit(initialSpecificFilters.filterAccount);
           } else {
-              // Fallback por si acaso
               if (initialSpecificFilters.filterCategory) setColFilterEntry(initialSpecificFilters.filterCategory);
               if (initialSpecificFilters.filterAccount) setColFilterExit(initialSpecificFilters.filterAccount);
           }
@@ -185,7 +198,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     }
   }, [initialSpecificFilters, indices, data.accounts]);
 
-  // ... (Helper functions: findSuggestedCategory, handleStartAnalysis, handleFinalImport kept same) ...
   const findSuggestedCategory = (desc: string): string => {
     const text = desc.toLowerCase();
     const match = data.transactions.find(t => t.description.toLowerCase().includes(text));
@@ -200,29 +212,24 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     const lines = rawData.split('\n').filter(l => l.trim());
     const props: ProposedTransaction[] = [];
     lines.forEach(line => {
-      // Intenta separar por punto y coma, tabulador o coma (si es CSV simple)
       const parts = line.split(/[;\t]/).map(p => p.trim());
-      // Si falla, intenta comas, pero cuidado con las comas en descripciones o decimales
       const effectiveParts = parts.length >= 2 ? parts : line.split(',').map(p => p.trim());
 
       if (effectiveParts.length < 2) return;
       
-      // Asumimos formato: FECHA ; DESCRIPCION ; IMPORTE (opcionalmente)
-      // Ajuste heurístico básico
       const dateStr = effectiveParts[0];
       const concept = effectiveParts[1];
-      const amountStr = effectiveParts[effectiveParts.length - 1].replace(',', '.'); // Asumimos importe al final
+      const amountStr = effectiveParts[effectiveParts.length - 1].replace(',', '.');
       const amount = parseFloat(amountStr);
       
-      if (isNaN(amount)) return; // Si no hay importe válido, saltamos
+      if (isNaN(amount)) return;
 
       props.push({
         id: generateId(),
-        // Normalizar fecha si viene DD/MM/YYYY
         date: dateStr.includes('/') ? dateStr.split('/').reverse().join('-') : dateStr,
         description: concept,
         amount: amount,
-        accountId: importAccount, // USA LA CUENTA SELECCIONADA
+        accountId: importAccount, 
         categoryId: findSuggestedCategory(concept),
         type: amount < 0 ? 'EXPENSE' : 'INCOME',
         isValidated: false
@@ -245,15 +252,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           };
           reader.readAsText(file);
       } else {
-          // Excel Support
           reader.onload = (evt) => {
               try {
                   const bstr = evt.target?.result;
                   const wb = XLSX.read(bstr, { type: 'binary' });
                   const wsname = wb.SheetNames[0];
                   const ws = wb.Sheets[wsname];
-                  // Convertir a CSV para reutilizar la lógica de análisis de texto existente
-                  // Usamos ; como delimitador para compatibilidad con nuestra lógica de parsing
                   const csvData = XLSX.utils.sheet_to_csv(ws, { FS: ';' });
                   handleStartAnalysis(csvData);
               } catch (err) {
@@ -263,26 +267,104 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           };
           reader.readAsBinaryString(file);
       }
-      // Limpiar input
       e.target.value = '';
   };
 
   const handleFinalImport = () => {
-    const validOnes = proposedTransactions.filter(p => !p.isValidated);
-    if (validOnes.length === 0) { setIsImportModalOpen(false); return; }
-    const newTxs: Transaction[] = validOnes.map(p => ({
+    const validTransactions = proposedTransactions.filter(p => p.categoryId && p.categoryId !== '');
+    const pendingTransactions = proposedTransactions.filter(p => !p.categoryId || p.categoryId === '');
+
+    if (validTransactions.length === 0 && pendingTransactions.length > 0) {
+        alert("Asigna categorías a los movimientos pendientes para poder importarlos.");
+        return;
+    }
+
+    if (validTransactions.length === 0) {
+        setIsImportModalOpen(false); 
+        return; 
+    }
+
+    const newTxs: Transaction[] = validTransactions.map(p => ({
       id: generateId(),
       date: p.date,
       amount: p.amount,
       description: p.description,
-      accountId: p.accountId, // Ya viene asignado desde el paso 1
+      accountId: p.accountId, 
       type: p.type,
       categoryId: p.categoryId,
-      familyId: indices.cat.get(p.categoryId)?.familyId || ''
+      familyId: indices.cat.get(p.categoryId)?.familyId || '',
+      attachment: p.attachment
     }));
+
     onUpdateData({ transactions: [...newTxs, ...data.transactions] });
-    setIsImportModalOpen(false);
-    resetForm();
+
+    if (pendingTransactions.length > 0) {
+        setProposedTransactions(pendingTransactions);
+        setSelectedImportIds(new Set());
+        alert(`Se han importado ${validTransactions.length} movimientos correctamente.\n\nQuedan ${pendingTransactions.length} movimientos sin categoría. Por favor, complétalos o descártalos.`);
+    } else {
+        setIsImportModalOpen(false);
+        setProposedTransactions([]);
+        setSelectedImportIds(new Set());
+        resetForm();
+    }
+  };
+
+  // Import Bulk Actions Logic
+  const toggleImportSelection = (id: string) => {
+      const newSet = new Set(selectedImportIds);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      setSelectedImportIds(newSet);
+  };
+
+  const toggleSelectAllImport = () => {
+      const allIds = proposedTransactions.map(p => p.id);
+      const allSelected = allIds.every(id => selectedImportIds.has(id));
+      
+      const newSet = new Set(selectedImportIds);
+      if (allSelected) {
+          allIds.forEach(id => newSet.delete(id));
+      } else {
+          allIds.forEach(id => newSet.add(id));
+      }
+      setSelectedImportIds(newSet);
+  };
+
+  const handleBulkImportDelete = () => {
+      const remaining = proposedTransactions.filter(p => !selectedImportIds.has(p.id));
+      setProposedTransactions(remaining);
+      setSelectedImportIds(new Set());
+  };
+
+  const handleBulkImportAssign = () => {
+      if (!bulkImportCategory) return;
+      const updated = proposedTransactions.map(p => {
+          if (selectedImportIds.has(p.id)) {
+              return { ...p, categoryId: bulkImportCategory };
+          }
+          return p;
+      });
+      setProposedTransactions(updated);
+      setBulkImportCategory('');
+      setSelectedImportIds(new Set());
+  };
+
+  const handleRowImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file && attachingImportId) {
+          try {
+              const compressed = await compressImage(file);
+              setProposedTransactions(prev => prev.map(p => 
+                  p.id === attachingImportId ? { ...p, attachment: compressed } : p
+              ));
+          } catch (err) {
+              console.error("Compression error", err);
+          } finally {
+              setAttachingImportId(null);
+          }
+      }
+      e.target.value = '';
   };
 
   // USAR FAVORITO
@@ -298,6 +380,61 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       setFAttachment(undefined);
       setShowFavoritesList(false);
       setIsModalOpen(true);
+  };
+
+  // BULK ACTIONS (Main Grid)
+  const toggleSelection = (id: string) => {
+      const newSet = new Set(selectedIds);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      setSelectedIds(newSet);
+  };
+
+  const toggleSelectAllPage = () => {
+      const allPageIds = paginatedTransactions.map(t => t.id);
+      const allSelected = allPageIds.every(id => selectedIds.has(id));
+      
+      const newSet = new Set(selectedIds);
+      if (allSelected) {
+          allPageIds.forEach(id => newSet.delete(id));
+      } else {
+          allPageIds.forEach(id => newSet.add(id));
+      }
+      setSelectedIds(newSet);
+  };
+
+  const handleBulkAction = () => {
+      if (bulkEditTarget === 'DELETE') {
+          if (confirm(`¿Estás seguro de borrar ${selectedIds.size} movimientos?`)) {
+              const remaining = data.transactions.filter(t => !selectedIds.has(t.id));
+              onUpdateData({ transactions: remaining });
+              setSelectedIds(new Set());
+              setIsBulkEditModalOpen(false);
+          }
+      } else {
+          if (!bulkEditValue) return;
+          
+          let updatedTxs = [...data.transactions];
+          
+          updatedTxs = updatedTxs.map(t => {
+              if (selectedIds.has(t.id)) {
+                  const updates: Partial<Transaction> = {};
+                  if (bulkEditTarget === 'DATE') updates.date = bulkEditValue;
+                  else if (bulkEditTarget === 'ACCOUNT') updates.accountId = bulkEditValue;
+                  else if (bulkEditTarget === 'CATEGORY') {
+                      updates.categoryId = bulkEditValue;
+                      const cat = indices.cat.get(bulkEditValue);
+                      if (cat) updates.familyId = cat.familyId;
+                  }
+                  return { ...t, ...updates };
+              }
+              return t;
+          });
+          
+          onUpdateData({ transactions: updatedTxs });
+          setSelectedIds(new Set());
+          setIsBulkEditModalOpen(false);
+      }
   };
 
   const timeFilteredList = useMemo(() => {
@@ -370,16 +507,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     const descPattern = colFilterDesc.trim().toLowerCase();
     const v1 = parseFloat(colFilterAmountVal1);
     return timeFilteredList.filter(t => {
-      // LOGICA DE COLUMNAS DEBE / HABER EN MODO "OR"
       const hasEntryFilter = colFilterEntry !== 'ALL';
       const hasExitFilter = colFilterExit !== 'ALL';
 
-      // Si hay algún filtro de columna activo, evaluamos.
       if (hasEntryFilter || hasExitFilter) {
           let matchEntry = false;
           let matchExit = false;
 
-          // Helper para comprobar si un ID participa en la transacción en cualquier rol
           const isIdInTransaction = (id: string, tx: Transaction) => {
               return tx.accountId === id || 
                      tx.categoryId === id || 
@@ -394,9 +528,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
              if (isIdInTransaction(colFilterExit, t)) matchExit = true;
           }
 
-          // La lógica es OR: Debe coincidir en entrada O en salida.
-          // Si solo hay filtro de entrada, matchExit será false, y viceversa.
-          // Si ambos filtros están puestos, basta con que uno coincida.
           if (!matchEntry && !matchExit) return false;
       }
 
@@ -573,13 +704,14 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-  // Ajustado gridClasses para mover columna menú al final
-  const gridClasses = "grid grid-cols-[52px_1fr_1.2fr_12px_1fr_50px_20px] md:grid-cols-[90px_1fr_1.5fr_40px_1fr_80px_40px] gap-1 md:gap-4 items-center";
+  // Ajustado gridClasses para INCLUIR CHECKBOX COLUMN (25px aprox)
+  const gridClasses = "grid grid-cols-[25px_52px_1fr_1.2fr_12px_1fr_50px_20px] md:grid-cols-[30px_90px_1fr_1.5fr_40px_1fr_80px_40px] gap-1 md:gap-4 items-center";
 
   return (
     <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500" onClick={() => setActiveMenuTxId(null)}>
       {/* CABECERA PRINCIPAL */}
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
+        {/* ... (Existing header code) ... */}
         <div className="space-y-4 text-center md:text-left w-full xl:w-auto">
           <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
@@ -663,6 +795,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       </div>
 
       {/* BARRA DE FILTROS ACTIVA */}
+      {/* ... (Existing filter chips code) ... */}
       {activeFiltersChips.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 p-3 px-6 bg-white rounded-2xl border border-slate-100 shadow-sm mt-4">
           <span className="text-[9px] font-black text-slate-400 uppercase mr-2 flex items-center gap-1"><Filter size={12}/> Filtros:</span>
@@ -677,7 +810,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {/* CABECERA DE FILTROS */}
+      {/* ... (Existing filter headers code with checkboxes) ... */}
       <div className={`bg-slate-900/5 p-2 md:p-4 rounded-2xl border border-slate-100 ${gridClasses}`}>
+          <div className="flex items-center justify-center">
+              <button onClick={toggleSelectAllPage} className="text-slate-400 hover:text-indigo-600">
+                  {paginatedTransactions.length > 0 && paginatedTransactions.every(t => selectedIds.has(t.id)) ? <CheckSquare size={16}/> : <Square size={16}/>}
+              </button>
+          </div>
           <div className="flex flex-col items-center justify-center">
               <button onClick={() => { if(sortField==='DATE') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('DATE'); }} className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest inline-flex items-center gap-0.5">Fec <SortIcon field="DATE"/></button>
           </div>
@@ -723,9 +862,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       {/* LISTADO DE MOVIMIENTOS */}
       <div className="space-y-1.5 md:space-y-2.5">
         {paginatedTransactions.map(t => {
+          // ... (Existing row rendering code) ...
           const srcAcc = indices.acc.get(t.accountId);
           const dstAcc = t.transferAccountId ? indices.acc.get(t.transferAccountId) : null;
           const cat = indices.cat.get(t.categoryId);
+          const isSelected = selectedIds.has(t.id);
           
           let debitNode, creditNode;
           let debitId = '', creditId = '';
@@ -752,8 +893,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           }
 
           return (
-            <div key={t.id} className="group bg-white p-2 md:p-4 md:px-6 rounded-2xl border border-slate-100 hover:shadow-lg transition-all relative">
+            <div key={t.id} className={`group bg-white p-2 md:p-4 md:px-6 rounded-2xl border ${isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-100'} hover:shadow-lg transition-all relative`}>
                 <div className={gridClasses}>
+                    <div className="flex justify-center">
+                        <button onClick={(e) => { e.stopPropagation(); toggleSelection(t.id); }} className={`text-slate-400 ${isSelected ? 'text-indigo-600' : 'hover:text-indigo-600'}`}>
+                            {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+                        </button>
+                    </div>
                     <div className="text-left text-[8px] md:text-sm font-black text-slate-400 uppercase tracking-tighter leading-none truncate">
                         {formatDateDisplay(t.date)}
                     </div>
@@ -824,6 +970,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       </div>
 
       {/* PAGINACIÓN */}
+      {/* ... (Existing pagination code) ... */}
       {totalItems > 0 && (
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-100">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -865,6 +1012,87 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         </div>
       )}
 
+      {/* FLOATING BULK ACTIONS BAR */}
+      {selectedIds.size > 0 && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[150] animate-in slide-in-from-bottom-4 fade-in duration-300">
+              <div className="bg-slate-950 text-white rounded-2xl shadow-2xl p-2 px-4 flex items-center gap-4 border border-white/10">
+                  <span className="text-[10px] font-black uppercase tracking-widest px-2">{selectedIds.size} Seleccionados</span>
+                  <div className="h-6 w-px bg-white/20"></div>
+                  <button onClick={() => { setBulkEditTarget('DATE'); setBulkEditValue(''); setIsBulkEditModalOpen(true); }} className="flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-xl transition-all">
+                      <PenTool size={14}/> <span className="text-[10px] font-bold uppercase">Editar Bloque</span>
+                  </button>
+                  <button onClick={() => { setBulkEditTarget('DELETE'); setIsBulkEditModalOpen(true); }} className="flex items-center gap-2 px-3 py-2 bg-rose-600 hover:bg-rose-700 rounded-xl transition-all shadow-lg">
+                      <Trash2 size={14}/> <span className="text-[10px] font-bold uppercase">Borrar</span>
+                  </button>
+                  <button onClick={() => setSelectedIds(new Set())} className="p-2 hover:bg-white/10 rounded-full text-slate-400 hover:text-white">
+                      <X size={14}/>
+                  </button>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL BULK EDIT */}
+      {isBulkEditModalOpen && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl space-y-6">
+                  <div className="flex justify-between items-center">
+                      <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
+                          {bulkEditTarget === 'DELETE' ? <Trash2 className="text-rose-500"/> : <LayoutList className="text-indigo-600"/>}
+                          {bulkEditTarget === 'DELETE' ? 'Borrado Masivo' : 'Edición en Bloque'}
+                      </h3>
+                      <button onClick={() => setIsBulkEditModalOpen(false)} className="p-2 bg-slate-100 rounded-full hover:bg-rose-100 hover:text-rose-500"><X size={18} /></button>
+                  </div>
+                  
+                  {bulkEditTarget === 'DELETE' ? (
+                      <p className="text-sm font-medium text-slate-600">
+                          Estás a punto de eliminar permanentemente <span className="font-black text-slate-900">{selectedIds.size}</span> movimientos. ¿Estás seguro?
+                      </p>
+                  ) : (
+                      <div className="space-y-4">
+                          <p className="text-xs text-slate-500">Se actualizarán <span className="font-bold">{selectedIds.size}</span> elementos con el nuevo valor.</p>
+                          <div className="flex bg-slate-100 p-1.5 rounded-xl">
+                              <button onClick={() => setBulkEditTarget('DATE')} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${bulkEditTarget === 'DATE' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Fecha</button>
+                              <button onClick={() => setBulkEditTarget('ACCOUNT')} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${bulkEditTarget === 'ACCOUNT' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Cuenta</button>
+                              <button onClick={() => setBulkEditTarget('CATEGORY')} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${bulkEditTarget === 'CATEGORY' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Categoría</button>
+                          </div>
+                          
+                          {bulkEditTarget === 'DATE' && (
+                              <input type="date" className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" value={bulkEditValue} onChange={e => setBulkEditValue(e.target.value)} />
+                          )}
+                          {bulkEditTarget === 'ACCOUNT' && (
+                              <select className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" value={bulkEditValue} onChange={e => setBulkEditValue(e.target.value)}>
+                                  <option value="">Seleccionar Cuenta...</option>
+                                  {groupedAccounts.map(g => (
+                                      <optgroup key={g.group.id} label={g.group.name}>
+                                          {g.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                      </optgroup>
+                                  ))}
+                              </select>
+                          )}
+                          {bulkEditTarget === 'CATEGORY' && (
+                              <select className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" value={bulkEditValue} onChange={e => setBulkEditValue(e.target.value)}>
+                                  <option value="">Seleccionar Categoría...</option>
+                                  {groupedCategories.map(f => (
+                                      <optgroup key={f.family.id} label={f.family.name}>
+                                          {f.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                      </optgroup>
+                                  ))}
+                              </select>
+                          )}
+                      </div>
+                  )}
+
+                  <button 
+                      onClick={handleBulkAction}
+                      disabled={bulkEditTarget !== 'DELETE' && !bulkEditValue}
+                      className={`w-full py-4 text-white rounded-xl font-black uppercase text-[11px] tracking-widest shadow-xl transition-all ${bulkEditTarget === 'DELETE' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50'}`}
+                  >
+                      {bulkEditTarget === 'DELETE' ? 'Confirmar Borrado' : 'Aplicar Cambios'}
+                  </button>
+              </div>
+          </div>
+      )}
+
       {/* MODAL SMART IMPORT MEJORADO */}
       {isImportModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500" onClick={() => setIsImportModalOpen(false)}>
@@ -886,7 +1114,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                         >
                             {groupedAccounts.map(g => (
                                 <optgroup key={g.group.id} label={g.group.name}>
-                                    {g.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                    {/* SOLO CUENTAS ACTIVAS */}
+                                    {g.accounts.filter(a => a.active !== false).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                                 </optgroup>
                             ))}
                         </select>
@@ -895,11 +1124,20 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     <div className="space-y-4">
                         <label className="text-[10px] font-black text-slate-400 uppercase ml-1">2. Copia y Pega tus movimientos</label>
                         <textarea 
+                            ref={rawImportTextRef}
                             className="w-full h-40 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-xs outline-none focus:border-indigo-500 transition-all resize-none shadow-inner" 
                             placeholder={`Formato esperado:\nDD/MM/AAAA; Concepto del movimiento; -50,00\nDD/MM/AAAA; Ingreso de Nómina; 1500,00\n...`}
                             onBlur={(e) => handleStartAnalysis(e.target.value)}
                         />
-                        <p className="text-[10px] text-slate-400 font-medium pl-2">El sistema detectará automáticamente fecha, concepto e importe. Usa punto y coma (;) o tabuladores para separar.</p>
+                        <div className="flex justify-between items-start">
+                            <p className="text-[10px] text-slate-400 font-medium pl-2 max-w-[70%]">El sistema detectará automáticamente fecha, concepto e importe. Usa punto y coma (;) o tabuladores para separar.</p>
+                            <button 
+                                onClick={() => handleStartAnalysis(rawImportTextRef.current?.value || '')}
+                                className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg flex items-center gap-2 -mt-2"
+                            >
+                                <Sparkles size={14} /> Analizar Texto
+                            </button>
+                        </div>
                     </div>
 
                     <div className="relative flex items-center justify-center py-4">
@@ -918,41 +1156,98 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
             )}
 
             {importStep === 3 && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 relative">
                     <div className="flex justify-between items-center px-2">
-                        <span className="text-xs font-bold text-slate-500 uppercase">Revisión ({proposedTransactions.length})</span>
+                        <div className="flex items-center gap-3">
+                            <button onClick={toggleSelectAllImport} className="text-slate-400 hover:text-indigo-600">
+                                {proposedTransactions.length > 0 && proposedTransactions.every(p => selectedImportIds.has(p.id)) ? <CheckSquare size={16}/> : <Square size={16}/>}
+                            </button>
+                            <span className="text-xs font-bold text-slate-500 uppercase">Revisión ({proposedTransactions.length})</span>
+                        </div>
                         <div className="flex gap-2">
-                            <button onClick={() => { setProposedTransactions([]); setImportStep(1); }} className="text-[10px] font-black uppercase text-rose-500 hover:underline">Descartar Todo</button>
+                            <button onClick={() => { setProposedTransactions([]); setImportStep(1); setSelectedImportIds(new Set()); }} className="text-[10px] font-black uppercase text-rose-500 hover:underline">Descartar Todo</button>
                         </div>
                     </div>
-                    <div className="max-h-[400px] overflow-y-auto custom-scrollbar space-y-2 pr-2">
-                        {proposedTransactions.map((t, idx) => (
-                            <div key={idx} className={`p-4 rounded-2xl flex items-center gap-4 ${t.isValidated ? 'bg-emerald-50 border border-emerald-100 opacity-50' : 'bg-slate-50 border border-slate-100'}`}>
-                                <button onClick={() => { const newArr = [...proposedTransactions]; newArr[idx].isValidated = !newArr[idx].isValidated; setProposedTransactions(newArr); }} className={`p-2 rounded-full transition-colors ${t.isValidated ? 'bg-emerald-100 text-emerald-600' : 'bg-white text-slate-300 hover:text-indigo-500 shadow-sm'}`}><CheckCircle2 size={18}/></button>
-                                <div className="flex-1 min-w-0 grid grid-cols-12 gap-4 items-center">
-                                    <div className="col-span-2 text-[10px] font-bold text-slate-500">{t.date}</div>
-                                    <div className="col-span-5 text-xs font-bold text-slate-800 truncate" title={t.description}>{t.description}</div>
-                                    <div className={`col-span-2 text-xs font-black text-right ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
-                                    <div className="col-span-3">
-                                        <select 
-                                            className="w-full bg-white border border-slate-200 rounded-lg text-[9px] font-bold py-1.5 px-2 outline-none"
-                                            value={t.categoryId}
-                                            onChange={(e) => { const newArr = [...proposedTransactions]; newArr[idx].categoryId = e.target.value; setProposedTransactions(newArr); }}
-                                        >
-                                            <option value="">Sin Categoría</option>
-                                            {groupedCategories.map(f => (
-                                                <optgroup key={f.family.id} label={f.family.name}>
-                                                    {f.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                                </optgroup>
-                                            ))}
-                                        </select>
+                    <div className="max-h-[400px] overflow-y-auto custom-scrollbar space-y-2 pr-2 pb-16">
+                        {proposedTransactions.map((t, idx) => {
+                            const hasCategory = !!t.categoryId;
+                            return (
+                                <div key={t.id} className={`p-4 rounded-2xl flex items-center gap-4 ${hasCategory ? 'bg-emerald-50/50 border border-emerald-100' : 'bg-slate-50 border border-slate-100'}`}>
+                                    <button onClick={() => toggleImportSelection(t.id)} className={`text-slate-400 hover:text-indigo-600 flex-shrink-0`}>
+                                        {selectedImportIds.has(t.id) ? <CheckSquare size={16}/> : <Square size={16}/>}
+                                    </button>
+                                    <div className="flex-1 min-w-0 grid grid-cols-12 gap-4 items-center">
+                                        <div className="col-span-2 text-[10px] font-bold text-slate-500">{t.date}</div>
+                                        {/* CONCEPTO EDITABLE */}
+                                        <input 
+                                            type="text" 
+                                            className="col-span-5 text-xs font-bold text-slate-800 bg-transparent border-b border-transparent focus:border-indigo-300 outline-none truncate transition-colors"
+                                            value={t.description}
+                                            title={t.description}
+                                            onChange={(e) => {
+                                                const newArr = [...proposedTransactions];
+                                                newArr[idx].description = e.target.value;
+                                                setProposedTransactions(newArr);
+                                            }}
+                                        />
+                                        <div className={`col-span-2 text-xs font-black text-right ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
+                                        <div className="col-span-3">
+                                            <select 
+                                                className={`w-full border rounded-lg text-[9px] font-bold py-1.5 px-2 outline-none transition-colors ${hasCategory ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-white border-rose-200 text-slate-500'}`}
+                                                value={t.categoryId}
+                                                onChange={(e) => { const newArr = [...proposedTransactions]; newArr[idx].categoryId = e.target.value; setProposedTransactions(newArr); }}
+                                            >
+                                                <option value="">Sin Categoría</option>
+                                                {groupedCategories.map(f => (
+                                                    <optgroup key={f.family.id} label={f.family.name}>
+                                                        {f.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                    </optgroup>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button onClick={() => { setAttachingImportId(t.id); rowImportFileRef.current?.click(); }} className={`p-2 rounded-full transition-colors ${t.attachment ? 'text-indigo-600 bg-indigo-50' : 'text-slate-300 hover:text-indigo-500 hover:bg-slate-100'}`} title="Adjuntar comprobante">
+                                            {t.attachment ? <CheckCircle2 size={16}/> : <Paperclip size={16}/>}
+                                        </button>
+                                        <button onClick={() => setProposedTransactions(proposedTransactions.filter((_, i) => i !== idx))} className="text-slate-300 hover:text-rose-500 p-2 rounded-full hover:bg-rose-50 transition-colors"><X size={16}/></button>
                                     </div>
                                 </div>
-                                <button onClick={() => setProposedTransactions(proposedTransactions.filter((_, i) => i !== idx))} className="text-slate-300 hover:text-rose-500"><X size={16}/></button>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
-                    <button onClick={handleFinalImport} className="w-full py-6 bg-slate-950 text-white rounded-[2rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-emerald-600 transition-all">Confirmar Importación</button>
+
+                    {/* IMPORT BULK ACTIONS BAR */}
+                    {selectedImportIds.size > 0 && (
+                        <div className="absolute bottom-20 left-0 right-0 z-10 flex justify-center animate-in slide-in-from-bottom-2 fade-in">
+                            <div className="bg-slate-900 text-white rounded-xl shadow-xl p-2 px-3 flex items-center gap-3 border border-slate-700">
+                                <span className="text-[9px] font-black uppercase whitespace-nowrap">{selectedImportIds.size} Items</span>
+                                <div className="h-4 w-px bg-white/20"></div>
+                                <select 
+                                    className="bg-slate-800 text-white text-[9px] font-bold py-1.5 px-2 rounded-lg outline-none border border-slate-700 max-w-[120px]"
+                                    value={bulkImportCategory}
+                                    onChange={(e) => setBulkImportCategory(e.target.value)}
+                                >
+                                    <option value="">Asignar Categoría...</option>
+                                    {groupedCategories.map(f => (
+                                        <optgroup key={f.family.id} label={f.family.name}>
+                                            {f.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </optgroup>
+                                    ))}
+                                </select>
+                                <button onClick={handleBulkImportAssign} className="p-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors" disabled={!bulkImportCategory}><Check size={14}/></button>
+                                <button onClick={handleBulkImportDelete} className="p-1.5 bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors"><Trash2 size={14}/></button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex gap-4">
+                        <button onClick={handleFinalImport} className="flex-1 py-6 bg-slate-950 text-white rounded-[2rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-emerald-600 transition-all">
+                            Confirmar Importación ({proposedTransactions.filter(p => p.categoryId).length})
+                        </button>
+                    </div>
+                    {/* Hidden input for row attachments */}
+                    <input type="file" ref={rowImportFileRef} className="hidden" accept="image/*,application/pdf" onChange={handleRowImportFileChange} />
                 </div>
             )}
           </div>
@@ -960,6 +1255,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {/* MODAL EDITOR NORMAL */}
+      {/* ... (Existing Editor Modal) ... */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-white/20">
@@ -1041,6 +1337,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {/* MODAL CREAR RECURRENTE */}
+      {/* ... (Existing Recurrent Modal) ... */}
       {recurrenceModalTx && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[250] p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
               <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl space-y-6">
@@ -1067,6 +1364,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {/* MODAL CREAR FAVORITO */}
+      {/* ... (Existing Favorite Modal) ... */}
       {favoriteModalTx && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[250] p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
               <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl space-y-6">
@@ -1084,6 +1382,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {/* VISOR DE ADJUNTOS (LIGHTBOX) */}
+      {/* ... (Existing Lightbox) ... */}
       {previewAttachment && (
         <div className="fixed inset-0 z-[300] bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setPreviewAttachment(null)}>
             <button onClick={() => setPreviewAttachment(null)} className="absolute top-4 right-4 p-4 text-white/50 hover:text-white transition-colors"><X size={32}/></button>
