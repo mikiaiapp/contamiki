@@ -28,9 +28,28 @@ const SMTP_CONFIG = {
 };
 
 // Transporter (o Mock si no hay config)
-const mailer = process.env.SMTP_HOST 
+// Quitamos espacios en blanco accidentales de las variables si los hubiera
+const hasSmtp = process.env.SMTP_HOST && process.env.SMTP_HOST.trim() !== '';
+
+const mailer = hasSmtp 
     ? nodemailer.createTransport(SMTP_CONFIG)
     : null;
+
+// VERIFICACIÓN DE CONEXIÓN SMTP AL INICIO
+if (mailer) {
+    console.log(`📧 [SMTP INIT] Intentando conectar a ${SMTP_CONFIG.host}:${SMTP_CONFIG.port} con usuario ${SMTP_CONFIG.auth.user}...`);
+    mailer.verify((error, success) => {
+        if (error) {
+            console.error("❌ [SMTP ERROR] No se pudo conectar al servidor de correo:");
+            console.error(error);
+            console.error("SUGERENCIA: Si usas Gmail, asegúrate de usar una 'Contraseña de Aplicación' y no tu clave normal.");
+        } else {
+            console.log("✅ [SMTP SUCCESS] Servidor de correo conectado y listo.");
+        }
+    });
+} else {
+    console.log("⚠️ [SMTP DISABLED] No se detectó configuración SMTP válida. Los correos se imprimirán en la consola del servidor.");
+}
 
 const sendEmail = async (to, subject, text, html) => {
     if (mailer) {

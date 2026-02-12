@@ -484,8 +484,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-  // Ajustado gridClasses para que la última columna sea más estrecha (solo icono menú)
-  const gridClasses = "grid grid-cols-[52px_1fr_1.2fr_12px_1fr_20px_40px] md:grid-cols-[90px_1fr_1.5fr_40px_1fr_40px_50px] gap-1 md:gap-4 items-center";
+  // Ajustado gridClasses para mover columna menú al final
+  const gridClasses = "grid grid-cols-[52px_1fr_1.2fr_12px_1fr_50px_20px] md:grid-cols-[90px_1fr_1.5fr_40px_1fr_80px_40px] gap-1 md:gap-4 items-center";
 
   return (
     <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500" onClick={() => setActiveMenuTxId(null)}>
@@ -571,12 +571,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                   ))}
               </select>
           </div>
-          <div className="flex justify-center">
-              <button onClick={clearAllFilters} className="text-slate-300 hover:text-rose-500 transition-colors p-1"><Eraser size={14}/></button>
-          </div>
           <div className="flex flex-col">
               <button onClick={() => { if(sortField==='AMOUNT') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('AMOUNT'); }} className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-end gap-0.5">Imp <SortIcon field="AMOUNT"/></button>
               <select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none text-right" value={colFilterAmountOp} onChange={e => setColFilterAmountOp(e.target.value as any)}><option value="ALL">...</option><option value="GT">{">"}</option><option value="LT">{"<"}</option></select>
+          </div>
+           <div className="flex justify-center">
+              <button onClick={clearAllFilters} className="text-slate-300 hover:text-rose-500 transition-colors p-1"><Eraser size={14}/></button>
           </div>
       </div>
 
@@ -633,8 +633,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     </div>
                     <div className="min-w-0 text-[8px] md:text-sm">{creditNode}</div>
                     
-                    {/* MENÚ DE ACCIONES */}
-                    <div className="flex justify-center relative">
+                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(t.amount, t.type)}`}>
+                        {formatCurrency(t.amount)}
+                    </div>
+
+                     {/* MENÚ DE ACCIONES */}
+                     <div className="flex justify-center relative">
                         <button 
                             onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(activeMenuTxId === t.id ? null : t.id); }} 
                             className="p-1.5 md:p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
@@ -662,10 +666,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                 </button>
                             </div>
                         )}
-                    </div>
-
-                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(t.amount, t.type)}`}>
-                        {formatCurrency(t.amount)}
                     </div>
                 </div>
 
