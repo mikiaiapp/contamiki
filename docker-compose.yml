@@ -19,10 +19,10 @@ services:
       # Tu API Key de Google Gemini
       #- API_KEY=AIzaSyByt2qp5UYhL-bhf1me82AM81PEJ7MJyYE
       # Clave secreta para las sesiones (Cámbiala por seguridad)
-      - JWT_SECRET=nasMAJU1505
-      - APP_URL=http://conta.mafede.i234.me
-      - SMTP_HOST=smtp.gmail.com
-      - SMTP_PORT=587
-      - SMTP_SECURE=false
-      - SMTP_USER=contamikimail@gmail.com
-      - SMTP_PASS=sbwjfvjvekgcvbth
+      #- JWT_SECRET=nasMAJU1505
+      #- APP_URL=http://conta.mafede.i234.me
+      #- SMTP_HOST=smtp.gmail.com
+      #- SMTP_PORT=587
+      #- SMTP_SECURE=false
+      #- SMTP_USER=contamikimail@gmail.com
+      #- SMTP_PASS=sbwjfvjvekgcvbth
