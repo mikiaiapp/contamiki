@@ -489,8 +489,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   return (
     <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500" onClick={() => setActiveMenuTxId(null)}>
-      {/* ... (CABECERA y FILTROS SE MANTIENEN IGUAL) ... */}
-      
       {/* CABECERA PRINCIPAL */}
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
         <div className="space-y-4 text-center md:text-left w-full xl:w-auto">
@@ -682,6 +680,48 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           );
         })}
       </div>
+
+      {/* PAGINACIÓN */}
+      {totalItems > 0 && (
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-100">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                Mostrando {paginatedTransactions.length} de {totalItems} movimientos
+            </span>
+            
+            <div className="flex items-center gap-4">
+                <select 
+                    className="bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase py-2 px-3 outline-none"
+                    value={itemsPerPage}
+                    onChange={(e) => setItemsPerPage(parseInt(e.target.value))}
+                >
+                    <option value={25}>25 por pág</option>
+                    <option value={50}>50 por pág</option>
+                    <option value={100}>100 por pág</option>
+                    <option value={-1}>Ver Todos</option>
+                </select>
+
+                <div className="flex items-center gap-2">
+                    <button 
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                        <ChevronLeft size={16} />
+                    </button>
+                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                        Pág {currentPage} / {totalPages}
+                    </span>
+                    <button 
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                        <ChevronRight size={16} />
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* MODAL EDITOR NORMAL */}
       {isModalOpen && (
