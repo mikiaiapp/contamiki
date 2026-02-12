@@ -27,7 +27,7 @@ services:
       #- SMTP_USER=contamikimail@gmail.com
       #- SMTP_PASS=sbwjfvjvekgcvbth
     secrets:
-      - WT_SECRET
+      - JWT_SECRET
       - APP_URL
       - SMTP_HOST
       - SMTP_PORT
@@ -35,7 +35,7 @@ services:
       - SMTP_USER
       - SMTP_PASS
 secrets:
-  WT_SECRET
+  JWT_SECRET
     external: true
   APP_URL
     external: true
