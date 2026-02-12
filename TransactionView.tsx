@@ -317,16 +317,19 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           let matchEntry = false;
           let matchExit = false;
 
+          // Helper para comprobar si un ID participa en la transacción en cualquier rol
+          const isIdInTransaction = (id: string, tx: Transaction) => {
+              return tx.accountId === id || 
+                     tx.categoryId === id || 
+                     (tx.type === 'TRANSFER' && tx.transferAccountId === id);
+          };
+
           if (hasEntryFilter) {
-             if (t.type === 'EXPENSE' && t.categoryId === colFilterEntry) matchEntry = true;
-             else if (t.type === 'INCOME' && t.accountId === colFilterEntry) matchEntry = true;
-             else if (t.type === 'TRANSFER' && t.transferAccountId === colFilterEntry) matchEntry = true;
+             if (isIdInTransaction(colFilterEntry, t)) matchEntry = true;
           }
 
           if (hasExitFilter) {
-             if (t.type === 'EXPENSE' && t.accountId === colFilterExit) matchExit = true;
-             else if (t.type === 'INCOME' && t.categoryId === colFilterExit) matchExit = true;
-             else if (t.type === 'TRANSFER' && t.accountId === colFilterExit) matchExit = true;
+             if (isIdInTransaction(colFilterExit, t)) matchExit = true;
           }
 
           // La lógica es OR: Debe coincidir en entrada O en salida.
@@ -375,11 +378,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     const chips: { id: string, label: string, onRemove: () => void }[] = [];
     if (colFilterEntry !== 'ALL') {
         const name = indices.cat.get(colFilterEntry)?.name || indices.acc.get(colFilterEntry)?.name || '...';
-        chips.push({ id: 'entry', label: `Debe: ${name}`, onRemove: () => setColFilterEntry('ALL') });
+        chips.push({ id: 'entry', label: `Filtro: ${name}`, onRemove: () => setColFilterEntry('ALL') });
     }
     if (colFilterExit !== 'ALL') {
         const name = indices.cat.get(colFilterExit)?.name || indices.acc.get(colFilterExit)?.name || '...';
-        chips.push({ id: 'exit', label: `Haber: ${name}`, onRemove: () => setColFilterExit('ALL') });
+        chips.push({ id: 'exit', label: `Filtro: ${name}`, onRemove: () => setColFilterExit('ALL') });
     }
     if (colFilterDesc) chips.push({ id: 'desc', label: `Texto: "${colFilterDesc}"`, onRemove: () => setColFilterDesc('') });
     if (colFilterClip !== 'ALL') chips.push({ id: 'clip', label: `Clip: ${colFilterClip}`, onRemove: () => setColFilterClip('ALL') });
@@ -564,7 +567,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
               <button onClick={() => { if(sortField==='DATE') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('DATE'); }} className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest inline-flex items-center gap-0.5">Fec <SortIcon field="DATE"/></button>
           </div>
           <div className="flex flex-col">
-              <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Debe</span>
+              <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Filtro A</span>
               <select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none truncate" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)}>
                   <option value="ALL">Todo</option>
                   {activeDropdownOptions.entryGroups.map(group => (
@@ -583,7 +586,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
               <select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none" value={colFilterClip} onChange={e => setColFilterClip(e.target.value as any)}><option value="ALL">.</option><option value="YES">SI</option><option value="NO">NO</option></select>
           </div>
           <div className="flex flex-col">
-              <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Haber</span>
+              <span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Filtro B</span>
               <select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none truncate" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}>
                   <option value="ALL">Todo</option>
                   {activeDropdownOptions.exitGroups.map(group => (
