@@ -35,6 +35,8 @@ services:
       - SMTP_USER
       - SMTP_PASS
 secrets:
+  WT_SECRET
+    external:true
   APP_URL
     external:true
   SMTP_HOST
