@@ -36,16 +36,16 @@ services:
       - SMTP_PASS
 secrets:
   WT_SECRET
-    external:true
+    external: true
   APP_URL
-    external:true
+    external: true
   SMTP_HOST
-    external:true
+    external: true
   SMTP_PORT
-    external:true  
+    external: true  
   SMTP_SECURE
-    external:true  
+    external: true  
   SMTP_USER
-    external:true  
+    external: true  
   SMTP_PASS
-    external:true  
+    external: true  
