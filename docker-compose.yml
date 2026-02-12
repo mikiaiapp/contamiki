@@ -1,40 +1,28 @@
-
-version: '3.8'
-
+version: '3'
 services:
   contamiki:
-    build: .
     container_name: contamiki
+    build: .
     restart: unless-stopped
     ports:
       - "4000:4000"
-    environment:
-      - NODE_ENV=production
-      - PORT=4000
-    #  - DATA_DIR=/app/data
-    #  - API_KEY=${API_KEY}
-    #  - JWT_SECRET=${JWT_SECRET:-clave_secreta_por_defecto_123}
-      
-      # Configuración de la URL de la App (Necesario para generar links de verificación correctos)
-      # Si usas dominio propio, ponlo aquí: https://mis-finanzas.com
-      - APP_URL=${APP_URL:-http://localhost:4000}
-
-      # Configuración de Correo (SMTP)
-      # Si se dejan vacíos, el servidor imprimirá los correos en la consola (Modo Debug)
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_SECURE=${SMTP_SECURE:-false}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASS=${SMTP_PASS}
     volumes:
-      # Usamos un volumen nombrado para que Docker lo gestione automáticamente
+      # 1. Mapear el directorio actual al contenedor para reflejar cambios de código (git pull)
+      #- ./:/app
+      # 2. Usar un volumen anónimo para node_modules para evitar conflictos con el host
+      #- ./app/node_modules
+      # 3. Persistencia de datos (Ajusta la ruta de la izquierda según tu NAS)
       - /volume1/docker/contamiki/data:/app/data
-    networks:
-      - contamiki_network
-
-volumes:
-  contamiki_data:
-
-networks:
-  contamiki_network:
-    driver: bridge
+    # Comando: Reconstruye el frontend (bundle.js) y luego arranca el servidor cada vez que se reinicia
+    #command: sh -c "npm run build && npm start"
+    environment:
+      # Tu API Key de Google Gemini
+      #- API_KEY=AIzaSyByt2qp5UYhL-bhf1me82AM81PEJ7MJyYE
+      # Clave secreta para las sesiones (Cámbiala por seguridad)
+      - JWT_SECRET=nasMAJU1505
+      - APP_URL=http://conta.mafede.i234.me
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_SECURE=false
+      - SMTP_USER=tu_contamikimail@gmail.com
+      - SMTP_PASS=sbwjfvjvekgcvbth
