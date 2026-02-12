@@ -35,17 +35,17 @@ services:
       - SMTP_USER
       - SMTP_PASS
 secrets:
-  JWT_SECRET
+  JWT_SECRET:
     external: true
-  APP_URL
+  APP_URL:
     external: true
-  SMTP_HOST
+  SMTP_HOST:
     external: true
-  SMTP_PORT
+  SMTP_PORT:
     external: true  
-  SMTP_SECURE
+  SMTP_SECURE:
     external: true  
-  SMTP_USER
+  SMTP_USER:
     external: true  
-  SMTP_PASS
-    external: true  
+  SMTP_PASS:
+    external: true
