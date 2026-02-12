@@ -36,16 +36,16 @@ services:
       - SMTP_PASS
 secrets:
   JWT_SECRET:
-    external: true
+    environment: JWT_SECRET
   APP_URL:
-    external: true
+    environment: APP_URL
   SMTP_HOST:
-    external: true
+    environment: SMTP_HOST
   SMTP_PORT:
-    external: true  
+    environment: SMTP_PORT
   SMTP_SECURE:
-    external: true  
+    environment: SMTP_SECURE
   SMTP_USER:
-    external: true  
+    environment: SMTP_USER
   SMTP_PASS:
-    external: true
+    environment: SMTP_PASS
