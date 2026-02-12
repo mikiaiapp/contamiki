@@ -1,7 +1,8 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, RecurrentMovement, RecurrenceFrequency } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
   data: AppState;
@@ -94,6 +95,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   
   const [favoriteModalTx, setFavoriteModalTx] = useState<Transaction | null>(null);
   const [favName, setFavName] = useState('');
+  const [showFavoritesList, setShowFavoritesList] = useState(false);
 
   // --- PREVIEW STATE ---
   const [previewAttachment, setPreviewAttachment] = useState<string | null>(null);
@@ -103,6 +105,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const [importStep, setImportStep] = useState<1 | 2 | 3>(1);
   const [importAccount, setImportAccount] = useState('');
   const [proposedTransactions, setProposedTransactions] = useState<ProposedTransaction[]>([]);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   // Filters & Sort
   const [colFilterEntry, setColFilterEntry] = useState('ALL');
@@ -198,19 +201,29 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     const lines = rawData.split('\n').filter(l => l.trim());
     const props: ProposedTransaction[] = [];
     lines.forEach(line => {
-      const parts = line.split(/[;\t,]/).map(p => p.trim());
-      if (parts.length < 2) return;
-      const dateStr = parts[0];
-      const concept = parts[1];
-      const amountStr = parts[parts.length - 1].replace(',', '.');
+      // Intenta separar por punto y coma, tabulador o coma (si es CSV simple)
+      const parts = line.split(/[;\t]/).map(p => p.trim());
+      // Si falla, intenta comas, pero cuidado con las comas en descripciones o decimales
+      const effectiveParts = parts.length >= 2 ? parts : line.split(',').map(p => p.trim());
+
+      if (effectiveParts.length < 2) return;
+      
+      // Asumimos formato: FECHA ; DESCRIPCION ; IMPORTE (opcionalmente)
+      // Ajuste heurístico básico
+      const dateStr = effectiveParts[0];
+      const concept = effectiveParts[1];
+      const amountStr = effectiveParts[effectiveParts.length - 1].replace(',', '.'); // Asumimos importe al final
       const amount = parseFloat(amountStr);
-      if (isNaN(amount)) return;
+      
+      if (isNaN(amount)) return; // Si no hay importe válido, saltamos
+
       props.push({
         id: generateId(),
+        // Normalizar fecha si viene DD/MM/YYYY
         date: dateStr.includes('/') ? dateStr.split('/').reverse().join('-') : dateStr,
         description: concept,
         amount: amount,
-        accountId: importAccount,
+        accountId: importAccount, // USA LA CUENTA SELECCIONADA
         categoryId: findSuggestedCategory(concept),
         type: amount < 0 ? 'EXPENSE' : 'INCOME',
         isValidated: false
@@ -218,6 +231,41 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     });
     setProposedTransactions(props);
     setImportStep(3);
+  };
+
+  const handleImportFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      
+      if (file.name.endsWith('.csv')) {
+          reader.onload = (evt) => {
+              const text = evt.target?.result as string;
+              handleStartAnalysis(text);
+          };
+          reader.readAsText(file);
+      } else {
+          // Excel Support
+          reader.onload = (evt) => {
+              try {
+                  const bstr = evt.target?.result;
+                  const wb = XLSX.read(bstr, { type: 'binary' });
+                  const wsname = wb.SheetNames[0];
+                  const ws = wb.Sheets[wsname];
+                  // Convertir a CSV para reutilizar la lógica de análisis de texto existente
+                  // Usamos ; como delimitador para compatibilidad con nuestra lógica de parsing
+                  const csvData = XLSX.utils.sheet_to_csv(ws, { FS: ';' });
+                  handleStartAnalysis(csvData);
+              } catch (err) {
+                  alert("Error leyendo el archivo Excel. Asegúrate de que no esté corrupto.");
+                  console.error(err);
+              }
+          };
+          reader.readAsBinaryString(file);
+      }
+      // Limpiar input
+      e.target.value = '';
   };
 
   const handleFinalImport = () => {
@@ -228,7 +276,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       date: p.date,
       amount: p.amount,
       description: p.description,
-      accountId: p.accountId,
+      accountId: p.accountId, // Ya viene asignado desde el paso 1
       type: p.type,
       categoryId: p.categoryId,
       familyId: indices.cat.get(p.categoryId)?.familyId || ''
@@ -236,6 +284,21 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     onUpdateData({ transactions: [...newTxs, ...data.transactions] });
     setIsImportModalOpen(false);
     resetForm();
+  };
+
+  // USAR FAVORITO
+  const handleUseFavorite = (fav: FavoriteMovement) => {
+      setEditingTx(null);
+      setFType(fav.type);
+      setFAmount(fav.amount ? fav.amount.toString() : '');
+      setFDesc(fav.description);
+      setFDate(new Date().toISOString().split('T')[0]);
+      setFAcc(fav.accountId);
+      setFCat(fav.categoryId);
+      setFTransferDest(fav.transferAccountId || '');
+      setFAttachment(undefined);
+      setShowFavoritesList(false);
+      setIsModalOpen(true);
   };
 
   const timeFilteredList = useMemo(() => {
@@ -540,8 +603,44 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
             </div>
 
             <div className="flex gap-2">
-              <button onClick={(e) => { e.stopPropagation(); setImportAccount(data.accounts[0]?.id || ''); setImportStep(1); setIsImportModalOpen(true); }} className="bg-indigo-50 text-indigo-600 border border-indigo-100 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm hover:bg-indigo-100"><Bot size={16} /></button>
-              <button onClick={() => openEditor()} className="bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg active:scale-95"><Plus size={16} /> Nuevo</button>
+                {/* FAVORITOS BUTTON */}
+                <div className="relative">
+                    <button onClick={() => setShowFavoritesList(!showFavoritesList)} className="bg-amber-50 text-amber-600 border border-amber-100 px-3 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm hover:bg-amber-100 flex items-center gap-2">
+                        <Heart size={16} fill={showFavoritesList ? "currentColor" : "none"} />
+                    </button>
+                    {showFavoritesList && (
+                        <>
+                            <div className="fixed inset-0 z-10" onClick={() => setShowFavoritesList(false)}></div>
+                            <div className="absolute top-full left-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 w-64 p-2 z-20 animate-in fade-in zoom-in duration-200">
+                                <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Plantillas Rápidas</div>
+                                <div className="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
+                                    {data.favorites && data.favorites.length > 0 ? (
+                                        data.favorites.map(fav => (
+                                            <button 
+                                                key={fav.id} 
+                                                onClick={() => handleUseFavorite(fav)}
+                                                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-amber-50 text-left transition-colors group"
+                                            >
+                                                <div className="bg-amber-100 text-amber-600 p-1.5 rounded-lg group-hover:bg-amber-200 transition-colors">
+                                                    {renderIcon(fav.icon || '⭐', "w-4 h-4")}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-xs font-bold text-slate-700 truncate">{fav.name}</div>
+                                                    <div className="text-[9px] text-slate-400 font-medium truncate">{fav.description}</div>
+                                                </div>
+                                            </button>
+                                        ))
+                                    ) : (
+                                        <div className="p-4 text-center text-slate-400 text-xs">No hay favoritos. Créalos desde el menú de acciones de un movimiento.</div>
+                                    )}
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                <button onClick={(e) => { e.stopPropagation(); setImportAccount(data.accounts[0]?.id || ''); setImportStep(1); setIsImportModalOpen(true); }} className="bg-indigo-50 text-indigo-600 border border-indigo-100 px-4 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-sm hover:bg-indigo-100"><Bot size={16} /></button>
+                <button onClick={() => openEditor()} className="bg-slate-950 text-white px-6 py-2.5 rounded-xl font-black uppercase text-[10px] shadow-lg active:scale-95"><Plus size={16} /> Nuevo</button>
             </div>
           </div>
         </div>
@@ -747,6 +846,100 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     </button>
                 </div>
             </div>
+        </div>
+      )}
+
+      {/* MODAL SMART IMPORT MEJORADO */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500" onClick={() => setIsImportModalOpen(false)}>
+          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-white/20" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setIsImportModalOpen(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
+            <div className="flex items-center gap-4 mb-8">
+                <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Bot size={28} /></div>
+                <div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Importación Inteligente</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Carga masiva con categorización automática</p></div>
+            </div>
+
+            {importStep === 1 && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
+                    <div className="space-y-4">
+                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">1. ¿A qué cuenta imputamos los movimientos?</label>
+                        <select 
+                            className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none text-slate-800 focus:border-indigo-500" 
+                            value={importAccount} 
+                            onChange={e => setImportAccount(e.target.value)}
+                        >
+                            {groupedAccounts.map(g => (
+                                <optgroup key={g.group.id} label={g.group.name}>
+                                    {g.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </optgroup>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="space-y-4">
+                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">2. Copia y Pega tus movimientos</label>
+                        <textarea 
+                            className="w-full h-40 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-mono text-xs outline-none focus:border-indigo-500 transition-all resize-none shadow-inner" 
+                            placeholder={`Formato esperado:\nDD/MM/AAAA; Concepto del movimiento; -50,00\nDD/MM/AAAA; Ingreso de Nómina; 1500,00\n...`}
+                            onBlur={(e) => handleStartAnalysis(e.target.value)}
+                        />
+                        <p className="text-[10px] text-slate-400 font-medium pl-2">El sistema detectará automáticamente fecha, concepto e importe. Usa punto y coma (;) o tabuladores para separar.</p>
+                    </div>
+
+                    <div className="relative flex items-center justify-center py-4">
+                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+                        <span className="relative bg-white px-4 text-[10px] font-black uppercase text-slate-300">O sube un archivo</span>
+                    </div>
+
+                    <div className="space-y-4">
+                        <button onClick={() => importFileRef.current?.click()} className="w-full py-5 bg-white border-2 border-dashed border-indigo-200 text-indigo-500 rounded-3xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-50 transition-all flex flex-col items-center justify-center gap-2 group">
+                            <Upload size={24} className="group-hover:scale-110 transition-transform"/>
+                            <span>Subir Excel (.xlsx) o CSV</span>
+                        </button>
+                        <input type="file" ref={importFileRef} className="hidden" accept=".csv, .xlsx" onChange={handleImportFileUpload} />
+                    </div>
+                </div>
+            )}
+
+            {importStep === 3 && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                    <div className="flex justify-between items-center px-2">
+                        <span className="text-xs font-bold text-slate-500 uppercase">Revisión ({proposedTransactions.length})</span>
+                        <div className="flex gap-2">
+                            <button onClick={() => { setProposedTransactions([]); setImportStep(1); }} className="text-[10px] font-black uppercase text-rose-500 hover:underline">Descartar Todo</button>
+                        </div>
+                    </div>
+                    <div className="max-h-[400px] overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                        {proposedTransactions.map((t, idx) => (
+                            <div key={idx} className={`p-4 rounded-2xl flex items-center gap-4 ${t.isValidated ? 'bg-emerald-50 border border-emerald-100 opacity-50' : 'bg-slate-50 border border-slate-100'}`}>
+                                <button onClick={() => { const newArr = [...proposedTransactions]; newArr[idx].isValidated = !newArr[idx].isValidated; setProposedTransactions(newArr); }} className={`p-2 rounded-full transition-colors ${t.isValidated ? 'bg-emerald-100 text-emerald-600' : 'bg-white text-slate-300 hover:text-indigo-500 shadow-sm'}`}><CheckCircle2 size={18}/></button>
+                                <div className="flex-1 min-w-0 grid grid-cols-12 gap-4 items-center">
+                                    <div className="col-span-2 text-[10px] font-bold text-slate-500">{t.date}</div>
+                                    <div className="col-span-5 text-xs font-bold text-slate-800 truncate" title={t.description}>{t.description}</div>
+                                    <div className={`col-span-2 text-xs font-black text-right ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
+                                    <div className="col-span-3">
+                                        <select 
+                                            className="w-full bg-white border border-slate-200 rounded-lg text-[9px] font-bold py-1.5 px-2 outline-none"
+                                            value={t.categoryId}
+                                            onChange={(e) => { const newArr = [...proposedTransactions]; newArr[idx].categoryId = e.target.value; setProposedTransactions(newArr); }}
+                                        >
+                                            <option value="">Sin Categoría</option>
+                                            {groupedCategories.map(f => (
+                                                <optgroup key={f.family.id} label={f.family.name}>
+                                                    {f.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                </optgroup>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                                <button onClick={() => setProposedTransactions(proposedTransactions.filter((_, i) => i !== idx))} className="text-slate-300 hover:text-rose-500"><X size={16}/></button>
+                            </div>
+                        ))}
+                    </div>
+                    <button onClick={handleFinalImport} className="w-full py-6 bg-slate-950 text-white rounded-[2rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-emerald-600 transition-all">Confirmar Importación</button>
+                </div>
+            )}
+          </div>
         </div>
       )}
 
