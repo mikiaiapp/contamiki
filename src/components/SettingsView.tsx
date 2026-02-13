@@ -119,7 +119,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
     return <span className="text-xl">{iconStr}</span>;
   }
 
-  // --- LÓGICA DEL DEPURADOR VISUAL (NUEVO HANDLE FILE CHANGE) ---
+  // --- LÓGICA DEL DEPURADOR VISUAL ---
   const addLog = (msg: string, status: 'loading' | 'success' | 'error' | 'info') => {
       setProcessLogs(prev => [...prev, { msg, status }]);
   };
@@ -183,7 +183,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
                     addLog("Formato detectado: Libro Individual Simple (Versión antigua).", 'info');
                     dataToUse = json as AppState;
                 } else {
-                    throw new Error("El archivo NO tiene la estructura reconocida de ContaMiki (falta 'transactions' o 'booksData').");
+                    // Intento de rescate si es un objeto AppState directo
+                    if (json.accounts && Array.isArray(json.accounts)) {
+                         addLog("Formato detectado: Libro Individual (Estructura Plana).", 'info');
+                         dataToUse = json as AppState;
+                    } else {
+                        throw new Error("El archivo NO tiene la estructura reconocida de ContaMiki.");
+                    }
                 }
 
                 // VALIDACIÓN FINAL DE DATOS EXTRAÍDOS
@@ -271,6 +277,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
           alert("Logo actualizado.");
       } catch (err) { alert("Error al procesar la imagen."); }
       e.target.value = '';
+  };
+
+  const handleRemoveLogo = () => {
+      localStorage.removeItem('contamiki_custom_logo');
+      setCustomLogoPreview('');
+      window.dispatchEvent(new Event('contamiki_logo_changed'));
   };
 
   const openVerification = (type: 'YEAR' | 'ALL_TX' | 'BOOK', payload?: any) => { setVerificationModal({ type, payload }); setVerificationInput(''); };
@@ -410,7 +422,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
                                 </>
                             )}
                         </button>
-                        <input id="restore-file" type="file" ref={backupInputRef} className="hidden" accept=".json,application/json" onChange={handleFileChange} />
+                        {/* FIX: Usar handleFileChange en lugar de la función antigua handleFileSelect */}
+                        <input id="restore-file" type="file" ref={backupInputRef} className="hidden" accept=".json,application/json" onChange={handleFileChange} onClick={(e) => (e.currentTarget.value = '')} />
                     </div>
                 </div>
 
