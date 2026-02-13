@@ -1,10 +1,12 @@
 
+// ... existing imports ...
 import React, { useState, useRef, useMemo } from 'react';
 import { AppState, Account, Family, Category, Transaction, TransactionType, AccountGroup, ImportReport, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, BookMetadata, BookColor } from '../types';
 import { Trash2, Edit2, Layers, Tag, Wallet, Loader2, Sparkles, XCircle, Download, DatabaseZap, ClipboardPaste, CheckCircle2, BoxSelect, FileJson, Info, AlertTriangle, Eraser, FileSpreadsheet, Upload, FolderTree, ArrowRightLeft, Receipt, Check, Image as ImageIcon, CalendarClock, Heart, Clock, Calendar, Archive, RefreshCw, X, HardDriveDownload, HardDriveUpload, Bot, ShieldAlert, Monitor, Palette, Eye, EyeOff, Plus, ChevronDown, BookCopy, BookPlus, AlertOctagon } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import * as XLSX from 'xlsx';
 
+// ... existing interfaces ...
 interface SettingsViewProps {
   data: AppState;
   books: BookMetadata[];
@@ -19,7 +21,7 @@ interface SettingsViewProps {
 const generateId = () => Math.random().toString(36).substring(2, 15);
 const numberFormatter = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// Utility para comprimir logo
+// ... existing helper functions (compressLogo) ...
 const compressLogo = async (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -52,6 +54,7 @@ const compressLogo = async (file: File): Promise<string> => {
 };
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdateData, onNavigateToTransactions, onCreateBookFromImport, onDeleteBook, onExportData, onRestoreToBook }) => {
+  // ... existing state definitions ...
   const [activeTab, setActiveTab] = useState('ACC_GROUPS');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
@@ -89,7 +92,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
   const iconUploadRef = useRef<HTMLInputElement>(null);
   const logoUploadRef = useRef<HTMLInputElement>(null);
 
-  // Form States
+  // Form States (Acc, Fam, Cat, etc)
   const [grpId, setGrpId] = useState<string | null>(null);
   const [grpName, setGrpName] = useState('');
   const [grpIcon, setGrpIcon] = useState('🗂️');
@@ -165,7 +168,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
     return <span className="text-xl">{iconStr}</span>;
   }
 
-  // --- DELETE PROTECTORS ---
+  // ... (Delete protectors) ...
   const attemptDeleteAccount = (account: Account) => {
       const usageCount = data.transactions.filter(t => t.accountId === account.id || t.transferAccountId === account.id).length;
       if (usageCount > 0) {
@@ -188,20 +191,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
       }
   };
 
+  // HANDLER PRINCIPAL DE RESTAURACIÓN
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      
       const reader = new FileReader();
       reader.onload = (ev) => {
           try {
               const content = JSON.parse(ev.target?.result as string);
-              if ((content.transactions && Array.isArray(content.transactions)) || (content.booksData && content.booksMetadata)) {
+              // Validación básica: Comprobar si es AppState (tiene transactions) o MultiBookState (tiene booksData)
+              const isSingleBook = Array.isArray(content.transactions);
+              const isMultiBook = content.booksMetadata && Array.isArray(content.booksMetadata);
+
+              if (isSingleBook || isMultiBook) {
                   setRestoreFile(content);
                   setRestoreFileName(file.name.replace('.json', ''));
               } else {
                   alert("El archivo no parece una copia de seguridad válida de ContaMiki.");
               }
           } catch (err) {
+              console.error(err);
               alert("Error al leer el archivo JSON.");
           }
       };
@@ -209,21 +219,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
       e.target.value = ''; // Reset input
   };
 
+  // ... (executeRestore, handleLogoUpload, handleRemoveLogo, openVerification, executeDangerousAction, handleProcessImport, renderIconInput) ...
   const executeRestore = (target: 'CURRENT' | 'OTHER' | 'NEW') => {
       if (!restoreFile) return;
       
-      // Si el archivo es un backup completo (MultiBookState), extraemos solo los datos si se va a restaurar en un libro simple.
-      // Si es un backup simple (AppState), lo usamos directo.
       let dataToRestore: AppState = restoreFile as AppState;
       
       if ((restoreFile as any).booksData) {
-          // Es un backup completo. 
-          // Si estamos restaurando en un libro concreto, debemos elegir QUÉ libro del backup restaurar?
-          // Simplificación: Cogemos el libro activo del backup o el primero.
           const mb = restoreFile as any;
-          const targetId = mb.currentBookId || Object.keys(mb.booksData)[0];
-          dataToRestore = mb.booksData[targetId];
-          alert("Aviso: Has seleccionado un backup completo del sistema. Se restaurarán los datos del libro principal contenido en el archivo.");
+          const targetId = mb.currentBookId || (mb.booksData && Object.keys(mb.booksData).length > 0 ? Object.keys(mb.booksData)[0] : null);
+          
+          if (targetId && mb.booksData[targetId]) {
+             dataToRestore = mb.booksData[targetId];
+             alert("Aviso: Has seleccionado un backup completo del sistema. Se restaurarán los datos del libro principal contenido en el archivo.");
+          } else {
+             alert("Error crítico: El archivo de respaldo está dañado o no contiene libros válidos.");
+             return;
+          }
       }
 
       if (target === 'CURRENT') {
@@ -251,7 +263,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
           const base64 = await compressLogo(file);
           localStorage.setItem('contamiki_custom_logo', base64);
           setCustomLogoPreview(base64);
-          // Disparar evento para que Layout y Login se actualicen
           window.dispatchEvent(new Event('contamiki_logo_changed'));
           alert("Logo actualizado correctamente.");
       } catch (err) {
@@ -281,6 +292,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
   };
 
   const handleProcessImport = (rawData: string) => {
+    // ... (same as original) ...
     if (!rawData.trim()) return;
     const lines = rawData.split('\n').filter(l => l.trim());
     const localGroups = [...data.accountGroups]; const localAccs = [...data.accounts];
@@ -302,6 +314,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
   };
 
   const renderIconInput = (icon: string, setIcon: (s: string) => void, currentName: string) => (
+    // ... (same as original) ...
     <div className="space-y-4 w-full">
         <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 p-4 sm:p-6 rounded-[2rem] border border-slate-100 shadow-inner">
             <div className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 flex items-center justify-center border-4 border-white rounded-[1.5rem] bg-white overflow-hidden shadow-lg transition-transform hover:scale-105">
@@ -361,95 +374,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
       </nav>
 
       <div className="max-w-4xl mx-auto">
-        {/* ... CODIGO EXISTENTE PARA ACC_GROUPS, ACCOUNTS, FAMILIES, ETC ... */}
         
-        {/* BLOQUE DATA ACTUALIZADO */}
-         {activeTab === 'DATA' && (
-            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="bg-indigo-50 p-10 rounded-[3rem] border border-indigo-100 space-y-6 text-center">
-                        <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm"><HardDriveDownload size={32}/></div>
-                        <div><h3 className="text-xl font-black text-indigo-900 uppercase">Exportar Datos</h3><p className="text-xs font-bold text-indigo-400 mt-2">Guarda una copia de seguridad completa o de un libro específico.</p></div>
-                        
-                        <div className="space-y-2 text-left">
-                            <label className="text-[10px] font-black text-indigo-400 uppercase ml-1">Alcance de la copia</label>
-                            <div className="relative">
-                                <select 
-                                    className="w-full px-4 py-3 bg-white border-2 border-indigo-200 rounded-xl font-bold text-xs text-indigo-900 outline-none appearance-none"
-                                    value={exportTarget}
-                                    onChange={(e) => setExportTarget(e.target.value)}
-                                >
-                                    <option value="ALL">Copia Completa (Todos los Libros)</option>
-                                    {books.map(b => (
-                                        <option key={b.id} value={b.id}>Libro: {b.name}</option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-300 pointer-events-none" size={16}/>
-                            </div>
-                        </div>
-
-                        <button onClick={() => onExportData(exportTarget)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-700 transition-all">Descargar JSON</button>
-                    </div>
-
-                    <div className="bg-slate-50 p-10 rounded-[3rem] border border-slate-100 space-y-6 text-center">
-                        <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-slate-600 shadow-sm"><HardDriveUpload size={32}/></div>
-                        <div><h3 className="text-xl font-black text-slate-900 uppercase">Restaurar Copia</h3><p className="text-xs font-bold text-slate-400 mt-2">Importa datos desde un archivo .json previamente exportado.</p></div>
-                        <button onClick={() => backupInputRef.current?.click()} className="w-full py-4 bg-white text-slate-900 border-2 border-slate-200 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-sm hover:border-indigo-500 hover:text-indigo-600 transition-all">Seleccionar Archivo</button>
-                        <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={handleFileSelect} />
-                    </div>
-                </div>
-                 {/* ZONA DE PELIGRO: Borrado */}
-                <div className="bg-rose-50 p-10 rounded-[3rem] border border-rose-100 space-y-6 text-center mt-8">
-                    <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-rose-600 shadow-sm"><ShieldAlert size={32}/></div>
-                    <div>
-                        <h3 className="text-xl font-black text-rose-900 uppercase">Zona de Peligro</h3>
-                        <p className="text-xs font-bold text-rose-400 mt-2">Acciones destructivas. Requieren verificación.</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                        <div className="p-6 bg-white rounded-[2rem] border border-rose-100 space-y-3 flex flex-col justify-center">
-                            <p className="text-[10px] font-black text-slate-400 uppercase">Borrar por Año</p>
-                            <div className="flex gap-2">
-                                <select className="w-full bg-slate-50 border border-slate-200 font-bold text-sm rounded-xl px-3 outline-none text-slate-700" value={yearToDelete} onChange={e => setYearToDelete(e.target.value)} >
-                                    <option value="" disabled>Año</option>
-                                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-                                </select>
-                                <button onClick={() => openVerification('YEAR', yearToDelete)} className="bg-rose-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase hover:bg-rose-700 shadow-lg disabled:opacity-50" disabled={!yearToDelete}>Borrar</button>
-                            </div>
-                        </div>
-
-                        <button onClick={() => openVerification('ALL_TX')} className="p-6 bg-white rounded-[2rem] border border-rose-100 flex flex-col items-center justify-center gap-2 hover:border-rose-300 hover:shadow-lg transition-all group">
-                            <Eraser size={24} className="text-rose-400 group-hover:text-rose-600 mb-1"/>
-                            <span className="text-[10px] font-black text-rose-600 uppercase">Borrar TODOS los Movimientos</span>
-                        </button>
-
-                         <button onClick={() => openVerification('BOOK')} className="p-6 bg-rose-600 text-white rounded-[2rem] border border-rose-600 flex flex-col items-center justify-center gap-2 hover:bg-rose-700 hover:shadow-xl transition-all group">
-                            <Trash2 size={24} className="text-white/80 group-hover:text-white mb-1"/>
-                            <span className="text-[10px] font-black text-white uppercase">Eliminar Libro Completo</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-         )}
-         
-         {/* ... TOOLS AND OTHER TABS ... */}
-         {activeTab === 'TOOLS' && (
-            <div className="space-y-12">
-                <div className="bg-indigo-600 p-10 rounded-[3rem] text-white space-y-8 shadow-2xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-12 opacity-10 group-hover:scale-110 transition-transform"><Bot size={120}/></div>
-                    <div className="relative z-10 space-y-4 text-center sm:text-left">
-                        <h3 className="text-3xl font-black uppercase tracking-tighter">Importación Inteligente</h3>
-                        <p className="text-indigo-100 text-sm font-medium">Carga tus extractos bancarios y deja que el Bot sugiera categorías basándose en tu historial.</p>
-                        <button onClick={() => onNavigateToTransactions?.({ action: 'IMPORT' })} className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl flex items-center justify-center gap-3 hover:scale-105 active:scale-95 transition-all">
-                           <Bot size={20}/> Lanzar Smart Import
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
+        {/* ... (Existing Tabs content for ACC_GROUPS, ACCOUNTS, FAMILIES, CATEGORIES, RECURRENTS, FAVORITES, UI, TOOLS) ... */}
         {activeTab === 'ACC_GROUPS' && (
+            // ... (Same content as before)
             <div className="space-y-6">
-                <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nuevo Grupo</button>
+                <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nueva Grupo</button>
                 <div className="space-y-4">
                     {data.accountGroups.map(g => (
                         <div key={g.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all">
@@ -464,6 +394,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
                         </div>
                     ))}
                 </div>
+                {/* MODAL EDITOR GRUPOS */}
                 {isEditModalOpen && (
                     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
                         <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20">
@@ -482,6 +413,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
                 )}
             </div>
         )}
+        
+        {/* ... (Repeat for ACCOUNTS, FAMILIES, CATEGORIES, RECURRENTS, FAVORITES, UI) ... */}
         {activeTab === 'ACCOUNTS' && (
             <div className="space-y-6">
                 <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nueva Cuenta</button>
@@ -505,6 +438,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
                         </div>
                     ))}
                 </div>
+                {/* MODAL EDITOR CUENTAS */}
                 {isEditModalOpen && (
                     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
                         <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-10 relative border border-white/20 max-h-[90vh] overflow-y-auto custom-scrollbar">
@@ -572,6 +506,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
                         </div>
                     ))}
                 </div>
+                {/* MODAL EDITOR FAMILIAS */}
                 {isEditModalOpen && (
                     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
                         <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20">
@@ -630,6 +565,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
                         );
                     })}
                 </div>
+                {/* MODAL EDITOR CATEGORÍAS */}
                 {isEditModalOpen && (
                     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
                         <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-10 relative border border-white/20 max-h-[90vh] overflow-y-auto custom-scrollbar">
@@ -669,6 +605,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
                 )}
             </div>
         )}
+
         {activeTab === 'RECURRENTS' && (
             <div className="grid grid-cols-1 gap-10">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
@@ -825,6 +762,89 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
                 </div>
             </div>
         )}
+
+         {activeTab === 'DATA' && (
+            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="bg-indigo-50 p-10 rounded-[3rem] border border-indigo-100 space-y-6 text-center">
+                        <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm"><HardDriveDownload size={32}/></div>
+                        <div><h3 className="text-xl font-black text-indigo-900 uppercase">Exportar Datos</h3><p className="text-xs font-bold text-indigo-400 mt-2">Guarda una copia de seguridad completa o de un libro específico.</p></div>
+                        
+                        <div className="space-y-2 text-left">
+                            <label className="text-[10px] font-black text-indigo-400 uppercase ml-1">Alcance de la copia</label>
+                            <div className="relative">
+                                <select 
+                                    className="w-full px-4 py-3 bg-white border-2 border-indigo-200 rounded-xl font-bold text-xs text-indigo-900 outline-none appearance-none"
+                                    value={exportTarget}
+                                    onChange={(e) => setExportTarget(e.target.value)}
+                                >
+                                    <option value="ALL">Copia Completa (Todos los Libros)</option>
+                                    {books.map(b => (
+                                        <option key={b.id} value={b.id}>Libro: {b.name}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-300 pointer-events-none" size={16}/>
+                            </div>
+                        </div>
+
+                        <button onClick={() => onExportData(exportTarget)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-700 transition-all">Descargar JSON</button>
+                    </div>
+
+                    <div className="bg-slate-50 p-10 rounded-[3rem] border border-slate-100 space-y-6 text-center">
+                        <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-slate-600 shadow-sm"><HardDriveUpload size={32}/></div>
+                        <div><h3 className="text-xl font-black text-slate-900 uppercase">Restaurar Copia</h3><p className="text-xs font-bold text-slate-400 mt-2">Importa datos desde un archivo .json previamente exportado.</p></div>
+                        <button onClick={() => backupInputRef.current?.click()} className="w-full py-4 bg-white text-slate-900 border-2 border-slate-200 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-sm hover:border-indigo-500 hover:text-indigo-600 transition-all">Seleccionar Archivo</button>
+                        {/* Hidden input moved to bottom to prevent unmounting */}
+                    </div>
+                </div>
+                 {/* ZONA DE PELIGRO: Borrado */}
+                <div className="bg-rose-50 p-10 rounded-[3rem] border border-rose-100 space-y-6 text-center mt-8">
+                    <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-rose-600 shadow-sm"><ShieldAlert size={32}/></div>
+                    <div>
+                        <h3 className="text-xl font-black text-rose-900 uppercase">Zona de Peligro</h3>
+                        <p className="text-xs font-bold text-rose-400 mt-2">Acciones destructivas. Requieren verificación.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                        <div className="p-6 bg-white rounded-[2rem] border border-rose-100 space-y-3 flex flex-col justify-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase">Borrar por Año</p>
+                            <div className="flex gap-2">
+                                <select className="w-full bg-slate-50 border border-slate-200 font-bold text-sm rounded-xl px-3 outline-none text-slate-700" value={yearToDelete} onChange={e => setYearToDelete(e.target.value)} >
+                                    <option value="" disabled>Año</option>
+                                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                                <button onClick={() => openVerification('YEAR', yearToDelete)} className="bg-rose-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase hover:bg-rose-700 shadow-lg disabled:opacity-50" disabled={!yearToDelete}>Borrar</button>
+                            </div>
+                        </div>
+
+                        <button onClick={() => openVerification('ALL_TX')} className="p-6 bg-white rounded-[2rem] border border-rose-100 flex flex-col items-center justify-center gap-2 hover:border-rose-300 hover:shadow-lg transition-all group">
+                            <Eraser size={24} className="text-rose-400 group-hover:text-rose-600 mb-1"/>
+                            <span className="text-[10px] font-black text-rose-600 uppercase">Borrar TODOS los Movimientos</span>
+                        </button>
+
+                         <button onClick={() => openVerification('BOOK')} className="p-6 bg-rose-600 text-white rounded-[2rem] border border-rose-600 flex flex-col items-center justify-center gap-2 hover:bg-rose-700 hover:shadow-xl transition-all group">
+                            <Trash2 size={24} className="text-white/80 group-hover:text-white mb-1"/>
+                            <span className="text-[10px] font-black text-white uppercase">Eliminar Libro Completo</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+         )}
+         
+         {activeTab === 'TOOLS' && (
+            <div className="space-y-12">
+                <div className="bg-indigo-600 p-10 rounded-[3rem] text-white space-y-8 shadow-2xl relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-12 opacity-10 group-hover:scale-110 transition-transform"><Bot size={120}/></div>
+                    <div className="relative z-10 space-y-4 text-center sm:text-left">
+                        <h3 className="text-3xl font-black uppercase tracking-tighter">Importación Inteligente</h3>
+                        <p className="text-indigo-100 text-sm font-medium">Carga tus extractos bancarios y deja que el Bot sugiera categorías basándose en tu historial.</p>
+                        <button onClick={() => onNavigateToTransactions?.({ action: 'IMPORT' })} className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl flex items-center justify-center gap-3 hover:scale-105 active:scale-95 transition-all">
+                           <Bot size={20}/> Lanzar Smart Import
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
       </div>
 
       {verificationModal && (
@@ -926,6 +946,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
               </div>
           </div>
       )}
+      
+      {/* File Input always rendered to ensure ref consistency and prevent unmounting issues */}
+      <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={handleFileSelect} />
     </div>
   );
 };
