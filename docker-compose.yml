@@ -2,7 +2,6 @@ version: '3'
 services:
   contamiki:
     container_name: contamiki
-    image: https://github.com/mikiaiapp/contamiki:latest
     build: .
     restart: unless-stopped
     ports:
