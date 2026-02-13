@@ -282,9 +282,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     });
     setProposedTransactions(props);
     
-    // Seleccionar por defecto SOLO los que NO son duplicados
-    const nonDuplicates = props.filter(p => !p.isDuplicate).map(p => p.id);
-    setSelectedImportIds(new Set(nonDuplicates));
+    // Modificación: No seleccionar nada por defecto, el usuario elige manualmente
+    setSelectedImportIds(new Set());
     
     setImportStep(3);
   };
