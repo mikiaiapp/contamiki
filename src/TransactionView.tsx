@@ -319,18 +319,15 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   };
 
   const handleFinalImport = () => {
-    // Validar transacciones: Deben tener categoría O ser una transferencia con cuenta destino
-    const validTransactions = proposedTransactions.filter(p => (p.categoryId && p.categoryId !== '') || (p.type === 'TRANSFER' && p.transferAccountId));
-    const pendingTransactions = proposedTransactions.filter(p => !((p.categoryId && p.categoryId !== '') || (p.type === 'TRANSFER' && p.transferAccountId)));
-
-    if (validTransactions.length === 0 && pendingTransactions.length > 0) {
-        alert("Asigna categorías o cuentas de destino a los movimientos pendientes para poder importarlos.");
-        return;
-    }
-
+    // Identify candidates based on selection
+    const candidates = proposedTransactions.filter(p => selectedImportIds.has(p.id));
+    
+    // Filter valid ones to import
+    const validTransactions = candidates.filter(p => (p.categoryId && p.categoryId !== '') || (p.type === 'TRANSFER' && p.transferAccountId));
+    
     if (validTransactions.length === 0) {
-        setIsImportModalOpen(false); 
-        return; 
+        alert("No hay movimientos válidos seleccionados para importar. Asigna categorías o cuentas de destino.");
+        return;
     }
 
     const newTxs: Transaction[] = validTransactions.map(p => ({
@@ -348,15 +345,24 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
     onUpdateData({ transactions: [...newTxs, ...data.transactions] });
 
-    if (pendingTransactions.length > 0) {
-        setProposedTransactions(pendingTransactions);
-        setSelectedImportIds(new Set());
-        alert(`Se han importado ${validTransactions.length} movimientos correctamente.\n\nQuedan ${pendingTransactions.length} movimientos sin asignar. Por favor, complétalos o descártalos.`);
-    } else {
+    // Remove imported items from proposed list
+    const importedIds = new Set(validTransactions.map(v => v.id));
+    const remainingTransactions = proposedTransactions.filter(p => !importedIds.has(p.id));
+
+    setProposedTransactions(remainingTransactions);
+    
+    // Update selection to remove imported IDs
+    const newSelection = new Set(selectedImportIds);
+    for (const id of importedIds) {
+        newSelection.delete(id);
+    }
+    setSelectedImportIds(newSelection);
+
+    if (remainingTransactions.length === 0) {
         setIsImportModalOpen(false);
-        setProposedTransactions([]);
-        setSelectedImportIds(new Set());
         resetForm();
+    } else {
+         alert(`Se han importado ${validTransactions.length} movimientos correctamente.`);
     }
   };
 
@@ -1221,66 +1227,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                             <button onClick={() => { setProposedTransactions([]); setImportStep(1); setSelectedImportIds(new Set()); }} className="text-[10px] font-black uppercase text-rose-500 hover:underline">Descartar Todo</button>
                         </div>
                     </div>
-
-                    {proposedTransactions.some(p => p.isDuplicate) && (
-                        <div className="flex items-center justify-between bg-rose-50 border border-rose-100 p-3 rounded-2xl mx-1 animate-in slide-in-from-top-2">
-                            <div className="flex items-center gap-2 text-rose-600">
-                                <AlertTriangle size={16} />
-                                <span className="text-[10px] font-black uppercase tracking-wide">
-                                    {proposedTransactions.filter(p => p.isDuplicate).length} Posibles Movimientos Duplicados
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <label className="flex items-center gap-2 cursor-pointer group select-none">
-                                    <div className="relative flex items-center">
-                                        <input 
-                                            type="checkbox" 
-                                            className="peer sr-only"
-                                            checked={proposedTransactions.filter(p => p.isDuplicate).every(p => selectedImportIds.has(p.id))}
-                                            onChange={(e) => {
-                                                const duplicateIds = proposedTransactions.filter(p => p.isDuplicate).map(p => p.id);
-                                                const newSet = new Set(selectedImportIds);
-                                                if (e.target.checked) {
-                                                    duplicateIds.forEach(id => newSet.add(id));
-                                                } else {
-                                                    duplicateIds.forEach(id => newSet.delete(id));
-                                                }
-                                                setSelectedImportIds(newSet);
-                                            }}
-                                        />
-                                        <div className="w-4 h-4 border-2 border-rose-200 rounded-md peer-checked:bg-rose-500 peer-checked:border-rose-500 transition-all flex items-center justify-center">
-                                            <Check size={10} className="text-white opacity-0 peer-checked:opacity-100" />
-                                        </div>
-                                    </div>
-                                    <span className="text-[9px] font-bold text-rose-400 group-hover:text-rose-600 uppercase">Seleccionar</span>
-                                </label>
-                                <div className="h-4 w-px bg-rose-200"></div>
-                                <button 
-                                    onClick={() => {
-                                        if(confirm("¿Estás seguro de descartar todos los posibles duplicados?")) {
-                                            setProposedTransactions(prev => prev.filter(p => !p.isDuplicate));
-                                            const dups = new Set(proposedTransactions.filter(p => p.isDuplicate).map(p => p.id));
-                                            const newSet = new Set(selectedImportIds);
-                                            dups.forEach(id => newSet.delete(id));
-                                            setSelectedImportIds(newSet);
-                                        }
-                                    }}
-                                    className="text-[9px] font-black uppercase text-rose-600 hover:text-rose-800 hover:underline"
-                                >
-                                    Borrar Duplicados
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
                     <div className="max-h-[400px] overflow-y-auto custom-scrollbar space-y-2 pr-2 pb-16">
                         {proposedTransactions.map((t, idx) => {
                             const hasCategory = !!t.categoryId;
                             const isTransfer = t.type === 'TRANSFER';
                             const isAssigned = hasCategory || isTransfer;
                             
-                            // Estilo especial para duplicados
-                            const rowBg = t.isDuplicate ? 'bg-amber-50/50 border border-amber-200' : (isAssigned ? 'bg-emerald-50/50 border border-emerald-100' : 'bg-slate-50 border border-slate-100');
+                            // Estilo especial para duplicados: ROJO ahora
+                            const rowBg = t.isDuplicate 
+                                ? 'bg-rose-50 border-rose-200' 
+                                : (isAssigned ? 'bg-emerald-50/50 border border-emerald-100' : 'bg-slate-50 border border-slate-100');
 
                             return (
                                 <div key={t.id} className={`p-4 rounded-2xl flex items-center gap-4 ${rowBg}`}>
@@ -1290,7 +1246,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                     <div className="flex-1 min-w-0 grid grid-cols-[repeat(16,minmax(0,1fr))] gap-4 items-center">
                                         <div className="col-span-2 text-[10px] font-bold text-slate-500 whitespace-nowrap flex items-center gap-2">
                                             {formatDateDisplay(t.date)}
-                                            {t.isDuplicate && <span className="inline-flex items-center gap-1 text-[8px] text-amber-600 font-black uppercase tracking-tight bg-amber-100 px-1.5 py-0.5 rounded-md" title="Posible Duplicado"><AlertTriangle size={8}/> Dup</span>}
+                                            {t.isDuplicate && <span className="inline-flex items-center gap-1 text-[8px] text-rose-600 font-black uppercase tracking-tight bg-rose-100 px-1.5 py-0.5 rounded-md" title="Posible Duplicado"><AlertTriangle size={8}/> Dup</span>}
                                         </div>
                                         {/* CONCEPTO EDITABLE */}
                                         <input 
@@ -1420,9 +1376,26 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                         </div>
                     )}
 
+                    {proposedTransactions.some(p => p.isDuplicate) && (
+                        <button 
+                            onClick={() => {
+                                if(confirm("¿Descartar todos los movimientos marcados como duplicados?")) {
+                                    setProposedTransactions(prev => prev.filter(p => !p.isDuplicate));
+                                    // Cleanup selection
+                                    const newSel = new Set(selectedImportIds);
+                                    proposedTransactions.filter(p => p.isDuplicate).forEach(p => newSel.delete(p.id));
+                                    setSelectedImportIds(newSel);
+                                }
+                            }}
+                            className="w-full py-3 mb-3 bg-white border-2 border-rose-100 text-rose-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-rose-50 transition-all flex items-center justify-center gap-2"
+                        >
+                            <Trash2 size={14}/> Descartar Duplicados Detectados
+                        </button>
+                    )}
+
                     <div className="flex gap-4">
                         <button onClick={handleFinalImport} className="flex-1 py-6 bg-slate-950 text-white rounded-[2rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-emerald-600 transition-all">
-                            Confirmar Importación ({proposedTransactions.filter(p => p.categoryId || p.transferAccountId).length})
+                            Confirmar Importación ({proposedTransactions.filter(p => selectedImportIds.has(p.id) && (p.categoryId || p.transferAccountId)).length})
                         </button>
                     </div>
                     {/* Hidden input for row attachments */}
