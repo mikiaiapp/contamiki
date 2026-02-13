@@ -104,12 +104,12 @@ const App: React.FC = () => {
       });
   };
 
-  const handleCreateBookFromImport = (importData: AppState, name: string) => {
+  const handleCreateBookFromImport = (importData: AppState, name: string, color: BookColor = 'BLUE') => {
       const newId = Math.random().toString(36).substring(2, 15);
       const newBook: BookMetadata = {
           id: newId,
           name: name || 'Libro Importado',
-          color: 'BLUE',
+          color: color,
           currency: 'EUR'
       };
       
@@ -120,6 +120,16 @@ const App: React.FC = () => {
           currentBookId: newId
       }));
       setCurrentView('RESUMEN');
+  };
+
+  const handleRestoreToBook = (bookId: string, data: AppState) => {
+      setMultiState(prev => ({
+          ...prev,
+          booksData: { ...prev.booksData, [bookId]: data },
+          currentBookId: bookId 
+      }));
+      setCurrentView('RESUMEN');
+      alert("Copia restaurada con éxito en el libro seleccionado.");
   };
 
   const handleDeleteBook = () => {
@@ -145,7 +155,6 @@ const App: React.FC = () => {
       setCurrentView('RESUMEN');
   };
 
-  // NUEVA FUNCIONALIDAD DE EXPORTACIÓN
   const handleExportData = (targetId: string) => {
       let dataToExport: any;
       let fileName = '';
@@ -163,7 +172,6 @@ const App: React.FC = () => {
               return;
           }
 
-          // Exportamos como un AppState individual
           dataToExport = bookData;
           fileName = `backup_${book.name.replace(/\s+/g, '_')}_${today}.json`;
       }
@@ -217,7 +225,7 @@ const App: React.FC = () => {
           </p>
           <button 
               onClick={() => window.location.reload()} 
-              className="bg-white text-slate-900 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-indigo-500 hover:text-white transition-all flex items-center gap-3"
+              className="bg-white text-slate-900 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-indigo-50 hover:text-white transition-all flex items-center gap-3"
           >
               <RefreshCw size={16} /> Reintentar Conexión
           </button>
@@ -266,12 +274,13 @@ const App: React.FC = () => {
       {currentView === 'SETTINGS' && (
         <SettingsView 
           data={currentAppData} 
-          books={multiState.booksMetadata} // Nuevo: Pasamos metadatos de todos los libros
+          books={multiState.booksMetadata} 
           onUpdateData={updateCurrentBookData} 
           onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }}
           onCreateBookFromImport={handleCreateBookFromImport}
+          onRestoreToBook={handleRestoreToBook}
           onDeleteBook={handleDeleteBook}
-          onExportData={handleExportData} // Nuevo: Pasamos handler de exportación
+          onExportData={handleExportData} 
         />
       )}
 

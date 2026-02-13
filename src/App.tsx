@@ -126,7 +126,7 @@ const App: React.FC = () => {
       setMultiState(prev => ({
           ...prev,
           booksData: { ...prev.booksData, [bookId]: data },
-          currentBookId: bookId // Opcional: Cambiar al libro restaurado para que el usuario vea el resultado
+          currentBookId: bookId 
       }));
       setCurrentView('RESUMEN');
   };
@@ -154,7 +154,6 @@ const App: React.FC = () => {
       setCurrentView('RESUMEN');
   };
 
-  // NUEVA FUNCIONALIDAD DE EXPORTACIÓN
   const handleExportData = (targetId: string) => {
       let dataToExport: any;
       let fileName = '';
@@ -172,7 +171,6 @@ const App: React.FC = () => {
               return;
           }
 
-          // Exportamos como un AppState individual
           dataToExport = bookData;
           fileName = `backup_${book.name.replace(/\s+/g, '_')}_${today}.json`;
       }
@@ -226,7 +224,7 @@ const App: React.FC = () => {
           </p>
           <button 
               onClick={() => window.location.reload()} 
-              className="bg-white text-slate-900 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-indigo-500 hover:text-white transition-all flex items-center gap-3"
+              className="bg-white text-slate-900 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-indigo-50 hover:text-white transition-all flex items-center gap-3"
           >
               <RefreshCw size={16} /> Reintentar Conexión
           </button>

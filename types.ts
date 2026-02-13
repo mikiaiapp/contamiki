@@ -15,7 +15,7 @@ export interface Account {
   currency: string;
   icon: string;
   groupId: string;
-  active?: boolean; // Nuevo: Control de estado
+  active?: boolean;
 }
 
 export interface Family {
@@ -30,7 +30,7 @@ export interface Category {
   name: string;
   familyId: string;
   icon: string;
-  active?: boolean; // Nuevo: Control de estado
+  active?: boolean;
 }
 
 export interface Transaction {
@@ -61,7 +61,7 @@ export interface RecurrentMovement {
   interval: number;
   startDate: string;
   nextDueDate: string;
-  endDate?: string; // Fecha fin opcional
+  endDate?: string;
   active: boolean;
 }
 
@@ -88,7 +88,6 @@ export interface AppState {
   favorites?: FavoriteMovement[];
 }
 
-// NUEVAS INTERFACES PARA MULTI-CONTABILIDAD
 export type BookColor = 'BLACK' | 'BLUE' | 'ROSE' | 'EMERALD' | 'AMBER' | 'VIOLET';
 
 export interface BookMetadata {
@@ -101,7 +100,7 @@ export interface BookMetadata {
 export interface MultiBookState {
   booksMetadata: BookMetadata[];
   currentBookId: string;
-  booksData: Record<string, AppState>; // Mapa: bookId -> Datos
+  booksData: Record<string, AppState>;
 }
 
 export interface ImportReport {
@@ -124,10 +123,11 @@ export interface GlobalFilter {
 
 export interface SettingsViewProps {
   data: AppState;
-  books: BookMetadata[]; // Nuevo: Lista de libros para el selector de exportación
+  books: BookMetadata[];
   onUpdateData: (newData: Partial<AppState>) => void;
   onNavigateToTransactions?: (filters: any) => void;
-  onCreateBookFromImport?: (data: AppState, name: string) => void;
+  onCreateBookFromImport?: (data: AppState, name: string, color?: BookColor) => void;
   onDeleteBook?: () => void;
-  onExportData: (targetId: string) => void; // Nuevo: Callback para exportar
+  onExportData: (targetId: string) => void;
+  onRestoreToBook?: (bookId: string, data: AppState) => void;
 }
