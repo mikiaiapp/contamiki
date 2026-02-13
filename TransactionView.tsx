@@ -1,6 +1,7 @@
+
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, RecurrentMovement, RecurrenceFrequency } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface TransactionViewProps {
@@ -30,6 +31,7 @@ interface ProposedTransaction {
   isValidated: boolean;
   attachment?: string;
   transferAccountId?: string;
+  isDuplicate?: boolean; // Nuevo campo
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
@@ -118,6 +120,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   // Import Row Attachment
   const [attachingImportId, setAttachingImportId] = useState<string | null>(null);
   const rowImportFileRef = useRef<HTMLInputElement>(null);
+  
+  // Import Dropdown State
+  const [openSelectorId, setOpenSelectorId] = useState<string | null>(null);
   
   const importFileRef = useRef<HTMLInputElement>(null);
   const rawImportTextRef = useRef<HTMLTextAreaElement>(null);
@@ -212,31 +217,75 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     if (!rawData.trim()) return;
     const lines = rawData.split('\n').filter(l => l.trim());
     const props: ProposedTransaction[] = [];
+    
+    // Preparar lista de transacciones existentes para búsqueda rápida
+    const existingInAccount = data.transactions.filter(t => t.accountId === importAccount);
+
     lines.forEach(line => {
       const parts = line.split(/[;\t]/).map(p => p.trim());
       const effectiveParts = parts.length >= 2 ? parts : line.split(',').map(p => p.trim());
 
       if (effectiveParts.length < 2) return;
       
-      const dateStr = effectiveParts[0];
+      const dateStrRaw = effectiveParts[0];
       const concept = effectiveParts[1];
-      const amountStr = effectiveParts[effectiveParts.length - 1].replace(',', '.');
-      const amount = parseFloat(amountStr);
       
+      // Lógica de parsing de importe mejorada para soportar formatos europeos (1.234,56) y americanos
+      let amountStr = effectiveParts[effectiveParts.length - 1].trim();
+      amountStr = amountStr.replace(/[^\d.,\-+]/g, '');
+
+      if (amountStr.includes('.') && amountStr.includes(',')) {
+          if (amountStr.lastIndexOf(',') > amountStr.lastIndexOf('.')) {
+              amountStr = amountStr.replace(/\./g, '').replace(',', '.');
+          } else {
+              amountStr = amountStr.replace(/,/g, '');
+          }
+      } else if (amountStr.includes(',')) {
+          amountStr = amountStr.replace(',', '.');
+      } else if (amountStr.includes('.')) {
+          // Soporte explícito para punto como separador de miles (ej: 1.200)
+          // Si hay más de un punto (1.234.567) o si el único punto va seguido de 3 dígitos exactos (1.234)
+          // se trata como separador de miles. De lo contrario (1.50), es decimal.
+          const dotCount = (amountStr.match(/\./g) || []).length;
+          const parts = amountStr.split('.');
+          const lastPart = parts[parts.length - 1];
+          
+          if (dotCount > 1 || lastPart.length === 3) {
+              amountStr = amountStr.replace(/\./g, '');
+          }
+      }
+      
+      const amount = parseFloat(amountStr);
       if (isNaN(amount)) return;
+
+      const formattedDate = dateStrRaw.includes('/') ? dateStrRaw.split('/').reverse().join('-') : dateStrRaw;
+
+      // DETECCIÓN DE DUPLICADOS
+      // Coincidencia exacta de: Cuenta, Fecha, Importe y Concepto
+      const isDuplicate = existingInAccount.some(ex => 
+          ex.date === formattedDate &&
+          Math.abs(ex.amount - amount) < 0.01 &&
+          ex.description.toLowerCase().trim() === concept.toLowerCase().trim()
+      );
 
       props.push({
         id: generateId(),
-        date: dateStr.includes('/') ? dateStr.split('/').reverse().join('-') : dateStr,
+        date: formattedDate,
         description: concept,
         amount: amount,
         accountId: importAccount, 
         categoryId: findSuggestedCategory(concept),
         type: amount < 0 ? 'EXPENSE' : 'INCOME',
-        isValidated: false
+        isValidated: false,
+        isDuplicate: isDuplicate
       });
     });
     setProposedTransactions(props);
+    
+    // Seleccionar por defecto SOLO los que NO son duplicados
+    const nonDuplicates = props.filter(p => !p.isDuplicate).map(p => p.id);
+    setSelectedImportIds(new Set(nonDuplicates));
+    
     setImportStep(3);
   };
 
@@ -272,6 +321,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   };
 
   const handleFinalImport = () => {
+    // Validar transacciones: Deben tener categoría O ser una transferencia con cuenta destino
     const validTransactions = proposedTransactions.filter(p => (p.categoryId && p.categoryId !== '') || (p.type === 'TRANSFER' && p.transferAccountId));
     const pendingTransactions = proposedTransactions.filter(p => !((p.categoryId && p.categoryId !== '') || (p.type === 'TRANSFER' && p.transferAccountId)));
 
@@ -710,7 +760,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const gridClasses = "grid grid-cols-[25px_52px_1fr_1.2fr_12px_1fr_50px_20px] md:grid-cols-[30px_90px_1fr_1.5fr_40px_1fr_80px_40px] gap-1 md:gap-4 items-center";
 
   return (
-    <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500" onClick={() => setActiveMenuTxId(null)}>
+    <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500" onClick={() => { setActiveMenuTxId(null); setOpenSelectorId(null); }}>
       {/* CABECERA PRINCIPAL */}
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
         {/* ... (Existing header code) ... */}
@@ -739,7 +789,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                 {/* FAVORITOS BUTTON */}
                 <div className="relative">
                     <button 
-                        onClick={() => setShowFavoritesList(!showFavoritesList)} 
+                        onClick={(e) => { e.stopPropagation(); setShowFavoritesList(!showFavoritesList); }} 
                         className="w-12 h-12 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl shadow-sm hover:bg-amber-100 flex items-center justify-center transition-all active:scale-95"
                         title="Favoritos"
                     >
@@ -785,7 +835,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                 </button>
                 
                 <button 
-                    onClick={() => openEditor()} 
+                    onClick={(e) => { e.stopPropagation(); openEditor(); }} 
                     className="w-12 h-12 bg-slate-950 text-white rounded-xl shadow-lg hover:bg-slate-800 flex items-center justify-center transition-all active:scale-95"
                     title="Nuevo Movimiento"
                 >
@@ -1179,17 +1229,23 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                             const isTransfer = t.type === 'TRANSFER';
                             const isAssigned = hasCategory || isTransfer;
                             
+                            // Estilo especial para duplicados
+                            const rowBg = t.isDuplicate ? 'bg-amber-50/50 border border-amber-200' : (isAssigned ? 'bg-emerald-50/50 border border-emerald-100' : 'bg-slate-50 border border-slate-100');
+
                             return (
-                                <div key={t.id} className={`p-4 rounded-2xl flex items-center gap-4 ${isAssigned ? 'bg-emerald-50/50 border border-emerald-100' : 'bg-slate-50 border border-slate-100'}`}>
+                                <div key={t.id} className={`p-4 rounded-2xl flex items-center gap-4 ${rowBg}`}>
                                     <button onClick={() => toggleImportSelection(t.id)} className={`text-slate-400 hover:text-indigo-600 flex-shrink-0`}>
                                         {selectedImportIds.has(t.id) ? <CheckSquare size={16}/> : <Square size={16}/>}
                                     </button>
-                                    <div className="flex-1 min-w-0 grid grid-cols-12 gap-4 items-center">
-                                        <div className="col-span-2 text-[10px] font-bold text-slate-500">{t.date}</div>
+                                    <div className="flex-1 min-w-0 grid grid-cols-[repeat(16,minmax(0,1fr))] gap-4 items-center">
+                                        <div className="col-span-2 text-[10px] font-bold text-slate-500 whitespace-nowrap flex items-center gap-2">
+                                            {formatDateDisplay(t.date)}
+                                            {t.isDuplicate && <span className="inline-flex items-center gap-1 text-[8px] text-amber-600 font-black uppercase tracking-tight bg-amber-100 px-1.5 py-0.5 rounded-md" title="Posible Duplicado"><AlertTriangle size={8}/> Dup</span>}
+                                        </div>
                                         {/* CONCEPTO EDITABLE */}
                                         <input 
                                             type="text" 
-                                            className="col-span-5 text-xs font-bold text-slate-800 bg-transparent border-b border-transparent focus:border-indigo-300 outline-none truncate transition-colors"
+                                            className="col-span-4 text-xs font-bold text-slate-800 bg-transparent border-b border-transparent focus:border-indigo-300 outline-none truncate transition-colors"
                                             value={t.description}
                                             title={t.description}
                                             onChange={(e) => {
@@ -1198,46 +1254,85 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                                 setProposedTransactions(newArr);
                                             }}
                                         />
-                                        <div className={`col-span-2 text-xs font-black text-right ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
-                                        <div className="col-span-3">
-                                            <select 
-                                                className={`w-full border rounded-lg text-[9px] font-bold py-1.5 px-2 outline-none transition-colors ${isAssigned ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-white border-rose-200 text-slate-500'}`}
-                                                value={t.type === 'TRANSFER' ? t.transferAccountId : t.categoryId}
-                                                onChange={(e) => { 
-                                                    const val = e.target.value;
-                                                    const newArr = [...proposedTransactions];
-                                                    
-                                                    // Detectar si es cuenta (traspaso) o categoría
-                                                    const isAccount = indices.acc.has(val);
-                                                    
-                                                    if (isAccount) {
-                                                        newArr[idx].type = 'TRANSFER';
-                                                        newArr[idx].transferAccountId = val;
-                                                        newArr[idx].categoryId = ''; // Limpiar categoría
-                                                    } else {
-                                                        newArr[idx].categoryId = val;
-                                                        newArr[idx].transferAccountId = undefined;
-                                                        // Recalcular tipo basado en signo si no es traspaso
-                                                        newArr[idx].type = newArr[idx].amount < 0 ? 'EXPENSE' : 'INCOME';
-                                                    }
-                                                    setProposedTransactions(newArr); 
-                                                }}
+                                        <div className={`col-span-7 text-xs font-black text-right whitespace-nowrap ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
+                                        
+                                        {/* SELECTOR CUSTOMIZADO 2 COLUMNAS (MODAL CENTRADO) */}
+                                        <div className="col-span-3 relative">
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); setOpenSelectorId(openSelectorId === t.id ? null : t.id); }}
+                                                className={`w-full border rounded-lg text-[9px] font-bold py-1.5 px-2 outline-none transition-colors flex items-center justify-between gap-2 ${isAssigned ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-white border-rose-200 text-slate-500'}`}
                                             >
-                                                <option value="">Sin Asignar</option>
-                                                <optgroup label="--- CATEGORÍAS ---">
-                                                    {groupedCategories.map(f => (
-                                                        <optgroup key={f.family.id} label={f.family.name}>
-                                                            {f.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                                        </optgroup>
-                                                    ))}
-                                                </optgroup>
-                                                <optgroup label="--- TRASPASO A CUENTA ---">
-                                                    {data.accounts
-                                                        .filter(a => a.id !== importAccount && a.active !== false)
-                                                        .map(a => <option key={a.id} value={a.id}>➡ {a.name}</option>)
+                                                <span className="truncate">
+                                                    {t.type === 'TRANSFER' && t.transferAccountId 
+                                                        ? `➡ ${indices.acc.get(t.transferAccountId)?.name || 'Cuenta Desconocida'}`
+                                                        : (indices.cat.get(t.categoryId)?.name || 'Sin Asignar')
                                                     }
-                                                </optgroup>
-                                            </select>
+                                                </span>
+                                                <ChevronDown size={12} className="opacity-50"/>
+                                            </button>
+
+                                            {openSelectorId === t.id && (
+                                                <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-[2px]" onClick={(e) => { e.stopPropagation(); setOpenSelectorId(null); }}>
+                                                    <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[550px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[60vh]" onClick={e => e.stopPropagation()}>
+                                                        
+                                                        {/* COLUMNA IZQUIERDA: CATEGORÍAS */}
+                                                        <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50">
+                                                            <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10">Categorías</div>
+                                                            {groupedCategories.map(f => (
+                                                                <div key={f.family.id}>
+                                                                    <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-9 z-0">{f.family.name}</div>
+                                                                    {f.categories.map(c => (
+                                                                        <button
+                                                                            key={c.id}
+                                                                            onClick={() => {
+                                                                                const newArr = [...proposedTransactions];
+                                                                                newArr[idx].categoryId = c.id;
+                                                                                newArr[idx].transferAccountId = undefined;
+                                                                                newArr[idx].type = newArr[idx].amount < 0 ? 'EXPENSE' : 'INCOME';
+                                                                                setProposedTransactions(newArr);
+                                                                                setOpenSelectorId(null);
+                                                                            }}
+                                                                            className={`w-full text-left px-4 py-3 hover:bg-white hover:text-indigo-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-2 ${t.categoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}
+                                                                        >
+                                                                            {c.icon} {c.name}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+
+                                                        {/* COLUMNA DERECHA: CUENTAS */}
+                                                        <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+                                                            <div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10">Traspasos</div>
+                                                            {groupedAccounts.map(g => {
+                                                                const availableAccs = g.accounts.filter(a => a.id !== importAccount && a.active !== false);
+                                                                if (availableAccs.length === 0) return null;
+                                                                return (
+                                                                    <div key={g.group.id}>
+                                                                        <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>
+                                                                        {availableAccs.map(a => (
+                                                                            <button
+                                                                                key={a.id}
+                                                                                onClick={() => {
+                                                                                    const newArr = [...proposedTransactions];
+                                                                                    newArr[idx].type = 'TRANSFER';
+                                                                                    newArr[idx].transferAccountId = a.id;
+                                                                                    newArr[idx].categoryId = '';
+                                                                                    setProposedTransactions(newArr);
+                                                                                    setOpenSelectorId(null);
+                                                                                }}
+                                                                                className={`w-full text-left px-4 py-3 hover:bg-slate-50 hover:text-emerald-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-2 ${t.transferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}
+                                                                            >
+                                                                                ➡ {a.icon} {a.name}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1">
@@ -1288,153 +1383,156 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         </div>
       )}
 
-      {/* MODAL EDITOR NORMAL */}
-      {/* ... (Existing Editor Modal) ... */}
+      {/* MODAL PRINCIPAL DE EDICIÓN (SINGLE) */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500" onClick={(e) => e.stopPropagation()}>
-          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-white/20">
-            <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
-            <div className="flex items-center gap-4 mb-10">
-              <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Receipt size={28} /></div>
-              <div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">{editingTx ? 'Editar' : 'Nuevo'}</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Asiento Diario</p></div>
-            </div>
-            {/* ... Resto del contenido del modal editor ... */}
-            <div className="space-y-8">
-              <div className="bg-slate-100 p-2 rounded-[1.5rem] flex gap-2">
-                {['EXPENSE', 'INCOME', 'TRANSFER'].map(m => (
-                  <button key={m} type="button" onClick={() => setFType(m as any)} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${fType === m ? `bg-white text-indigo-600 shadow-xl` : 'text-slate-400'}`}>{m === 'EXPENSE' ? 'Gasto' : m === 'INCOME' ? 'Ingreso' : 'Traspaso'}</button>
-                ))}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe</label>
-                  <div className="relative">
-                    <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 font-bold">€</span>
-                    <input type="number" step="0.01" className="w-full pl-10 pr-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-2xl font-black outline-none focus:border-indigo-500 transition-all shadow-inner" value={fAmount} onChange={e => setFAmount(e.target.value)} />
+          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
+              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20 max-h-[95vh] overflow-y-auto custom-scrollbar">
+                  <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                  <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Edit3 className="text-indigo-600"/> {editingTx ? 'Editar Movimiento' : 'Nuevo Movimiento'}</h3>
+                  <div className="space-y-6">
+                      <div className="bg-slate-100 p-1.5 rounded-2xl flex shadow-inner">
+                          <button onClick={() => setFType('EXPENSE')} className={`flex-1 py-4 text-[10px] font-black uppercase rounded-xl transition-all ${fType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-500' : 'text-slate-400 hover:text-slate-600'}`}>Gasto</button>
+                          <button onClick={() => setFType('INCOME')} className={`flex-1 py-4 text-[10px] font-black uppercase rounded-xl transition-all ${fType === 'INCOME' ? 'bg-white shadow-sm text-emerald-500' : 'text-slate-400 hover:text-slate-600'}`}>Ingreso</button>
+                          <button onClick={() => setFType('TRANSFER')} className={`flex-1 py-4 text-[10px] font-black uppercase rounded-xl transition-all ${fType === 'TRANSFER' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>Traspaso</button>
+                      </div>
+
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe</label>
+                          <div className="relative">
+                              <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 font-black">€</span>
+                              <input type="number" step="0.01" inputMode="decimal" placeholder="0.00" className="w-full pl-10 pr-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-xl outline-none focus:border-indigo-500 transition-all" value={fAmount} onChange={e => setFAmount(e.target.value)} autoFocus />
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                           <div className="space-y-2">
+                              <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha</label>
+                              <input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDate} onChange={e => setFDate(e.target.value)} />
+                           </div>
+                           <div className="space-y-2">
+                               <label className="text-[10px] font-black text-slate-400 uppercase ml-1">{fType === 'TRANSFER' ? 'Desde' : 'Cuenta'}</label>
+                               <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fAcc} onChange={e => setFAcc(e.target.value)}>
+                                   {groupedAccounts.map(g => (
+                                       <optgroup key={g.group.id} label={g.group.name}>
+                                           {g.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                       </optgroup>
+                                   ))}
+                               </select>
+                           </div>
+                      </div>
+
+                      {fType === 'TRANSFER' ? (
+                          <div className="space-y-2 animate-in slide-in-from-top-2">
+                              <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Hacia Cuenta Destino</label>
+                              <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fTransferDest} onChange={e => setFTransferDest(e.target.value)}>
+                                  <option value="">Selecciona destino...</option>
+                                  {groupedAccounts.map(g => (
+                                       <optgroup key={g.group.id} label={g.group.name}>
+                                           {g.accounts.filter(a => a.id !== fAcc).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                       </optgroup>
+                                   ))}
+                              </select>
+                          </div>
+                      ) : (
+                          <div className="space-y-2 animate-in slide-in-from-top-2">
+                              <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label>
+                              <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fCat} onChange={e => setFCat(e.target.value)}>
+                                  <option value="">Selecciona categoría...</option>
+                                  {groupedCategories.map(f => (
+                                      <optgroup key={f.family.id} label={f.family.name}>
+                                          {f.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                      </optgroup>
+                                  ))}
+                              </select>
+                          </div>
+                      )}
+
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Concepto</label>
+                          <input type="text" placeholder="Ej: Compra semanal..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDesc} onChange={e => { setFDesc(e.target.value); if(!editingTx && !fCat && fType !== 'TRANSFER') { const sugg = findSuggestedCategory(e.target.value); if(sugg) setFCat(sugg); } }} />
+                      </div>
+
+                      <div className="space-y-2">
+                           <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Comprobante (Opcional)</label>
+                           <div className="flex items-center gap-3">
+                               <button onClick={() => fileInputRef.current?.click()} className="flex-1 py-4 bg-white border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 hover:border-indigo-400 hover:text-indigo-500 transition-all font-bold uppercase text-[10px] flex justify-center items-center gap-2" disabled={isCompressing}>
+                                    {isCompressing ? <span className="animate-spin">⏳</span> : <Paperclip size={16}/>}
+                                    {fAttachment ? 'Cambiar Archivo' : 'Adjuntar Imagen'}
+                               </button>
+                               {fAttachment && (
+                                   <button onClick={() => setFAttachment(undefined)} className="p-4 bg-rose-50 text-rose-500 rounded-2xl hover:bg-rose-100"><Trash2 size={18}/></button>
+                               )}
+                           </div>
+                           <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />
+                           {fAttachment && <p className="text-[10px] text-emerald-500 font-bold flex items-center gap-1"><Check size={12}/> Archivo listo para guardar</p>}
+                      </div>
+
+                      <button onClick={handleSave} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl tracking-widest transition-all active:scale-95">
+                          {editingTx ? 'Actualizar Movimiento' : 'Guardar Movimiento'}
+                      </button>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha</label>
-                  <input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500" value={fDate} onChange={e => setFDate(e.target.value)} />
-                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Descripción</label>
-                <input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500" placeholder="Ej: Compra mensual..." value={fDesc} onChange={e => setFDesc(e.target.value)} />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">{fType === 'TRANSFER' ? 'Origen' : 'Cuenta'}</label>
-                  <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={fAcc} onChange={e => setFAcc(e.target.value)}>
-                    {groupedAccounts.map(g => (
-                       <optgroup key={g.group.id} label={g.group.name}>
-                           {g.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                       </optgroup>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">{fType === 'TRANSFER' ? 'Destino' : 'Categoría'}</label>
-                  <select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={fType === 'TRANSFER' ? fTransferDest : fCat} onChange={e => fType === 'TRANSFER' ? setFTransferDest(e.target.value) : setFCat(e.target.value)}>
-                    <option value="">Seleccionar...</option>
-                    {fType === 'TRANSFER' ? (
-                        groupedAccounts.map(g => (
-                           <optgroup key={g.group.id} label={g.group.name}>
-                               {g.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                           </optgroup>
-                        ))
-                    ) : (
-                        groupedCategories.map(f => (
-                            <optgroup key={f.family.id} label={f.family.name}>
-                                {f.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </optgroup>
-                        ))
-                    )}
-                  </select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2"><Paperclip size={14} /> Adjunto (Se comprimirá automáticamente)</label>
-                <div className="flex gap-3">
-                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isCompressing} className={`flex-1 px-8 py-5 border-2 border-dashed rounded-3xl font-black text-[11px] uppercase transition-all flex items-center justify-center gap-3 ${fAttachment ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'bg-slate-50 border-slate-200 text-slate-400'}`}>
-                    {isCompressing ? <Loader2 size={18} className="animate-spin" /> : fAttachment ? <CheckCircle2 size={18}/> : <Upload size={18}/>} 
-                    {isCompressing ? 'Comprimiendo...' : fAttachment ? 'Listo (Optimizado)' : 'Subir'}
-                  </button>
-                  {fAttachment && <button type="button" onClick={() => setFAttachment(undefined)} className="p-5 bg-rose-50 text-rose-500 rounded-3xl active:scale-90"><X size={24}/></button>}
-                </div>
-                <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />
-              </div>
-              <button onClick={handleSave} disabled={isCompressing} className="w-full py-7 bg-slate-950 text-white rounded-[2.5rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-indigo-600 active:scale-95 transition-all mt-10 disabled:opacity-50">Guardar Asiento Contable</button>
-            </div>
           </div>
-        </div>
       )}
 
-      {/* MODAL CREAR RECURRENTE */}
-      {/* ... (Existing Recurrent Modal) ... */}
+      {/* MODAL RECURRENTES */}
       {recurrenceModalTx && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[250] p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
-              <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl space-y-6">
-                  <div className="flex justify-between items-center"><h3 className="text-lg font-black text-slate-900 uppercase tracking-tighter">Crear Recurrente</h3><button onClick={() => setRecurrenceModalTx(null)} className="p-2 bg-slate-100 rounded-full hover:bg-rose-100 hover:text-rose-500"><X size={18} /></button></div>
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                      <p className="text-xs font-bold text-slate-700">{recurrenceModalTx.description}</p>
-                      <p className={`text-lg font-black ${getAmountColor(recurrenceModalTx.amount)}`}>{formatCurrency(recurrenceModalTx.amount)}</p>
-                  </div>
+          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
+              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 text-center relative border border-white/20">
+                  <button onClick={() => setRecurrenceModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button>
+                  <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-emerald-500"><Repeat size={32}/></div>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Crear Recurrente</h3>
+                  <p className="text-xs text-slate-500 mb-6">Programar: <span className="font-bold text-slate-800">{recurrenceModalTx.description}</span></p>
+                  
                   <div className="space-y-4">
-                      <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Frecuencia</label>
-                          <select className="w-full px-4 py-3 bg-white border-2 border-slate-100 rounded-xl font-bold outline-none" value={recFreq} onChange={e => setRecFreq(e.target.value as any)}>
-                              <option value="DAYS">Días</option><option value="WEEKS">Semanas</option><option value="MONTHLY">Meses</option><option value="YEARS">Años</option>
-                          </select>
+                      <div className="space-y-2 text-left">
+                           <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Repetir cada</label>
+                           <div className="flex gap-2">
+                               <input type="number" min="1" className="w-20 px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none text-center" value={recInterval} onChange={e => setRecInterval(e.target.value)} />
+                               <select className="flex-1 px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none" value={recFreq} onChange={e => setRecFreq(e.target.value as any)}>
+                                   <option value="DAYS">Días</option>
+                                   <option value="WEEKS">Semanas</option>
+                                   <option value="MONTHLY">Meses</option>
+                                   <option value="YEARS">Años</option>
+                               </select>
+                           </div>
                       </div>
-                      <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Intervalo</label>
-                          <input type="number" className="w-full px-4 py-3 bg-white border-2 border-slate-100 rounded-xl font-bold outline-none" value={recInterval} onChange={e => setRecInterval(e.target.value)} />
-                      </div>
+                      <button onClick={handleSaveRecurrent} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 shadow-xl">Confirmar Programación</button>
                   </div>
-                  <button onClick={handleSaveRecurrent} className="w-full py-4 bg-emerald-500 text-white rounded-xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-emerald-600 transition-all">Generar Programación</button>
               </div>
           </div>
       )}
 
-      {/* MODAL CREAR FAVORITO */}
-      {/* ... (Existing Favorite Modal) ... */}
+      {/* MODAL FAVORITOS */}
       {favoriteModalTx && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[250] p-4 animate-in fade-in duration-200" onClick={(e) => e.stopPropagation()}>
-              <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl space-y-6">
-                  <div className="flex justify-between items-center"><h3 className="text-lg font-black text-slate-900 uppercase tracking-tighter">Guardar Favorito</h3><button onClick={() => setFavoriteModalTx(null)} className="p-2 bg-slate-100 rounded-full hover:bg-rose-100 hover:text-rose-500"><X size={18} /></button></div>
+          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
+              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 text-center relative border border-white/20">
+                  <button onClick={() => setFavoriteModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button>
+                  <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-amber-500"><Heart size={32}/></div>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Guardar Favorito</h3>
+                  
                   <div className="space-y-4">
-                      <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Alias (Nombre Corto)</label>
-                          <input type="text" className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-amber-400" placeholder="Ej: Café" value={favName} onChange={e => setFavName(e.target.value)} autoFocus />
+                      <div className="space-y-2 text-left">
+                           <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre del Botón</label>
+                           <input type="text" placeholder="Ej: Café Diario" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-amber-400 transition-colors" value={favName} onChange={e => setFavName(e.target.value)} autoFocus />
                       </div>
-                      <p className="text-[10px] text-slate-400 font-medium">Se guardará una plantilla con la categoría, cuenta e importe actual.</p>
+                      <button onClick={handleSaveFavorite} className="w-full py-4 bg-amber-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-600 shadow-xl">Guardar Plantilla</button>
                   </div>
-                  <button onClick={handleSaveFavorite} className="w-full py-4 bg-amber-500 text-white rounded-xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-amber-600 transition-all">Guardar Plantilla</button>
               </div>
           </div>
       )}
 
-      {/* VISOR DE ADJUNTOS (LIGHTBOX) */}
-      {/* ... (Existing Lightbox) ... */}
+      {/* PREVIEW ATTACHMENT MODAL */}
       {previewAttachment && (
-        <div className="fixed inset-0 z-[300] bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setPreviewAttachment(null)}>
-            <button onClick={() => setPreviewAttachment(null)} className="absolute top-4 right-4 p-4 text-white/50 hover:text-white transition-colors"><X size={32}/></button>
-            <img 
-                src={previewAttachment} 
-                className="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain" 
-                onClick={(e) => e.stopPropagation()} 
-                alt="Documento adjunto"
-            />
-            <a 
-                href={previewAttachment} 
-                download={`adjunto-contamiki-${Date.now()}.jpg`}
-                className="mt-6 px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all backdrop-blur-md border border-white/10"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <Download size={16}/> Descargar Original
-            </a>
-        </div>
+          <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[300] p-4 animate-in fade-in zoom-in duration-300" onClick={() => setPreviewAttachment(null)}>
+              <div className="relative max-w-3xl max-h-[90vh] w-full flex flex-col items-center">
+                  <button onClick={() => setPreviewAttachment(null)} className="absolute -top-12 right-0 p-2 text-white/50 hover:text-white"><X size={32}/></button>
+                  <img src={previewAttachment} className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border-4 border-white/10" onClick={e => e.stopPropagation()} />
+                  <a href={previewAttachment} download={`comprobante_${Date.now()}.jpg`} onClick={e => e.stopPropagation()} className="mt-6 px-6 py-3 bg-white text-slate-900 rounded-full font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-transform shadow-xl flex items-center gap-2">
+                      <ArrowUpDown size={14} className="rotate-180"/> Descargar Imagen Original
+                  </a>
+              </div>
+          </div>
       )}
     </div>
   );
