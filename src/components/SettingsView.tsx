@@ -54,9 +54,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
   const [parsedData, setParsedData] = useState<AppState | null>(null);
   const [fileName, setFileName] = useState('');
   const [exportTarget, setExportTarget] = useState<string>('ALL');
+  
+  // ESTADOS DEL DEPURADOR VISUAL
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [processLogs, setProcessLogs] = useState<{msg: string, status: 'loading' | 'success' | 'error' | 'info'}[]>([]);
   const [processError, setProcessError] = useState<string | null>(null);
+  
+  // ESTADOS DEL MODAL DE ACCIÓN TRAS RESTAURAR
   const [targetBookId, setTargetBookId] = useState<string>('');
   const [newBookName, setNewBookName] = useState('');
   const [newBookColor, setNewBookColor] = useState<BookColor>('BLUE');
@@ -115,7 +119,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
     return <span className="text-xl">{iconStr}</span>;
   }
 
-  // --- RESTORE LOGIC (VISUAL DEBUGGER) ---
+  // --- LÓGICA DEL DEPURADOR VISUAL (NUEVO HANDLE FILE CHANGE) ---
   const addLog = (msg: string, status: 'loading' | 'success' | 'error' | 'info') => {
       setProcessLogs(prev => [...prev, { msg, status }]);
   };
@@ -124,6 +128,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // 1. Resetear estados e iniciar UI de depuración
     setParsedData(null);
     setProcessError(null);
     setIsProcessingFile(true);
@@ -138,8 +143,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
     reader.onload = (event) => {
       try {
         const content = event.target?.result as string;
-        addLog("Lectura completada. Analizando JSON...", 'loading');
+        addLog("Lectura completada. Analizando estructura JSON...", 'loading');
         
+        // Timeout para que la UI se renderice y el usuario vea los logs
         setTimeout(() => {
             try {
                 const json = JSON.parse(content);
@@ -147,61 +153,68 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
 
                 let dataToUse: AppState | null = null;
 
-                // 1. Detect Multi-Book (Backup Completo - Nueva Versión)
+                // --- DETECCIÓN DE FORMATOS ---
+
+                // CASO 1: Copia de Seguridad Completa (Multilibro - Nueva)
+                // Se detecta por tener 'booksData' o 'booksMetadata'
                 if ((json.booksData && typeof json.booksData === 'object') || (json.booksMetadata && Array.isArray(json.booksMetadata))) {
                     addLog("Formato detectado: Copia de Seguridad Completa (Multi-Libro).", 'info');
                     
+                    // Intentar sacar el libro "currentBookId"
                     const id = json.currentBookId || Object.keys(json.booksData || {})[0];
+                    
                     if (id && json.booksData && json.booksData[id]) {
                         dataToUse = json.booksData[id];
                         addLog(`Extrayendo datos del libro principal (ID: ${id.substring(0,6)}...)`, 'success');
                     } else {
-                        // Si no hay libro actual, coger el primero que encuentre
+                        // Fallback: coger el primer libro que encuentre
                         const firstKey = Object.keys(json.booksData || {})[0];
                         if (firstKey) {
                              dataToUse = json.booksData[firstKey];
-                             addLog(`Aviso: ID activo no encontrado. Usando libro ${firstKey}`, 'info');
+                             addLog(`Aviso: ID activo no encontrado. Usando libro disponible: ${firstKey}`, 'info');
                         } else {
-                             throw new Error(`El archivo Multilibro parece vacío.`);
+                             throw new Error(`El archivo Multilibro parece estar vacío (booksData vacío).`);
                         }
                     }
                 } 
-                // 2. Detect Single Book (Libro Individual - Versión Antigua)
+                // CASO 2: Copia de Seguridad Simple (Legacy - Antigua)
+                // Se detecta por tener 'transactions' array directamente en la raíz
                 else if (json.transactions && Array.isArray(json.transactions)) {
-                    addLog("Formato detectado: Libro Individual Simple.", 'info');
+                    addLog("Formato detectado: Libro Individual Simple (Versión antigua).", 'info');
                     dataToUse = json as AppState;
                 } else {
-                    throw new Error("El archivo no tiene la estructura reconocida de ContaMiki (falta 'transactions' o 'booksData').");
+                    throw new Error("El archivo NO tiene la estructura reconocida de ContaMiki (falta 'transactions' o 'booksData').");
                 }
 
+                // VALIDACIÓN FINAL DE DATOS EXTRAÍDOS
                 if (dataToUse) {
                     const txCount = dataToUse.transactions?.length || 0;
                     const accCount = dataToUse.accounts?.length || 0;
-                    addLog(`Validación: ${txCount} movimientos, ${accCount} cuentas.`, 'success');
+                    addLog(`Validación: ${txCount} movimientos y ${accCount} cuentas encontradas.`, 'success');
                     
                     setParsedData(dataToUse);
                     setNewBookName(file.name.replace('.json', '').replace('backup_', '').replace('contamiki_', ''));
-                    addLog("¡Análisis completado! Elige una acción.", 'success');
-                    setIsProcessingFile(false);
+                    addLog("¡Análisis completado! Selecciona una acción abajo.", 'success');
+                    setIsProcessingFile(false); // Detiene el spinner pero deja el modal abierto
                 }
 
             } catch (parseErr: any) {
                 console.error(parseErr);
                 setProcessError(parseErr.message);
-                addLog("Fallo en el análisis de datos.", 'error');
+                addLog("Fallo crítico en el análisis de datos.", 'error');
                 setIsProcessingFile(false);
             }
         }, 800);
 
       } catch (err: any) {
         setProcessError(err.message);
-        addLog("Error crítico de lectura.", 'error');
+        addLog("Error crítico de lectura de archivo.", 'error');
         setIsProcessingFile(false);
       }
     };
 
     reader.onerror = () => {
-        setProcessError("No se pudo leer el archivo.");
+        setProcessError("No se pudo leer el archivo físico (Permisos o Corrupto).");
         addLog("Fallo de I/O.", 'error');
         setIsProcessingFile(false);
     };
@@ -441,7 +454,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, onUpdat
           </div>
       )}
 
-      {/* VISUAL DEBUGGER / RESTORE MODAL */}
+      {/* DEPURADOR VISUAL Y RESTAURACIÓN (EL FIX REAL) */}
       {(isProcessingFile || processLogs.length > 0) && (
         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[999] p-4 sm:p-6 animate-in fade-in duration-300">
           <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-5xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar">
