@@ -242,11 +242,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
       const formattedDate = dateStrRaw.includes('/') ? dateStrRaw.split('/').reverse().join('-') : dateStrRaw;
 
-      // DETECCIÓN DE DUPLICADOS: Fecha + Concepto + Importe exacto en la misma cuenta
+      // DETECCIÓN DE DUPLICADOS: Fecha + Importe exacto en la misma cuenta (ignoramos literalidad del concepto)
       const isDuplicate = existingInAcc.some(t => 
           t.date === formattedDate && 
-          t.amount === amount && 
-          t.description.toLowerCase() === concept.toLowerCase()
+          t.amount === amount
       );
 
       props.push({
