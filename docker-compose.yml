@@ -9,7 +9,8 @@ services:
     volumes:
 # Ajusta la ruta de abajo según tu NAS
       - /volume1/docker/contamiki/data:/app/data
-    API_KEY: AIzaSyAisQlWx4yBFXXY32HfWj-1qQ4qKqpXcfc
+    environment:
+      - API_KEY: AIzaSyAisQlWx4yBFXXY32HfWj-1qQ4qKqpXcfc
     secrets:
       - JWT_SECRET
       - APP_URL
