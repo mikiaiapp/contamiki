@@ -1,13 +1,14 @@
 
 import React, { useState, useRef, useMemo } from 'react';
 import { AppState, Account, Family, Category, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, BookMetadata, BookColor, MultiBookState } from '../types';
-import { Trash2, Edit2, Wallet, BoxSelect, Check, X, ChevronDown, AlertTriangle, Loader2, Search, Layers, Tag, CalendarClock, Heart, Palette, DatabaseZap, ShieldAlert, Image as ImageIcon, Sparkles, Eye, EyeOff, Plus, Upload, Eraser, Bot, XCircle, Download, FileJson, CheckCircle2, History } from 'lucide-react';
+import { Trash2, Edit2, Wallet, BoxSelect, Check, X, ChevronDown, AlertTriangle, Loader2, Search, Layers, Tag, CalendarClock, Heart, Palette, DatabaseZap, ShieldAlert, Image as ImageIcon, Sparkles, Eye, EyeOff, Plus, Upload, Eraser, Bot, XCircle, Download, FileJson, CheckCircle2, History } from 'lucide-center';
 import { searchInternetLogos } from '../services/iconService';
 
 interface SettingsViewProps {
   data: AppState;
   books: BookMetadata[];
   currentBookId: string;
+  multiState: MultiBookState;
   onUpdateData: (newData: Partial<AppState>) => void;
   onReplaceFullState: (newState: MultiBookState) => void;
   onNavigateToTransactions?: (filters: any) => void;
@@ -45,7 +46,7 @@ const compressLogo = async (file: File): Promise<string> => {
     });
 };
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, currentBookId, onUpdateData, onReplaceFullState, onNavigateToTransactions, onDeleteBook }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, currentBookId, multiState, onUpdateData, onReplaceFullState, onNavigateToTransactions, onDeleteBook }) => {
   const [activeTab, setActiveTab] = useState('ACC_GROUPS');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
@@ -80,7 +81,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
   // Form States (Reused for all entities)
   const [grpId, setGrpId] = useState<string | null>(null); const [grpName, setGrpName] = useState(''); const [grpIcon, setGrpIcon] = useState('🗂️');
   const [accId, setAccId] = useState<string | null>(null); const [accName, setAccName] = useState(''); const [accBalance, setAccBalance] = useState(''); const [accIcon, setAccIcon] = useState('🏦'); const [accGroupId, setAccGroupId] = useState(''); const [accActive, setAccActive] = useState(true);
-  const [famId, setFamId] = useState<string | null>(null); const [famName, setFamName] = useState(''); const [famType, setFamType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE'); const [famIcon, setFamIcon] = useState('📂');
+  const [famId, setFamId] = useState<string | null>(null); const [famName, setFamName] = useState(''); const [famIcon, setFamIcon] = useState('📂'); const [famType, setFamType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [catId, setCatId] = useState<string | null>(null); const [catName, setCatName] = useState(''); const [catParent, setCatParent] = useState(''); const [catIcon, setCatIcon] = useState('🏷️'); const [catActive, setCatActive] = useState(true);
   const [recId, setRecId] = useState<string | null>(null); const [recDesc, setRecDesc] = useState(''); const [recAmount, setRecAmount] = useState(''); const [recType, setRecType] = useState<TransactionType>('EXPENSE'); const [recAcc, setRecAcc] = useState(''); const [recCat, setRecCat] = useState(''); const [recFreq, setRecFreq] = useState<RecurrenceFrequency>('MONTHLY'); const [recInterval, setRecInterval] = useState('1'); const [recStart, setRecStart] = useState(new Date().toISOString().split('T')[0]); const [recEnd, setRecEnd] = useState('');
   const [favId, setFavId] = useState<string | null>(null); const [favName, setFavName] = useState(''); const [favDesc, setFavDesc] = useState(''); const [favAmount, setFavAmount] = useState(''); const [favType, setFavType] = useState<TransactionType>('EXPENSE'); const [favAcc, setFavAcc] = useState(''); const [favCat, setFavCat] = useState(''); const [favIcon, setFavIcon] = useState('⭐');
@@ -112,7 +113,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
     return <span className="text-xl">{iconStr}</span>;
   }
 
-  // --- ACTIONS ---
   const attemptDeleteAccount = (account: Account) => {
       const usageCount = data.transactions.filter(t => t.accountId === account.id || t.transferAccountId === account.id).length;
       if (usageCount > 0) { alert(`Cuenta en uso (${usageCount} movs). Archívala en lugar de borrar.`); return; }
@@ -147,10 +147,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
       resetForm();
   };
 
-  // --- BACKUP & RESTORE IMPLEMENTATION ---
   const handleBackup = async () => {
-      // Intentar obtener el estado completo de forma segura. En un entorno multi-usuario real,
-      // esto vendría por API, pero aquí simulamos con lo que tiene el App actual + localstorage.
       const currentBookMeta = books.find(b => b.id === currentBookId);
       let payload: any = {};
       let stats: any = {};
@@ -172,32 +169,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
               favorites: data.favorites?.length || 0
           };
       } else {
-          // Para el backup total, en una app real pediríamos todo al servidor.
-          // En esta simulación, asumimos que tenemos acceso a la estructura global si estuviera disponible.
-          // Por ahora usamos la API de Books para exportar la estructura Multi-Libro.
-          const fullStateString = localStorage.getItem('contamiki_data_' + (localStorage.getItem('auth_user') || 'default'));
-          if (!fullStateString) {
-              alert("No se ha podido acceder al almacén global de datos.");
-              return;
-          }
-          const fullState: MultiBookState = JSON.parse(fullStateString);
           payload = {
               version: '1.5.0',
               scope: 'ALL',
               timestamp: new Date().toISOString(),
-              state: fullState
+              state: multiState
           };
           
           let totalTx = 0;
           let totalAtch = 0;
-          Object.values(fullState.booksData).forEach(b => {
+          Object.values(multiState.booksData).forEach(b => {
               totalTx += b.transactions.length;
               totalAtch += b.transactions.filter(t => t.attachment).length;
           });
 
           stats = {
               type: 'Backup Global',
-              books: fullState.booksMetadata.length,
+              books: multiState.booksMetadata.length,
               transactions: totalTx,
               attachments: totalAtch
           };
@@ -253,15 +241,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
           const singleBackup = restoreModal.data;
           const bookData: AppState = singleBackup.data;
           
-          // Re-obtener multiState actual desde localstorage o inyectar lógica en App
-          const fullStateString = localStorage.getItem('contamiki_data_' + (localStorage.getItem('auth_user') || 'default'));
-          if (!fullStateString) return;
-          const fullState: MultiBookState = JSON.parse(fullStateString);
+          // Clonamos el estado actual para no mutar referencias directamente
+          const fullState: MultiBookState = JSON.parse(JSON.stringify(multiState));
 
           if (singleRestoreConfig.target === 'CURRENT') {
               fullState.booksData[currentBookId] = bookData;
           } else if (singleRestoreConfig.target === 'EXISTING') {
-              if (!singleRestoreConfig.targetId) return;
+              if (!singleRestoreConfig.targetId) {
+                  alert("Por favor, selecciona un libro de destino.");
+                  return;
+              }
               fullState.booksData[singleRestoreConfig.targetId] = bookData;
           } else {
               // NEW
@@ -325,7 +314,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
       </nav>
 
       <div className="max-w-4xl mx-auto">
-        {/* ... (Existing tabs logic remains same) ... */}
         {activeTab === 'ACC_GROUPS' && (
             <div className="space-y-6">
                 <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nuevo Grupo</button>
@@ -342,11 +330,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
             </div>
         )}
 
-        {/* FAMILIES, CATEGORIES, RECURRENTS, FAVORITES, UI ... (omitted for brevity, assume they exist) */}
-
         {activeTab === 'DATA' && (
             <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
-                {/* BLOQUE COPIA DE SEGURIDAD */}
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex items-center gap-4">
                         <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Download size={24}/></div>
@@ -380,7 +365,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                     )}
                 </div>
 
-                {/* BLOQUE RESTAURACIÓN */}
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex items-center gap-4">
                         <div className="bg-amber-500 p-4 rounded-3xl text-white shadow-xl shadow-amber-500/20"><History size={24}/></div>
@@ -405,7 +389,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                     )}
                 </div>
 
-                {/* ZONA DE PELIGRO: Borrado */}
                 <div className="bg-rose-50 p-10 rounded-[3rem] border border-rose-100 space-y-6 text-center mt-8">
                     <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-rose-600 shadow-sm"><ShieldAlert size={32}/></div>
                     <div><h3 className="text-xl font-black text-rose-900 uppercase">Zona de Peligro</h3><p className="text-xs font-bold text-rose-400 mt-2">Acciones destructivas locales. Requieren verificación.</p></div>
@@ -417,11 +400,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                 </div>
             </div>
         )}
-        
-        {/* TOOLS TAB ... */}
       </div>
 
-      {/* MODAL CONFIGURACIÓN RESTAURACIÓN */}
       {restoreModal && (
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[250] p-6 animate-in fade-in duration-300">
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20 overflow-y-auto max-h-[90vh]">

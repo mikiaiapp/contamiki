@@ -117,6 +117,7 @@ export interface SettingsViewProps {
   data: AppState;
   books: BookMetadata[];
   currentBookId: string;
+  multiState: MultiBookState;
   onUpdateData: (newData: Partial<AppState>) => void;
   onReplaceFullState: (newState: MultiBookState) => void;
   onNavigateToTransactions?: (filters: any) => void;

@@ -295,13 +295,27 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   };
 
   const handleFinalImport = () => {
-    const validTransactions = proposedTransactions.filter(p => (p.categoryId && p.categoryId !== '') || (p.type === 'TRANSFER' && p.transferAccountId));
-    const pendingTransactions = proposedTransactions.filter(p => !((p.categoryId && p.categoryId !== '') || (p.type === 'TRANSFER' && p.transferAccountId)));
+    // FILTRADO CRÍTICO: Ignorar movimientos marcados como isDuplicate.
+    const validTransactions = proposedTransactions.filter(p => 
+      !p.isDuplicate && 
+      ((p.categoryId && p.categoryId !== '') || (p.type === 'TRANSFER' && p.transferAccountId))
+    );
+    
+    const pendingTransactions = proposedTransactions.filter(p => 
+      p.isDuplicate || 
+      !((p.categoryId && p.categoryId !== '') || (p.type === 'TRANSFER' && p.transferAccountId))
+    );
 
     if (validTransactions.length === 0 && pendingTransactions.length > 0) {
-        alert("Asigna categorías o cuentas de destino a los movimientos pendientes para poder importarlos.");
+        const hasBlockedDuplicates = pendingTransactions.some(p => p.isDuplicate);
+        if (hasBlockedDuplicates) {
+            alert("Hay movimientos marcados como duplicados. Debes aceptarlos individualmente o en bloque para poder importarlos.");
+        } else {
+            alert("Asigna categorías o cuentas de destino a los movimientos pendientes para poder importarlos.");
+        }
         return;
     }
+    
     if (validTransactions.length === 0) { setIsImportModalOpen(false); return; }
 
     const newTxs: Transaction[] = validTransactions.map(p => ({
@@ -321,7 +335,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     if (pendingTransactions.length > 0) {
         setProposedTransactions(pendingTransactions);
         setSelectedImportIds(new Set());
-        alert(`Se han importado ${validTransactions.length} movimientos correctamente.\n\nQuedan ${pendingTransactions.length} movimientos sin asignar.`);
+        alert(`Se han importado ${validTransactions.length} movimientos correctamente.\n\nQuedan ${pendingTransactions.length} movimientos sin asignar o bloqueados como duplicados.`);
     } else {
         setIsImportModalOpen(false);
         setProposedTransactions([]);
@@ -359,6 +373,17 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       });
       setProposedTransactions(updated);
       setBulkImportCategory('');
+      setSelectedImportIds(new Set());
+  };
+
+  const handleBulkAcceptDuplicates = () => {
+      const updated = proposedTransactions.map(p => {
+          if (selectedImportIds.has(p.id) && p.isDuplicate) {
+              return { ...p, isDuplicate: false };
+          }
+          return p;
+      });
+      setProposedTransactions(updated);
       setSelectedImportIds(new Set());
   };
 
@@ -605,6 +630,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const duplicateProps = useMemo(() => proposedTransactions.filter(p => p.isDuplicate), [proposedTransactions]);
   const normalProps = useMemo(() => proposedTransactions.filter(p => !p.isDuplicate), [proposedTransactions]);
 
+  const anyDuplicateSelected = useMemo(() => {
+      return Array.from(selectedImportIds).some(id => proposedTransactions.find(p => p.id === id)?.isDuplicate);
+  }, [selectedImportIds, proposedTransactions]);
+
   return (
     <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500" onClick={() => { setActiveMenuTxId(null); setOpenSelectorId(null); }}>
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
@@ -808,9 +837,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                         {/* SECCIÓN DUPLICADOS SI EXISTEN */}
                         {duplicateProps.length > 0 && (
                             <div className="space-y-3 mb-8">
-                                <div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm z-20 flex items-center gap-3 border-b-2 border-rose-100 mb-4">
-                                    <AlertTriangle className="text-rose-500" size={20}/>
-                                    <h4 className="text-sm font-black text-rose-600 uppercase tracking-tight">Posibles duplicidades encontradas</h4>
+                                <div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm z-20 flex flex-col gap-1 border-b-2 border-rose-100 mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <AlertTriangle className="text-rose-500" size={20}/>
+                                        <h4 className="text-sm font-black text-rose-600 uppercase tracking-tight">Posibles duplicidades encontradas</h4>
+                                    </div>
+                                    <p className="text-[8px] font-black text-rose-400 uppercase tracking-widest ml-8">⚠️ Bloqueados por seguridad. Acéptalos para permitir su importación.</p>
                                 </div>
                                 {duplicateProps.map((t) => {
                                     const isAssigned = !!t.categoryId || (t.type === 'TRANSFER' && t.transferAccountId);
@@ -821,7 +853,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                             <button onClick={() => toggleImportSelection(t.id)} className={`text-slate-400 hover:text-indigo-600 flex-shrink-0`}>{selectedImportIds.has(t.id) ? <CheckSquare size={16}/> : <Square size={16}/>}</button>
                                             <div className="flex-1 min-w-0 grid grid-cols-[repeat(16,minmax(0,1fr))] gap-4 items-center">
                                                 <div className="col-span-2 text-[10px] font-bold text-slate-500 whitespace-nowrap flex flex-col">
-                                                    <span className="bg-amber-200 text-amber-900 px-1.5 rounded-md text-[8px] font-black self-start mb-1">DUP</span>
+                                                    <span className="bg-rose-500 text-white px-1.5 rounded-md text-[8px] font-black self-start mb-1">DUP</span>
                                                     {formatDateDisplay(t.date)}
                                                 </div>
                                                 <input type="text" className="col-span-4 text-xs font-bold text-slate-800 bg-transparent border-b border-transparent focus:border-indigo-300 outline-none truncate transition-colors" value={t.description} title={t.description} onChange={(e) => { const newArr = [...proposedTransactions]; newArr[idxInMaster].description = e.target.value; setProposedTransactions(newArr); }} />
@@ -894,10 +926,26 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     </div>
                     {selectedImportIds.size > 0 && (
                         <div className="absolute bottom-20 left-0 right-0 z-10 flex justify-center animate-in slide-in-from-bottom-2 fade-in">
-                            <div className="bg-slate-900 text-white rounded-xl shadow-xl p-2 px-3 flex items-center gap-3 border border-slate-700"><span className="text-[9px] font-black uppercase whitespace-nowrap">{selectedImportIds.size} Items</span><div className="h-4 w-px bg-white/20"></div><select className="bg-slate-800 text-white text-[9px] font-bold py-1.5 px-2 rounded-lg outline-none border border-slate-700 max-w-[120px]" value={bulkImportCategory} onChange={(e) => setBulkImportCategory(e.target.value)}><option value="">Asignar Categoría...</option>{groupedCategories.map(f => (<optgroup key={f.family.id} label={f.family.name}>{f.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>))}</select><button onClick={handleBulkImportAssign} className="p-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors" disabled={!bulkImportCategory}><Check size={14}/></button><button onClick={handleBulkImportDelete} className="p-1.5 bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors"><Trash2 size={14}/></button></div>
+                            <div className="bg-slate-900 text-white rounded-xl shadow-xl p-2 px-3 flex items-center gap-3 border border-slate-700">
+                                <span className="text-[9px] font-black uppercase whitespace-nowrap">{selectedImportIds.size} Items</span>
+                                <div className="h-4 w-px bg-white/20"></div>
+                                
+                                {anyDuplicateSelected && (
+                                    <button onClick={handleBulkAcceptDuplicates} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors text-[9px] font-bold uppercase">
+                                        <Check size={14}/> Aceptar Duplicados
+                                    </button>
+                                )}
+
+                                <select className="bg-slate-800 text-white text-[9px] font-bold py-1.5 px-2 rounded-lg outline-none border border-slate-700 max-w-[120px]" value={bulkImportCategory} onChange={(e) => setBulkImportCategory(e.target.value)}>
+                                    <option value="">Asignar Categoría...</option>
+                                    {groupedCategories.map(f => (<optgroup key={f.family.id} label={f.family.name}>{f.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>))}
+                                </select>
+                                <button onClick={handleBulkImportAssign} className="p-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors" disabled={!bulkImportCategory}><Check size={14}/></button>
+                                <button onClick={handleBulkImportDelete} className="p-1.5 bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors"><Trash2 size={14}/></button>
+                            </div>
                         </div>
                     )}
-                    <div className="flex gap-4"><button onClick={handleFinalImport} className="flex-1 py-6 bg-slate-950 text-white rounded-[2rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-emerald-600 transition-all">Confirmar Importación ({proposedTransactions.filter(p => p.categoryId || p.transferAccountId).length})</button></div>
+                    <div className="flex gap-4"><button onClick={handleFinalImport} className="flex-1 py-6 bg-slate-950 text-white rounded-[2rem] font-black uppercase text-[12px] tracking-widest shadow-2xl hover:bg-emerald-600 transition-all">Confirmar Importación ({proposedTransactions.filter(p => !p.isDuplicate && (p.categoryId || p.transferAccountId)).length})</button></div>
                     <input type="file" ref={rowImportFileRef} className="hidden" accept="image/*,application/pdf" onChange={handleRowImportFileChange} />
                 </div>
             )}
