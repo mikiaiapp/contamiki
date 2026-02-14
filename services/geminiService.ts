@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Transaction, Family, Account, Category, TransactionType } from "../types";
 
@@ -14,7 +13,7 @@ export const generateFinancialAdvice = async (
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
-    const recentTransactions = transactions.slice(0, 50).map(t => {
+    const recentTransactions = transactions.slice(0, 100).map(t => {
       const fam = families.find(f => f.id === t.familyId);
       const cat = categories.find(c => c.id === t.categoryId);
       
@@ -23,8 +22,8 @@ export const generateFinancialAdvice = async (
         amount: t.amount,
         type: t.type,
         desc: t.description,
-        group: fam?.name || 'Otros',
-        item: cat?.name || 'Otros'
+        family: fam?.name || 'Otros',
+        category: cat?.name || 'Otros'
       };
     });
 
@@ -34,15 +33,23 @@ export const generateFinancialAdvice = async (
     }));
 
     const prompt = `
-      Actúa como un experto asesor financiero.
-      Datos del usuario:
-      Cuentas: ${JSON.stringify(accountSummaries)}
-      Últimas transacciones: ${JSON.stringify(recentTransactions)}
+      Actúa como un experto analista financiero senior de la plataforma ContaMiki.
+      Tu misión es analizar los datos financieros del usuario para proporcionarle una visión estratégica de su economía.
 
-      Analiza y responde brevemente en Markdown:
-      1. ¿En qué grupo se está gastando más dinero?
-      2. ¿Qué hábito de consumo parece más ineficiente?
-      3. Dame 3 consejos de ahorro directos.
+      DATOS DEL USUARIO:
+      - Cuentas y saldos iniciales: ${JSON.stringify(accountSummaries)}
+      - Últimas 100 transacciones relevantes: ${JSON.stringify(recentTransactions)}
+
+      TAREA - Realiza un informe en Markdown que incluya:
+      1. **ANÁLISIS DE TIPOLOGÍA DE GASTOS**: ¿En qué categorías se va el dinero? Diferencia entre gastos fijos (vivienda, facturas) y variables (ocio, compras). Identifica si hay "gastos hormiga".
+      2. **DETECCIÓN DE TENDENCIAS DE AHORRO**: Basado en los ingresos vs gastos, ¿el usuario está ahorrando o descapitalizándose? ¿Hay patrones estacionales o impulsivos?
+      3. **PROPUESTAS DE MEJORA FINANCIERA**: Lanza 3 propuestas concretas, realistas y motivadoras para optimizar sus finanzas el próximo mes.
+
+      REGLAS DE ESTILO:
+      - Usa un tono profesional pero cercano.
+      - Utiliza negritas, listas y emojis para que sea fácil de leer.
+      - Si el saldo es negativo o crítico, sé directo pero constructivo.
+      - Limítate a la información proporcionada.
     `;
 
     const response = await ai.models.generateContent({
@@ -50,10 +57,10 @@ export const generateFinancialAdvice = async (
       contents: prompt,
     });
 
-    return response.text || "No se pudo obtener una respuesta clara.";
+    return response.text || "No se pudo obtener una respuesta clara del motor financiero.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Error al conectar con el motor de IA. Revisa la clave de API o intenta de nuevo.";
+    return "## ⚠️ Error de Conexión\nNo se pudo conectar con el motor de IA. Por favor, asegúrate de que la clave de API sea válida y tengas conexión a internet.";
   }
 };
 

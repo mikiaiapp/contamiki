@@ -1,6 +1,5 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
-import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle, ShieldCheck, QrCode } from 'lucide-react';
+import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle, ShieldCheck, QrCode, Sparkles } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
 import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus } from './services/authService';
 
@@ -85,6 +84,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
   const mainNavItems: { id: View; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'RESUMEN', label: 'Resumen', icon: <LayoutDashboard size={22} />, badge: pendingRecurrentsCount },
     { id: 'TRANSACTIONS', label: 'Movimientos', icon: <Receipt size={22} /> },
+    { id: 'AI_INSIGHTS', label: 'Análisis IA', icon: <Sparkles size={22} /> },
     { id: 'SETTINGS', label: 'Ajustes', icon: <Settings size={22} /> },
   ];
 
@@ -472,7 +472,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       {isDeleteAccountModalOpen && (
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 text-center relative border-4 border-rose-50">
-                  <button onClick={() => setIsDeleteAccountModalOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full hover:bg-slate-100"><X size={20}/></button>
+                  <button onClick={() => setIsDeleteAccountModalOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-slate-100"><X size={20}/></button>
                   <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-rose-500"><AlertCircle size={32}/></div>
                   <h3 className="text-xl font-black text-rose-600 uppercase tracking-tighter mb-2">¡Peligro!</h3>
                   <p className="text-slate-500 text-xs font-medium mb-6">Esta acción borrará tu usuario y <strong>TODOS</strong> tus datos financieros. Es irreversible a menos que tengas una copia de seguridad local.</p>

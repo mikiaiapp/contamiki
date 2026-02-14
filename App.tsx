@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Layout } from './Layout';
 import { Dashboard } from './Dashboard';
 import { TransactionView } from './TransactionView';
 import { SettingsView } from './components/SettingsView';
+import { AIInsights } from './components/AIInsights';
 import { LoginView } from './LoginView';
 import { AppState, View, Transaction, GlobalFilter, MultiBookState, BookMetadata, BookColor } from './types';
 import { loadData, saveData, defaultAppState } from './services/dataService';
@@ -170,6 +170,7 @@ const App: React.FC = () => {
       {currentView === 'RESUMEN' && <Dashboard data={currentAppData} onAddTransaction={(t) => updateCurrentBookData({ transactions: [t, ...currentAppData.transactions] })} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }} />}
       {currentView === 'TRANSACTIONS' && <TransactionView data={currentAppData} onAddTransaction={(t) => updateCurrentBookData({ transactions: [t, ...currentAppData.transactions] })} onDeleteTransaction={(id) => updateCurrentBookData({ transactions: currentAppData.transactions.filter(tx => tx.id !== id) })} onUpdateTransaction={(t) => updateCurrentBookData({ transactions: currentAppData.transactions.map(tx => tx.id === t.id ? t : tx) })} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} initialSpecificFilters={pendingSpecificFilters} clearSpecificFilters={() => setPendingSpecificFilters(null)} />}
       {currentView === 'SETTINGS' && <SettingsView data={currentAppData} books={multiState.booksMetadata} currentBookId={multiState.currentBookId} multiState={multiState} onUpdateData={updateCurrentBookData} onReplaceFullState={handleReplaceFullState} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }} onDeleteBook={handleDeleteBook} />}
+      {currentView === 'AI_INSIGHTS' && <AIInsights data={currentAppData} />}
       
       {isBookModalOpen && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
