@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, RecurrentMovement, RecurrenceFrequency } from './types';
+import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, RecurrentMovement, RecurrenceFrequency, Category, Account } from './types';
 import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -31,7 +31,7 @@ interface ProposedTransaction {
   isValidated: boolean;
   attachment?: string;
   transferAccountId?: string;
-  isDuplicate?: boolean; // Marca de sospecha
+  isDuplicate?: boolean; 
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
@@ -156,6 +156,25 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       }).filter(f => f.categories.length > 0);
   }, [data.families, data.categories, editingTx]);
 
+  // --- NUEVOS MEMOS PARA EL IMPORTADOR (SOLO ACTIVOS) ---
+  const activeGroupedCategories = useMemo(() => {
+      return data.families.map(family => {
+          const categories = data.categories
+              .filter(c => c.familyId === family.id && c.active !== false)
+              .sort((a, b) => a.name.localeCompare(b.name));
+          return { family, categories };
+      }).filter(f => f.categories.length > 0);
+  }, [data.families, data.categories]);
+
+  const activeGroupedAccounts = useMemo(() => {
+      return data.accountGroups.map(group => {
+          const accounts = data.accounts
+              .filter(a => a.groupId === group.id && a.active !== false)
+              .sort((a, b) => a.name.localeCompare(b.name));
+          return { group, accounts };
+      }).filter(g => g.accounts.length > 0);
+  }, [data.accountGroups, data.accounts]);
+
   useEffect(() => {
       setCurrentPage(1);
       setSelectedIds(new Set());
@@ -204,7 +223,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     const lines = rawData.split('\n').filter(l => l.trim());
     const props: ProposedTransaction[] = [];
     
-    // Cache de movimientos existentes para detectar duplicados rápidamente
     const existingInAcc = data.transactions.filter(t => t.accountId === importAccount || t.transferAccountId === importAccount);
 
     lines.forEach(line => {
@@ -242,7 +260,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
       const formattedDate = dateStrRaw.includes('/') ? dateStrRaw.split('/').reverse().join('-') : dateStrRaw;
 
-      // DETECCIÓN DE DUPLICADOS: Fecha + Importe exacto en la misma cuenta (ignoramos literalidad del concepto)
       const isDuplicate = existingInAcc.some(t => 
           t.date === formattedDate && 
           t.amount === amount
@@ -294,7 +311,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   };
 
   const handleFinalImport = () => {
-    // FILTRADO CRÍTICO: Ignorar movimientos marcados como isDuplicate.
     const validTransactions = proposedTransactions.filter(p => 
       !p.isDuplicate && 
       ((p.categoryId && p.categoryId !== '') || (p.type === 'TRANSFER' && p.transferAccountId))
@@ -625,7 +641,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
   const gridClasses = "grid grid-cols-[25px_52px_1fr_1.2fr_12px_1fr_50px_20px] md:grid-cols-[30px_90px_1fr_1.5fr_40px_1fr_80px_40px] gap-1 md:gap-4 items-center";
 
-  // Dividir los movimientos propuestos en Duplicados y No Duplicados
   const duplicateProps = useMemo(() => proposedTransactions.filter(p => p.isDuplicate), [proposedTransactions]);
   const normalProps = useMemo(() => proposedTransactions.filter(p => !p.isDuplicate), [proposedTransactions]);
 
@@ -833,7 +848,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                         <div className="flex gap-2"><button onClick={() => { setProposedTransactions([]); setImportStep(1); setSelectedImportIds(new Set()); }} className="text-[10px] font-black uppercase text-rose-500 hover:underline">Descartar Todo</button></div>
                     </div>
                     <div className="max-h-[400px] overflow-y-auto custom-scrollbar space-y-2 pr-2 pb-16">
-                        {/* SECCIÓN DUPLICADOS SI EXISTEN */}
                         {duplicateProps.length > 0 && (
                             <div className="space-y-3 mb-8">
                                 <div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm z-20 flex flex-col gap-1 border-b-2 border-rose-100 mb-4">
@@ -864,8 +878,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                                     {openSelectorId === t.id && (
                                                         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-[2px]" onClick={(e) => { e.stopPropagation(); setOpenSelectorId(null); }}>
                                                             <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[550px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[60vh]" onClick={e => e.stopPropagation()}>
-                                                                <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50"><div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10">Categorías</div>{groupedCategories.map(f => ( <div key={f.family.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-9 z-0">{f.family.name}</div>{f.categories.map(c => ( <button key={c.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].categoryId = c.id; newArr[idxInMaster].transferAccountId = undefined; newArr[idxInMaster].type = newArr[idxInMaster].amount < 0 ? 'EXPENSE' : 'INCOME'; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 hover:bg-white hover:text-indigo-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-2 ${t.categoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>{c.icon} {c.name}</button> ))}</div> ))}</div>
-                                                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white"><div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10">Traspasos</div>{groupedAccounts.map(g => { const availableAccs = g.accounts.filter(a => a.id !== importAccount && a.active !== false); if (availableAccs.length === 0) return null; return ( <div key={g.group.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>{availableAccs.map(a => ( <button key={a.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].type = 'TRANSFER'; newArr[idxInMaster].transferAccountId = a.id; newArr[idxInMaster].categoryId = ''; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 hover:bg-slate-50 hover:text-emerald-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-2 ${t.transferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>➡ {a.icon} {a.name}</button> ))}</div> ); })}</div>
+                                                                <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50"><div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Categorías Activas</div>{activeGroupedCategories.map(f => ( <div key={f.family.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-9 z-0">{f.family.name}</div>{f.categories.map(c => ( <button key={c.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].categoryId = c.id; newArr[idxInMaster].transferAccountId = undefined; newArr[idxInMaster].type = newArr[idxInMaster].amount < 0 ? 'EXPENSE' : 'INCOME'; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 hover:bg-white hover:text-indigo-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${t.categoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>{renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span></button> ))}</div> ))}</div>
+                                                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white"><div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos Activos</div>{activeGroupedAccounts.map(g => { const availableAccs = g.accounts.filter(a => a.id !== importAccount); if (availableAccs.length === 0) return null; return ( <div key={g.group.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>{availableAccs.map(a => ( <button key={a.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].type = 'TRANSFER'; newArr[idxInMaster].transferAccountId = a.id; newArr[idxInMaster].categoryId = ''; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 hover:bg-slate-50 hover:text-emerald-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${t.transferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span></button> ))}</div> ); })}</div>
                                                             </div>
                                                         </div>
                                                     )}
@@ -881,7 +895,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                             </div>
                         )}
 
-                        {/* LISTADO NORMAL */}
                         {normalProps.length > 0 && (
                             <div className="space-y-2">
                                 {duplicateProps.length > 0 && <div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm z-20 flex items-center gap-3 border-b border-slate-100 mb-2 mt-4"><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nuevos movimientos</h4></div>}
@@ -906,8 +919,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                                     {openSelectorId === t.id && (
                                                         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-[2px]" onClick={(e) => { e.stopPropagation(); setOpenSelectorId(null); }}>
                                                             <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[550px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[60vh]" onClick={e => e.stopPropagation()}>
-                                                                <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50"><div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10">Categorías</div>{groupedCategories.map(f => ( <div key={f.family.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-9 z-0">{f.family.name}</div>{f.categories.map(c => ( <button key={c.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].categoryId = c.id; newArr[idxInMaster].transferAccountId = undefined; newArr[idxInMaster].type = newArr[idxInMaster].amount < 0 ? 'EXPENSE' : 'INCOME'; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 hover:bg-white hover:text-indigo-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-2 ${t.categoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>{c.icon} {c.name}</button> ))}</div> ))}</div>
-                                                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white"><div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10">Traspasos</div>{groupedAccounts.map(g => { const availableAccs = g.accounts.filter(a => a.id !== importAccount && a.active !== false); if (availableAccs.length === 0) return null; return ( <div key={g.group.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>{availableAccs.map(a => ( <button key={a.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].type = 'TRANSFER'; newArr[idxInMaster].transferAccountId = a.id; newArr[idxInMaster].categoryId = ''; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 hover:bg-slate-50 hover:text-emerald-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-2 ${t.transferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>➡ {a.icon} {a.name}</button> ))}</div> ); })}</div>
+                                                                <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50"><div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Categorías Activas</div>{activeGroupedCategories.map(f => ( <div key={f.family.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-9 z-0">{f.family.name}</div>{f.categories.map(c => ( <button key={c.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].categoryId = c.id; newArr[idxInMaster].transferAccountId = undefined; newArr[idxInMaster].type = newArr[idxInMaster].amount < 0 ? 'EXPENSE' : 'INCOME'; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 hover:bg-white hover:text-indigo-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${t.categoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>{renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span></button> ))}</div> ))}</div>
+                                                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white"><div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos Activos</div>{activeGroupedAccounts.map(g => { const availableAccs = g.accounts.filter(a => a.id !== importAccount); if (availableAccs.length === 0) return null; return ( <div key={g.group.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>{availableAccs.map(a => ( <button key={a.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].type = 'TRANSFER'; newArr[idxInMaster].transferAccountId = a.id; newArr[idxInMaster].categoryId = ''; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 hover:bg-slate-50 hover:text-emerald-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${t.transferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span></button> ))}</div> ); })}</div>
                                                             </div>
                                                         </div>
                                                     )}
