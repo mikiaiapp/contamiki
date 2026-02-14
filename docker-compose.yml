@@ -19,7 +19,7 @@ services:
       - SMTP_SECURE
       - SMTP_USER
       - SMTP_PASS
-      - API_KEY
+#      - API_KEY
 secrets:
   JWT_SECRET:
     environment: JWT_SECRET
