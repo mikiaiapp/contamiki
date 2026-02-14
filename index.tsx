@@ -3,7 +3,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 
-console.log("ContaMiki: Booting client application...");
+console.log("ContaMiki: Booting client application from root...");
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -27,7 +27,6 @@ const mountApp = () => {
           </React.StrictMode>
         );
         console.log("ContaMiki: React mounted successfully.");
-        // Ocultamos el loader tras un pequeño respiro para el renderizado inicial
         setTimeout(hideLoader, 200);
     } catch (err) {
         console.error("ContaMiki: Error during mount:", err);

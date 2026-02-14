@@ -103,15 +103,7 @@ export interface MultiBookState {
   booksData: Record<string, AppState>;
 }
 
-export interface ImportReport {
-  added: number;
-  newAccounts: string[];
-  newCategories: string[];
-  errors: { fila: number; error: string }[];
-}
-
 export type View = 'RESUMEN' | 'TRANSACTIONS' | 'SETTINGS' | 'AI_INSIGHTS';
-
 export type TimeRange = 'ALL' | 'MONTH' | 'YEAR' | 'CUSTOM';
 
 export interface GlobalFilter {
@@ -124,10 +116,9 @@ export interface GlobalFilter {
 export interface SettingsViewProps {
   data: AppState;
   books: BookMetadata[];
+  currentBookId: string;
   onUpdateData: (newData: Partial<AppState>) => void;
+  onReplaceFullState: (newState: MultiBookState) => void;
   onNavigateToTransactions?: (filters: any) => void;
-  onCreateBookFromImport?: (data: AppState, name: string, color?: BookColor) => void;
   onDeleteBook?: () => void;
-  onExportData: (targetId: string) => void;
-  onRestoreToBook?: (bookId: string, data: AppState) => void;
 }
