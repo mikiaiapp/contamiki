@@ -11,7 +11,12 @@ export const generateFinancialAdvice = async (
   categories: Category[]
 ): Promise<string> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+    const apiKey = process.env.API_KEY;
+    if (!apiKey || apiKey.trim() === '') {
+      return "## ⚠️ Clave de API no configurada\nEl servidor no ha proporcionado una clave de API de Gemini válida. Por favor, asegúrate de haberla configurado en tu archivo `.env` o en las variables de entorno del servidor y haber reiniciado la aplicación.";
+    }
+
+    const ai = new GoogleGenAI({ apiKey: apiKey });
 
     const recentTransactions = transactions.slice(0, 100).map(t => {
       const fam = families.find(f => f.id === t.familyId);
@@ -60,7 +65,7 @@ export const generateFinancialAdvice = async (
     return response.text || "No se pudo obtener una respuesta clara del motor financiero.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "## ⚠️ Error de Conexión\nNo se pudo conectar con el motor de IA. Por favor, asegúrate de que la clave de API sea válida y tengas conexión a internet.";
+    return "## ⚠️ Error de Conexión\nNo se pudo conectar con el motor de IA. Esto puede deberse a una clave de API inválida, exceso de cuota o falta de conexión a internet.";
   }
 };
 
@@ -73,7 +78,10 @@ export const mapBankTransactions = async (
   families: Family[]
 ): Promise<any[]> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) return [];
+
+    const ai = new GoogleGenAI({ apiKey: apiKey });
 
     const categoryList = categories.map(c => ({
       id: c.id,
@@ -146,7 +154,10 @@ export const mapBankTransactions = async (
  */
 export const parseMigrationData = async (rawData: string): Promise<{ accounts: any[], families: any[], categories: any[] }> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) return { accounts: [], families: [], categories: [] };
+
+    const ai = new GoogleGenAI({ apiKey: apiKey });
     
     // Limitamos la entrada para no exceder tokens si pegan algo gigante
     const contentSample = rawData.substring(0, 30000);

@@ -7,7 +7,7 @@ import { AIInsights } from './components/AIInsights';
 import { LoginView } from './LoginView';
 import { AppState, View, Transaction, GlobalFilter, MultiBookState, BookMetadata, BookColor } from './types';
 import { loadData, saveData, defaultAppState } from './services/dataService';
-import { isAuthenticated, logout } from './services/authService';
+import { isAuthenticated, logout, getToken } from './services/authService';
 import { X, Check, WifiOff, RefreshCw } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -37,6 +37,29 @@ const App: React.FC = () => {
   });
   const [pendingSpecificFilters, setPendingSpecificFilters] = useState<any>(null);
   const saveTimeoutRef = useRef<number | null>(null);
+
+  // Efecto para cargar la configuración de la API (IA)
+  useEffect(() => {
+    if (isLoggedIn) {
+        const token = getToken();
+        if (token && !token.startsWith('guest_') && !token.startsWith('local_')) {
+            fetch('/api/config', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(res => res.json())
+            .then(config => {
+                if (config.apiKey) {
+                    // Inyectamos la clave en el shim de process.env para que los servicios la vean
+                    if (window.process && window.process.env) {
+                        window.process.env.API_KEY = config.apiKey;
+                        console.log("App: AI Config loaded from server.");
+                    }
+                }
+            })
+            .catch(err => console.error("App: Error fetching AI config", err));
+        }
+    }
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (isLoggedIn) {
