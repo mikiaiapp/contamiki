@@ -1,6 +1,5 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
-import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category, Family } from './types';
+import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category, Family, BookMetadata } from './types';
 import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown, Calendar } from 'lucide-react';
 
 interface DashboardProps {
@@ -10,6 +9,7 @@ interface DashboardProps {
   filter: GlobalFilter;
   onUpdateFilter: (f: GlobalFilter) => void;
   onNavigateToTransactions: (filters: any) => void;
+  currentBook: BookMetadata;
 }
 
 // Formateador estático para evitar recreación en render
@@ -18,13 +18,15 @@ const numberFormatter = new Intl.NumberFormat('de-DE', {
   maximumFractionDigits: 2,
 });
 
-export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, onUpdateData, filter, onUpdateFilter, onNavigateToTransactions }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, onUpdateData, filter, onUpdateFilter, onNavigateToTransactions, currentBook }) => {
   const { transactions, accounts, families, categories, accountGroups, recurrents = [] } = data;
   const [showBalanceDetail, setShowBalanceDetail] = useState(false);
   const [showRecurrentsModal, setShowRecurrentsModal] = useState(false);
   
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
+
+  const displayLogo = currentBook.logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
 
   // --- CAPA 1: INDEXACIÓN ESTRUCTURAL ---
   const indices = useMemo(() => {
@@ -248,18 +250,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     <div className="space-y-8 md:space-y-12 pb-10">
       {/* HEADER y NAVEGACIÓN TEMPORAL */}
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8">
-        <div className="space-y-4 text-center md:text-left w-full xl:w-auto">
-            <div className="flex items-center justify-center md:justify-start gap-4">
-                <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Resumen.</h2>
-                {pendingRecurrents.length > 0 && (
-                    <button 
-                        onClick={() => setShowRecurrentsModal(true)}
-                        className="bg-rose-500 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg shadow-rose-200 animate-pulse hover:scale-105 transition-transform"
-                    >
-                        <Bell size={18} />
-                        <span className="text-[12px] font-black">{pendingRecurrents.length}</span>
-                    </button>
-                )}
+        <div className="space-y-4 w-full xl:w-auto">
+            <div className="flex items-center justify-between md:justify-start gap-4">
+                {/* Mobile/Tablet Logo (Displayed when Sidebar is hidden or generally for visual consistency) */}
+                <div className="lg:hidden block w-14 h-14 bg-white rounded-2xl shadow-sm border border-slate-100 p-1 shrink-0 overflow-hidden">
+                    <img src={displayLogo} className="w-full h-full object-cover rounded-xl" onError={(e) => e.currentTarget.src = "/contamiki.jpg"} />
+                </div>
+
+                <div className="flex items-center gap-4">
+                    <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Resumen.</h2>
+                    {pendingRecurrents.length > 0 && (
+                        <button 
+                            onClick={() => setShowRecurrentsModal(true)}
+                            className="bg-rose-500 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg shadow-rose-200 animate-pulse hover:scale-105 transition-transform"
+                        >
+                            <Bell size={18} />
+                            <span className="text-[12px] font-black">{pendingRecurrents.length}</span>
+                        </button>
+                    )}
+                </div>
             </div>
             
             <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">

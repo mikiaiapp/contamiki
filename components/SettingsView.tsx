@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { AppState, Account, Family, Category, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, BookMetadata, BookColor, MultiBookState } from '../types';
-import { Trash2, Edit2, Wallet, BoxSelect, Check, X, ChevronDown, AlertTriangle, Loader2, Search, Layers, Tag, CalendarClock, Heart, Palette, DatabaseZap, ShieldAlert, Image as ImageIcon, Sparkles, Eye, EyeOff, Plus, Upload, Eraser, Bot, XCircle, Download, FileJson, CheckCircle2, History } from 'lucide-react';
+import { Trash2, Edit2, Wallet, BoxSelect, Check, X, ChevronDown, AlertTriangle, Loader2, Search, Layers, Tag, CalendarClock, Heart, Palette, DatabaseZap, ShieldAlert, Image as ImageIcon, Sparkles, Eye, EyeOff, Plus, Upload, Eraser, Bot, XCircle, Download, FileJson, CheckCircle2, History, Fingerprint } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 
 interface SettingsViewProps {
@@ -17,6 +17,39 @@ interface SettingsViewProps {
 const generateId = () => Math.random().toString(36).substring(2, 15);
 const numberFormatter = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+const compressLogo = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target?.result as string;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                // Logo resize (max 400x400)
+                const MAX_SIZE = 400;
+                let width = img.width;
+                let height = img.height;
+                
+                if (width > height) {
+                    if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+                } else {
+                    if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+                // Alta calidad PNG para logos con transparencia
+                resolve(canvas.toDataURL('image/png', 0.9));
+            };
+            img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (err) => reject(err);
+    });
+};
+
 export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, currentBookId, multiState, onUpdateData, onReplaceFullState, onNavigateToTransactions, onDeleteBook }) => {
   const [activeTab, setActiveTab] = useState('ACC_GROUPS');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -32,8 +65,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
   const [iaSearchStatus, setIaSearchStatus] = useState('');
   
-  // Custom Logo State
-  const [customLogoPreview, setCustomLogoPreview] = useState<string>(localStorage.getItem('contamiki_custom_logo') || '');
+  // Custom Logo State (Local UI state, data is in books)
+  const currentBook = books.find(b => b.id === currentBookId);
+  const displayLogo = currentBook?.logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
+  const bookLogoRef = useRef<HTMLInputElement>(null);
 
   // --- BACKUP & RESTORE STATES ---
   const [backupScope, setBackupScope] = useState<'CURRENT' | 'ALL'>('CURRENT');
@@ -132,6 +167,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
       return webLogos.filter(logo => !failedLogos.has(logo.url));
   }, [webLogos, failedLogos]);
 
+  // Manejo de carga de logotipo de libro
+  const handleBookLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          try {
+              const compressedLogo = await compressLogo(file);
+              // Actualizar metadata del libro actual
+              const updatedBooksMeta = books.map(b => 
+                  b.id === currentBookId ? { ...b, logo: compressedLogo } : b
+              );
+              // Propagar cambios globales (esto dispara el guardado en servidor)
+              onReplaceFullState({ ...multiState, booksMetadata: updatedBooksMeta });
+          } catch (err) {
+              console.error("Error compressing logo", err);
+              alert("Error procesando la imagen.");
+          }
+      }
+      e.target.value = ''; // Reset input
+  };
+
+  const removeBookLogo = () => {
+      const updatedBooksMeta = books.map(b => 
+          b.id === currentBookId ? { ...b, logo: undefined } : b
+      );
+      onReplaceFullState({ ...multiState, booksMetadata: updatedBooksMeta });
+  };
+
   const renderIconInput = (icon: string, setIcon: (s: string) => void, currentName: string) => (
     <div className="space-y-4 w-full">
         <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 p-4 sm:p-6 rounded-[2rem] border border-slate-100 shadow-inner">
@@ -227,7 +289,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
       } else {
           payload = { version: '1.5.0', scope: 'ALL', timestamp: new Date().toISOString(), state: multiState };
           let totalTx = 0, totalAtch = 0;
-          Object.values(multiState.booksData).forEach(b => { totalTx += b.transactions.length; totalAtch += b.transactions.filter(t => t.attachment).length; });
+          Object.values(multiState.booksData).forEach((b: AppState) => { totalTx += b.transactions.length; totalAtch += b.transactions.filter(t => t.attachment).length; });
           stats = { type: 'Backup Global', books: multiState.booksMetadata.length, transactions: totalTx, attachments: totalAtch };
       }
 
@@ -298,7 +360,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
   return (
     <div className="space-y-12 max-w-full overflow-hidden pb-20">
       <div className="text-center md:text-left space-y-2">
-        <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Ajustes.</h2>
+        <div className="flex items-center justify-center md:justify-start gap-4">
+            <div className="lg:hidden block w-14 h-14 bg-white rounded-2xl shadow-sm border border-slate-100 p-1 shrink-0 overflow-hidden">
+                <img src={displayLogo} className="w-full h-full object-cover rounded-xl" onError={(e) => e.currentTarget.src = "/contamiki.jpg"} />
+            </div>
+            <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Ajustes.</h2>
+        </div>
         <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Personalización y Control</p>
       </div>
 
@@ -407,6 +474,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                         <div className="p-6 bg-white rounded-[2rem] border border-rose-100 space-y-3 flex flex-col justify-center"><p className="text-[10px] font-black text-slate-400 uppercase">Borrar por Año</p><div className="flex gap-2"><select className="w-full bg-slate-50 border border-slate-200 font-bold text-sm rounded-xl px-3 outline-none text-slate-700" value={yearToDelete} onChange={e => setYearToDelete(e.target.value)} ><option value="" disabled>Año</option>{availableYears.map(y => <option key={y} value={y}>{y}</option>)}</select><button onClick={() => openVerification('YEAR', yearToDelete)} className="bg-rose-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase hover:bg-rose-700 shadow-lg disabled:opacity-50" disabled={!yearToDelete}>Borrar</button></div></div>
                         <button onClick={() => openVerification('ALL_TX')} className="p-6 bg-white rounded-[2rem] border border-rose-100 flex flex-col items-center justify-center gap-2 hover:border-rose-300 hover:shadow-lg transition-all group"><Eraser size={24} className="text-rose-400 group-hover:text-rose-600 mb-1"/><span className="text-[10px] font-black text-rose-600 uppercase">Borrar TODOS los Movimientos</span></button>
                          <button onClick={() => openVerification('BOOK')} className="p-6 bg-rose-600 text-white rounded-[2rem] border border-rose-600 flex flex-col items-center justify-center gap-2 hover:bg-rose-700 hover:shadow-xl transition-all group"><Trash2 size={24} className="text-white/80 group-hover:text-white mb-1"/><span className="text-[10px] font-black text-white uppercase">Eliminar Libro Completo</span></button>
+                    </div>
+                </div>
+
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col md:flex-row items-center gap-10 mt-8">
+                    <div className="flex flex-col items-center gap-4 relative group">
+                        <div className="w-32 h-32 md:w-40 md:h-40 rounded-[2.5rem] border-4 border-slate-50 bg-slate-50 shadow-inner flex items-center justify-center overflow-hidden relative">
+                            {currentBook?.logo ? (
+                                <img src={currentBook.logo} className="w-full h-full object-cover" alt="Logo Libro" />
+                            ) : (
+                                <div className="text-slate-200"><Fingerprint size={64}/></div>
+                            )}
+                            
+                            <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer backdrop-blur-[2px]" onClick={() => bookLogoRef.current?.click()}>
+                                <Upload className="text-white" size={32}/>
+                            </div>
+                        </div>
+                        {currentBook?.logo && (
+                            <button onClick={removeBookLogo} className="absolute -top-2 -right-2 p-2 bg-rose-500 text-white rounded-full shadow-lg hover:bg-rose-600 transition-transform hover:scale-110">
+                                <Trash2 size={14}/>
+                            </button>
+                        )}
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logo Actual</span>
+                        <input type="file" ref={bookLogoRef} className="hidden" accept="image/*" onChange={handleBookLogoUpload}/>
+                    </div>
+                    
+                    <div className="flex-1 space-y-4 text-center md:text-left">
+                        <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Imagen Corporativa</h3>
+                        <p className="text-sm font-medium text-slate-500 leading-relaxed">
+                            Personaliza el logotipo de tu contabilidad. Esta imagen se guardará en la nube y será visible en todos tus dispositivos al acceder a este libro.
+                        </p>
+                        <div className="flex flex-wrap gap-2 justify-center md:justify-start pt-2">
+                            <button onClick={() => bookLogoRef.current?.click()} className="px-6 py-3 bg-slate-950 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-600 transition-all shadow-xl flex items-center gap-2">
+                                <ImageIcon size={14}/> Subir Imagen
+                            </button>
+                            <div className="px-4 py-3 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-bold border border-indigo-100 flex items-center gap-2">
+                                <CheckCircle2 size={14}/> Sincronización Cloud
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

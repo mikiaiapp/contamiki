@@ -81,6 +81,8 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
   const bgClass = THEME_COLORS[currentBook.color] || THEME_COLORS.BLACK;
   const accentClass = THEME_ACCENTS[currentBook.color] || THEME_ACCENTS.BLACK;
 
+  const displayLogo = currentBook.logo || customLogo || "/contamiki.jpg";
+
   const mainNavItems: { id: View; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'RESUMEN', label: 'Resumen', icon: <LayoutDashboard size={22} />, badge: pendingRecurrentsCount },
     { id: 'TRANSACTIONS', label: 'Movimientos', icon: <Receipt size={22} /> },
@@ -211,10 +213,10 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         >
             <div className="bg-white/20 p-1.5 rounded-xl backdrop-blur-sm shadow-sm overflow-hidden flex items-center justify-center">
                  <img 
-                    src={customLogo || "/contamiki.jpg"} 
+                    src={displayLogo} 
                     className="w-6 h-6 object-cover" 
                     alt="Logo" 
-                    onError={customLogo ? undefined : handleImageError}
+                    onError={(e) => { if(!currentBook.logo) handleImageError(e); }}
                  />
             </div>
             <div className="text-left">
@@ -309,10 +311,10 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         <div className="px-6 pb-6 space-y-2">
           <div className="flex justify-center pb-6 opacity-80 hover:opacity-100 transition-all duration-500">
              <img 
-                src={customLogo || "/contamiki.jpg"} 
+                src={displayLogo} 
                 className="w-40 h-40 rounded-3xl shadow-2xl object-cover border-4 border-white/10 bg-white" 
                 alt="ContaMiki"
-                onError={customLogo ? undefined : handleImageError}
+                onError={(e) => { if(!currentBook.logo) handleImageError(e); }}
              />
           </div>
 

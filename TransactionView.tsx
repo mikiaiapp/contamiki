@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, RecurrentMovement, RecurrenceFrequency, Category, Account } from './types';
+import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, RecurrentMovement, RecurrenceFrequency, Category, Account, BookMetadata } from './types';
 import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -13,6 +13,7 @@ interface TransactionViewProps {
   onUpdateFilter: (f: GlobalFilter) => void;
   initialSpecificFilters?: any;
   clearSpecificFilters?: () => void;
+  currentBook: BookMetadata;
 }
 
 type SortField = 'DATE' | 'DESCRIPTION' | 'AMOUNT' | 'ACCOUNT' | 'CATEGORY' | 'ATTACHMENT';
@@ -68,7 +69,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   filter, 
   onUpdateFilter, 
   initialSpecificFilters, 
-  clearSpecificFilters 
+  clearSpecificFilters,
+  currentBook
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
@@ -126,6 +128,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
+
+  const displayLogo = currentBook.logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
 
   const indices = useMemo(() => {
     const acc = new Map(data.accounts.map(a => [a.id, a]));
@@ -651,7 +655,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500" onClick={() => { setActiveMenuTxId(null); setOpenSelectorId(null); }}>
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
         <div className="space-y-4 text-center md:text-left w-full xl:w-auto">
-          <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
+          <div className="flex items-center justify-center md:justify-start gap-4">
+              <div className="lg:hidden block w-14 h-14 bg-white rounded-2xl shadow-sm border border-slate-100 p-1 shrink-0 overflow-hidden">
+                  <img src={displayLogo} className="w-full h-full object-cover rounded-xl" onError={(e) => e.currentTarget.src = "/contamiki.jpg"} />
+              </div>
+              <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
+          </div>
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
             <div className="flex items-center gap-1">
               <button onClick={() => navigatePeriod('prev')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={24} /></button>
