@@ -129,7 +129,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
 
-  const displayLogo = currentBook.logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
+  const displayLogo = useMemo(() => {
+    let logo = currentBook.logo;
+    if (logo && logo.startsWith('/api/')) {
+        return `${logo}&key=${localStorage.getItem('auth_token')}`;
+    }
+    return logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
+  }, [currentBook.logo]);
 
   const indices = useMemo(() => {
     const acc = new Map(data.accounts.map(a => [a.id, a]));
@@ -896,47 +902,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                             <div className="flex items-center gap-1">
                                                 <button onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].isDuplicate = false; setProposedTransactions(newArr); }} className="p-2 bg-emerald-100 text-emerald-700 rounded-full hover:bg-emerald-200 transition-colors" title="Aceptar como válido"><Check size={16}/></button>
                                                 <button onClick={() => setProposedTransactions(proposedTransactions.filter(pt => pt.id !== t.id))} className="text-slate-400 hover:text-rose-500 p-2 rounded-full hover:bg-rose-50 transition-colors" title="Descartar"><X size={16}/></button>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-
-                        {normalProps.length > 0 && (
-                            <div className="space-y-2">
-                                {duplicateProps.length > 0 && <div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm z-20 flex items-center gap-3 border-b border-slate-100 mb-2 mt-4"><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nuevos movimientos</h4></div>}
-                                {normalProps.map((t) => {
-                                    const hasCategory = !!t.categoryId;
-                                    const isTransfer = t.type === 'TRANSFER';
-                                    const isAssigned = hasCategory || isTransfer;
-                                    const rowBg = isAssigned ? 'bg-emerald-50/50 border border-emerald-100' : 'bg-slate-50 border border-slate-100';
-                                    const idxInMaster = proposedTransactions.findIndex(pt => pt.id === t.id);
-
-                                    return (
-                                        <div key={t.id} className={`p-4 rounded-2xl flex items-center gap-4 ${rowBg}`}>
-                                            <button onClick={() => toggleImportSelection(t.id)} className={`text-slate-400 hover:text-indigo-600 flex-shrink-0`}>{selectedImportIds.has(t.id) ? <CheckSquare size={16}/> : <Square size={16}/>}</button>
-                                            <div className="flex-1 min-w-0 grid grid-cols-[repeat(16,minmax(0,1fr))] gap-4 items-center">
-                                                <div className="col-span-2 text-[10px] font-bold text-slate-500 whitespace-nowrap flex items-center gap-2">{formatDateDisplay(t.date)}</div>
-                                                <input type="text" className="col-span-4 text-xs font-bold text-slate-800 bg-transparent border-b border-transparent focus:border-indigo-300 outline-none truncate transition-colors" value={t.description} title={t.description} onChange={(e) => { const newArr = [...proposedTransactions]; newArr[idxInMaster].description = e.target.value; setProposedTransactions(newArr); }} />
-                                                <div className={`col-span-7 text-xs font-black text-right whitespace-nowrap ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
-                                                <div className="col-span-3 relative">
-                                                    <button onClick={(e) => { e.stopPropagation(); setOpenSelectorId(openSelectorId === t.id ? null : t.id); }} className={`w-full border rounded-lg text-[9px] font-bold py-1.5 px-2 outline-none transition-colors flex items-center justify-between gap-2 ${isAssigned ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-white border-rose-200 text-slate-500'}`}>
-                                                        <span className="truncate">{t.type === 'TRANSFER' && t.transferAccountId ? `➡ ${indices.acc.get(t.transferAccountId)?.name || 'Cuenta...'}` : (indices.cat.get(t.categoryId)?.name || 'Sin Asignar')}</span><ChevronDown size={12} className="opacity-50"/>
-                                                    </button>
-                                                    {openSelectorId === t.id && (
-                                                        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-[2px]" onClick={(e) => { e.stopPropagation(); setOpenSelectorId(null); }}>
-                                                            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[550px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[60vh]" onClick={e => e.stopPropagation()}>
-                                                                <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50"><div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Categorías Activas</div>{activeGroupedCategories.map(f => ( <div key={f.family.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-9 z-0">{f.family.name}</div>{f.categories.map(c => ( <button key={c.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].categoryId = c.id; newArr[idxInMaster].transferAccountId = undefined; newArr[idxInMaster].type = newArr[idxInMaster].amount < 0 ? 'EXPENSE' : 'INCOME'; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 hover:bg-white hover:text-indigo-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${t.categoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>{renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span></button> ))}</div> ))}</div>
-                                                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white"><div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos Activos</div>{activeGroupedAccounts.map(g => { const availableAccs = g.accounts.filter(a => a.id !== importAccount); if (availableAccs.length === 0) return null; return ( <div key={g.group.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>{availableAccs.map(a => ( <button key={a.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].type = 'TRANSFER'; newArr[idxInMaster].transferAccountId = a.id; newArr[idxInMaster].categoryId = ''; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 hover:bg-slate-50 hover:text-emerald-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${t.transferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span></button> ))}</div> ); })}</div>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <button onClick={() => { setAttachingImportId(t.id); rowImportFileRef.current?.click(); }} className={`p-2 rounded-full transition-colors ${t.attachment ? 'text-indigo-600 bg-indigo-50' : 'text-slate-300 hover:text-indigo-500 hover:bg-slate-100'}`} title="Adjuntar comprobante">{t.attachment ? <CheckCircle2 size={16}/> : <Paperclip size={16}/>}</button>
-                                                <button onClick={() => setProposedTransactions(proposedTransactions.filter(pt => pt.id !== t.id))} className="text-slate-300 hover:text-rose-500 p-2 rounded-full hover:bg-rose-50 transition-colors"><X size={16}/></button>
                                             </div>
                                         </div>
                                     );

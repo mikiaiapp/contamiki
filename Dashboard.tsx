@@ -26,7 +26,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
 
-  const displayLogo = currentBook.logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
+  const displayLogo = useMemo(() => {
+    let logo = currentBook.logo;
+    if (logo && logo.startsWith('/api/')) {
+        return `${logo}&key=${localStorage.getItem('auth_token')}`;
+    }
+    return logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
+  }, [currentBook.logo]);
 
   // --- CAPA 1: INDEXACIÓN ESTRUCTURAL ---
   const indices = useMemo(() => {

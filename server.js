@@ -192,6 +192,34 @@ const saveFullUserState = async (username, fullState) => {
     const userDir = getUserDir(username);
     await fs.mkdir(userDir, { recursive: true });
 
+    // 0. EXTRACCIÓN DE LOGOS (Base64 -> Archivo)
+    // Si recibimos un logo en Base64, lo guardamos en disco y actualizamos el JSON para apuntar a la API.
+    if (fullState.booksMetadata && Array.isArray(fullState.booksMetadata)) {
+        for (const book of fullState.booksMetadata) {
+            if (book.logo && book.logo.startsWith('data:image')) {
+                const bookDir = path.join(userDir, book.id);
+                await fs.mkdir(bookDir, { recursive: true });
+                
+                const matches = book.logo.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/);
+                if (matches) {
+                    const buffer = Buffer.from(matches[2], 'base64');
+                    // Guardamos siempre como logo.png para simplificar
+                    await fs.writeFile(path.join(bookDir, 'logo.png'), buffer);
+                    
+                    // Actualizamos la metadata para que apunte a la API
+                    // Se usa un timestamp para evitar caché del navegador
+                    book.logo = `/api/book/${book.id}/logo?v=${Date.now()}`;
+                }
+            } else if (book.logo === undefined || book.logo === null) {
+                // Si se eliminó el logo, intentamos borrar el archivo
+                const bookDir = path.join(userDir, book.id);
+                try {
+                    await fs.unlink(path.join(bookDir, 'logo.png'));
+                } catch (e) {}
+            }
+        }
+    }
+
     // 1. Guardar Metadatos Raíz (siempre se envían completos)
     const rootState = {
         booksMetadata: fullState.booksMetadata || [],
@@ -240,8 +268,6 @@ const saveFullUserState = async (username, fullState) => {
             }
             
             // LIMPIEZA DE AÑOS BORRADOS:
-            // Si existía un archivo de año (ej: 2022) pero no está en la nueva data, es que se borraron todas sus transacciones.
-            // Lo eliminamos para mantener coherencia.
             for (const file of existingFiles) {
                 if (!writtenFiles.has(file)) {
                     await fs.unlink(path.join(bookDir, file)).catch(e => console.warn(`Could not delete obsolete file ${file}`, e));
@@ -267,8 +293,12 @@ const saveUsers = async (users) => {
 };
 
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  let token = req.headers['authorization'] && req.headers['authorization'].split(' ')[1];
+  
+  // Soporte para token por Query Param (para cargar imágenes)
+  if (!token && req.query.key) {
+      token = req.query.key;
+  }
   
   if (!token) return res.status(401).json({ error: "No autorizado" });
 
@@ -612,6 +642,22 @@ app.get('/api/2fa/status', authenticateToken, async (req, res) => {
         res.json({ enabled: !!user?.twoFactorEnabled });
     } catch (err) {
         res.status(500).json({ error: "Error obteniendo estado 2FA" });
+    }
+});
+
+// Nueva ruta para servir el Logo de forma segura
+app.get('/api/book/:bookId/logo', authenticateToken, async (req, res) => {
+    const { bookId } = req.params;
+    // Sanitización básica del bookId para evitar path traversal
+    const safeBookId = bookId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const userDir = getUserDir(req.user.username);
+    const logoPath = path.join(userDir, safeBookId, 'logo.png');
+
+    try {
+        await fs.access(logoPath);
+        res.sendFile(logoPath);
+    } catch {
+        res.status(404).send('Not found');
     }
 });
 
