@@ -50,8 +50,8 @@ const App: React.FC = () => {
             .then(config => {
                 if (config.apiKey) {
                     // Inyectamos la clave en el shim de process.env para que los servicios la vean
-                    if (window.process && window.process.env) {
-                        window.process.env.API_KEY = config.apiKey;
+                    if ((window as any).process && (window as any).process.env) {
+                        (window as any).process.env.API_KEY = config.apiKey;
                         console.log("App: AI Config loaded from server.");
                     }
                 }

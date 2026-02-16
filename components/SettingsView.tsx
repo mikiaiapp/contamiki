@@ -264,7 +264,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
           const newState: MultiBookState = restoreModal.data.state;
           onReplaceFullState(newState);
           let totalTx = 0;
-          Object.values(newState.booksData).forEach(b => totalTx += b.transactions.length);
+          Object.values(newState.booksData).forEach((b: AppState) => totalTx += b.transactions.length);
           finalStats = { type: 'RESTAURACIÓN GLOBAL', result: 'Éxito', detail: `${newState.booksMetadata.length} Libros, ${totalTx} Movimientos integrados.` };
       } else {
           const singleBackup = restoreModal.data;

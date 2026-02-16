@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, RecurrentMovement, RecurrenceFrequency, Category, Account } from './types';
 import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check, AlertTriangle } from 'lucide-react';
@@ -675,13 +674,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     <button onClick={(e) => { e.stopPropagation(); setShowFavoritesList(!showFavoritesList); }} className="w-12 h-12 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl shadow-sm hover:bg-amber-100 flex items-center justify-center transition-all active:scale-95" title="Favoritos"><Heart size={20} fill={showFavoritesList ? "currentColor" : "none"} /></button>
                     {showFavoritesList && (
                         <>
-                            <div className="fixed inset-0 z-10" onClick={() => setShowFavoritesList(false)}></div>
-                            <div className="absolute top-full right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 w-64 p-2 z-20 animate-in fade-in zoom-in duration-200 origin-top-right">
-                                <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Plantillas Rápidas</div>
+                            <div className="fixed inset-0 z-10 bg-slate-900/20 backdrop-blur-[1px] md:bg-transparent md:backdrop-blur-none" onClick={() => setShowFavoritesList(false)}></div>
+                            <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:absolute md:top-full md:right-0 md:left-auto md:translate-x-0 md:translate-y-0 md:mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 w-[85vw] max-w-xs md:w-64 p-2 z-20 animate-in fade-in zoom-in duration-200 origin-center md:origin-top-right">
+                                <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center md:text-left">Plantillas Rápidas</div>
                                 <div className="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
                                     {data.favorites && data.favorites.length > 0 ? (
                                         data.favorites.map(fav => (
-                                            <button key={fav.id} onClick={() => handleUseFavorite(fav)} className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-amber-50 text-left transition-colors group">
+                                            <button key={fav.id} onClick={() => handleUseFavorite(fav)} className="w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-xl hover:bg-amber-50 text-left transition-colors group">
                                                 <div className="bg-amber-100 text-amber-600 p-1.5 rounded-lg group-hover:bg-amber-200 transition-colors">{renderIcon(fav.icon || '⭐', "w-4 h-4")}</div>
                                                 <div className="flex-1 min-w-0"><div className="text-xs font-bold text-slate-700 truncate">{fav.name}</div><div className="text-[9px] text-slate-400 font-medium truncate">{fav.description}</div></div>
                                             </button>
