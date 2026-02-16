@@ -360,9 +360,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
   return (
     <div className="space-y-12 max-w-full overflow-hidden pb-20">
       <div className="text-center md:text-left space-y-2">
-        <div className="flex items-center justify-center md:justify-start gap-4">
-            <div className="lg:hidden block w-14 h-14 bg-white rounded-2xl shadow-sm border border-slate-100 p-1 shrink-0 overflow-hidden">
-                <img src={displayLogo} className="w-full h-full object-cover rounded-xl" onError={(e) => e.currentTarget.src = "/contamiki.jpg"} />
+        <div className="flex items-center justify-center md:justify-start gap-6">
+            <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-3xl shadow-sm border border-slate-100 p-1.5 shrink-0 overflow-hidden">
+                <img src={displayLogo} className="w-full h-full object-cover rounded-2xl" onError={(e) => e.currentTarget.src = "/contamiki.jpg"} />
             </div>
             <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Ajustes.</h2>
         </div>

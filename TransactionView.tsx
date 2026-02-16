@@ -655,9 +655,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500" onClick={() => { setActiveMenuTxId(null); setOpenSelectorId(null); }}>
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
         <div className="space-y-4 text-center md:text-left w-full xl:w-auto">
-          <div className="flex items-center justify-center md:justify-start gap-4">
-              <div className="lg:hidden block w-14 h-14 bg-white rounded-2xl shadow-sm border border-slate-100 p-1 shrink-0 overflow-hidden">
-                  <img src={displayLogo} className="w-full h-full object-cover rounded-xl" onError={(e) => e.currentTarget.src = "/contamiki.jpg"} />
+          <div className="flex items-center justify-center md:justify-start gap-6">
+              <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-3xl shadow-sm border border-slate-100 p-1.5 shrink-0 overflow-hidden">
+                  <img src={displayLogo} className="w-full h-full object-cover rounded-2xl" onError={(e) => e.currentTarget.src = "/contamiki.jpg"} />
               </div>
               <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
           </div>

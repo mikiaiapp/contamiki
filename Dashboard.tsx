@@ -251,10 +251,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       {/* HEADER y NAVEGACIÓN TEMPORAL */}
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8">
         <div className="space-y-4 w-full xl:w-auto">
-            <div className="flex items-center justify-between md:justify-start gap-4">
-                {/* Mobile/Tablet Logo (Displayed when Sidebar is hidden or generally for visual consistency) */}
-                <div className="lg:hidden block w-14 h-14 bg-white rounded-2xl shadow-sm border border-slate-100 p-1 shrink-0 overflow-hidden">
-                    <img src={displayLogo} className="w-full h-full object-cover rounded-xl" onError={(e) => e.currentTarget.src = "/contamiki.jpg"} />
+            <div className="flex items-center justify-center md:justify-start gap-6">
+                {/* Logo Container - Visible on all screens, larger */}
+                <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-3xl shadow-sm border border-slate-100 p-1.5 shrink-0 overflow-hidden">
+                    <img src={displayLogo} className="w-full h-full object-cover rounded-2xl" onError={(e) => e.currentTarget.src = "/contamiki.jpg"} />
                 </div>
 
                 <div className="flex items-center gap-4">
