@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification } from './services/authService';
 import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles, Check, XCircle, CheckCircle2, Mail, ArrowLeft, KeyRound, Send, ShieldCheck } from 'lucide-react';
@@ -22,7 +21,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [loading, setLoading] = useState(false);
-    const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('contamiki_custom_logo'));
     const [resetToken, setResetToken] = useState<string | null>(null);
     const [showResend, setShowResend] = useState(false);
 
@@ -46,14 +44,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             setMode('RESET_PASSWORD');
             setResetToken(token);
         }
-    }, []);
-
-    useEffect(() => {
-        const handleLogoChange = () => {
-            setCustomLogo(localStorage.getItem('contamiki_custom_logo'));
-        };
-        window.addEventListener('contamiki_logo_changed', handleLogoChange);
-        return () => window.removeEventListener('contamiki_logo_changed', handleLogoChange);
     }, []);
 
     const validateEmail = (email: string) => {
@@ -192,17 +182,19 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     <div className="absolute top-0 left-0 w-full h-full bg-indigo-600/10 mix-blend-overlay"></div>
                     <div className="relative z-10">
                         <img 
-                            src={customLogo || "/contamiki.jpg"} 
+                            src={`/api/system/logo?v=${Date.now()}`} // Intentar cargar logo del sistema (Docker Folder)
                             className="mx-auto w-32 h-32 mb-6 drop-shadow-2xl animate-in zoom-in duration-700 hover:scale-105 transition-transform rounded-3xl shadow-xl object-cover border-4 border-white/10 bg-white"
                             alt="ContaMiki Logo"
                             onError={(e) => {
-                                if (customLogo) return;
                                 const target = e.currentTarget;
-                                const src = target.src;
-                                if (src.endsWith('/contamiki.jpg')) target.src = '/ContaMiki.jpg';
-                                else if (src.endsWith('/ContaMiki.jpg')) target.src = '/contamiki.png';
-                                else if (src.endsWith('/contamiki.png')) target.src = '/logo.jpg';
-                                else target.src = "https://cdn-icons-png.flaticon.com/512/2910/2910296.png";
+                                // Fallback a LocalStorage o Default si no hay logo de sistema
+                                const local = localStorage.getItem('contamiki_custom_logo');
+                                if (local && target.src !== local) {
+                                    target.src = local;
+                                } else {
+                                    if (target.src.includes('contamiki.jpg')) return; // Evitar loop
+                                    target.src = "/contamiki.jpg"; 
+                                }
                             }}
                         />
                         <h1 className="text-3xl font-black text-white tracking-tighter">ContaMiki</h1>

@@ -78,6 +78,7 @@ const sendEmail = async (to, subject, text, html) => {
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_DIR = path.join(DATA_DIR, 'users');
 const GLOBAL_USERS_FILE = path.join(DATA_DIR, 'users.json');
+const SYSTEM_LOGO_FILE = path.join(DATA_DIR, 'system_logo.png');
 
 console.log(`ContaMiki Server: Storage path set to: ${DATA_DIR}`);
 
@@ -209,6 +210,16 @@ const saveFullUserState = async (username, fullState) => {
                     // Actualizamos la metadata para que apunte a la API
                     // Se usa un timestamp para evitar caché del navegador
                     book.logo = `/api/book/${book.id}/logo?v=${Date.now()}`;
+
+                    // --- SISTEMA DE LOGO GLOBAL ---
+                    // Copiamos el último logo subido como logo del sistema público
+                    // Esto permite verlo en el Login sin autenticación
+                    try {
+                        await fs.writeFile(SYSTEM_LOGO_FILE, buffer);
+                        console.log(`[SYSTEM] Logo actualizado globalmente desde usuario ${username}`);
+                    } catch (sysErr) {
+                        console.error("[SYSTEM] Error updating system logo", sysErr);
+                    }
                 }
             } else if (book.logo === undefined || book.logo === null) {
                 // Si se eliminó el logo, intentamos borrar el archivo
@@ -645,7 +656,7 @@ app.get('/api/2fa/status', authenticateToken, async (req, res) => {
     }
 });
 
-// Nueva ruta para servir el Logo de forma segura
+// Nueva ruta para servir el Logo de forma segura (AUTENTICADO)
 app.get('/api/book/:bookId/logo', authenticateToken, async (req, res) => {
     const { bookId } = req.params;
     // Sanitización básica del bookId para evitar path traversal
@@ -658,6 +669,17 @@ app.get('/api/book/:bookId/logo', authenticateToken, async (req, res) => {
         res.sendFile(logoPath);
     } catch {
         res.status(404).send('Not found');
+    }
+});
+
+// RUTA PÚBLICA PARA EL LOGO DEL SISTEMA (LOGIN SCREEN)
+app.get('/api/system/logo', async (req, res) => {
+    try {
+        await fs.access(SYSTEM_LOGO_FILE);
+        res.sendFile(SYSTEM_LOGO_FILE);
+    } catch {
+        // Si no hay logo custom, 404 (el cliente usará default)
+        res.status(404).send('No custom system logo');
     }
 });
 
