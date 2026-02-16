@@ -82,6 +82,40 @@ const SYSTEM_LOGO_FILE = path.join(DATA_DIR, 'system_logo.png');
 
 console.log(`ContaMiki Server: Storage path set to: ${DATA_DIR}`);
 
+// DATOS POR DEFECTO (Para inicializar nuevos usuarios con Logo)
+const DEFAULT_APP_STATE = {
+    accountGroups: [
+        { id: 'g1', name: 'Bancos', icon: '🏦' },
+        { id: 'g2', name: 'Efectivo', icon: '💶' },
+        { id: 'g3', name: 'Tarjetas', icon: '💳' },
+        { id: 'g4', name: 'Inversión', icon: '📈' },
+    ],
+    accounts: [
+        { id: 'a1', groupId: 'g1', name: 'Banco Principal', initialBalance: 1000, currency: 'EUR', icon: '🏦', active: true },
+        { id: 'a2', groupId: 'g2', name: 'Cartera / Efectivo', initialBalance: 150, currency: 'EUR', icon: '👛', active: true },
+    ],
+    families: [
+        { id: 'f1', name: 'Vivienda', type: 'EXPENSE', icon: '🏠' },
+        { id: 'f2', name: 'Alimentación', type: 'EXPENSE', icon: '🍎' },
+        { id: 'f3', name: 'Vehículo', type: 'EXPENSE', icon: '🚗' },
+        { id: 'f4', name: 'Ingresos Laborales', type: 'INCOME', icon: '💼' },
+        { id: 'f5', name: 'Inversiones', type: 'INCOME', icon: '📈' },
+    ],
+    categories: [
+        { id: 'c1', familyId: 'f1', name: 'Alquiler/Hipoteca', icon: '🔑', active: true },
+        { id: 'c2', familyId: 'f1', name: 'Luz y Gas', icon: '💡', active: true },
+        { id: 'c3', familyId: 'f2', name: 'Supermercado', icon: '🛒', active: true },
+        { id: 'c4', familyId: 'f2', name: 'Restaurantes', icon: '🍽️', active: true },
+        { id: 'c5', familyId: 'f3', name: 'Gasolina', icon: '⛽', active: true },
+        { id: 'c6', familyId: 'f3', name: 'Mantenimiento', icon: '🔧', active: true },
+        { id: 'c7', familyId: 'f4', name: 'Nómina Mensual', icon: '💵', active: true },
+        { id: 'c8', familyId: 'f5', name: 'Dividendos', icon: '💰', active: true },
+    ],
+    transactions: [],
+    recurrents: [],
+    favorites: []
+};
+
 // Middleware - AUMENTADO A 500MB PARA SOPORTAR CARGAS EXTREMAS
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
@@ -353,7 +387,49 @@ app.post('/api/register', async (req, res) => {
         });
         
         await saveUsers(users);
-        await fs.mkdir(getUserDir(username), { recursive: true });
+        const userDir = getUserDir(username);
+        await fs.mkdir(userDir, { recursive: true });
+
+        // --- INICIALIZAR DATOS CON LOGO SI EXISTE ---
+        try {
+            // Verificamos si existe el logo del sistema
+            await fs.access(SYSTEM_LOGO_FILE);
+            
+            // Si llegamos aquí, existe. Inicializamos estructura básica del usuario.
+            const defaultBookId = 'default_book_1';
+            const bookDir = path.join(userDir, defaultBookId);
+            await fs.mkdir(bookDir, { recursive: true });
+
+            // 1. Copiar Logo
+            await fs.copyFile(SYSTEM_LOGO_FILE, path.join(bookDir, 'logo.png'));
+
+            // 2. Escribir Configuración por Defecto
+            await fs.writeFile(path.join(bookDir, 'config.json'), JSON.stringify(DEFAULT_APP_STATE, null, 2));
+
+            // 3. Escribir Metadata apuntando al logo
+            const meta = {
+                booksMetadata: [
+                    { 
+                        id: defaultBookId, 
+                        name: 'Mi Contabilidad', 
+                        color: 'BLACK', 
+                        currency: 'EUR',
+                        logo: `/api/book/${defaultBookId}/logo?v=${Date.now()}` // URL persistente
+                    }
+                ],
+                currentBookId: defaultBookId
+            };
+            await fs.writeFile(path.join(userDir, 'metadata.json'), JSON.stringify(meta, null, 2));
+            
+            console.log(`[AUTO-SETUP] Initialized data for new user ${username} with system logo.`);
+
+        } catch (initErr) {
+            // Si no hay logo del sistema o falla algo, no bloqueamos el registro.
+            // El cliente inicializará los datos por defecto (sin logo) en la primera carga.
+            if (initErr.code !== 'ENOENT') {
+                console.error("[AUTO-SETUP] Error initializing default user data:", initErr);
+            }
+        }
         
         // Enviar Email Verificación
         const link = `${APP_URL}?action=verify&token=${verificationToken}`;
@@ -365,7 +441,10 @@ app.post('/api/register', async (req, res) => {
         );
 
         res.json({ success: true, message: "Usuario creado. Revisa tu email (o la consola del servidor) para activar la cuenta." });
-    } catch (err) { res.status(500).json({ error: "Error server" }); }
+    } catch (err) { 
+        console.error("Register Error:", err);
+        res.status(500).json({ error: "Error server" }); 
+    }
 });
 
 app.post('/api/resend-verification', async (req, res) => {
