@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AppState, GlobalFilter, BookMetadata } from './types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, Legend, ReferenceLine, BarChart, Bar } from 'recharts';
-import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, ChevronLeft, Home, BarChart3, Grip, Search, X } from 'lucide-react';
+import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, ChevronLeft, Home, BarChart3, Grip, Search, X, Scale } from 'lucide-react';
 
 interface ChartsViewProps {
   data: AppState;
@@ -21,7 +21,11 @@ const compactCurrency = (value: number) => {
 const formatCurrency = (amount: number) => `${NUMBER_FORMATTER.format(amount)} €`;
 
 // Helper para color de importe en gráficos
-const getAmountColorClass = (val: number) => val >= 0 ? 'text-emerald-600' : 'text-rose-600';
+const getAmountColorClass = (val: number) => {
+    if (val > 0) return 'text-emerald-600';
+    if (val < 0) return 'text-rose-600';
+    return 'text-slate-500';
+};
 
 // Estado de Navegación del Gráfico
 type ViewLevel = 'ROOT' | 'FAMILY' | 'CATEGORY';
@@ -125,6 +129,22 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     let result: any[] = Array.from(timeline.entries()).map(([date, balance]) => ({ date, balance })).sort((a, b) => a.date.localeCompare(b.date));
     return result;
   }, [data.transactions, dateBounds, data.accounts, isMonthlyGranularity]);
+
+  // --- DATA: TOTALES DEL PERIODO ---
+  const periodStats = useMemo(() => {
+      let income = 0;
+      let expense = 0;
+      data.transactions.forEach(t => {
+          if (t.date >= dateBounds.start && t.date <= dateBounds.end && t.type !== 'TRANSFER') {
+              // Asumimos que expense es negativo en DB, si no, lo forzamos
+              const val = t.type === 'EXPENSE' ? -Math.abs(t.amount) : Math.abs(t.amount);
+              
+              if (val > 0) income += val;
+              else expense += val;
+          }
+      });
+      return { income, expense, result: income + expense };
+  }, [data.transactions, dateBounds]);
 
   // --- DATA: DRILL DOWN DINÁMICO (Sección 2) ---
   const chartData = useMemo(() => {
@@ -314,28 +334,49 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
         <div className="bg-white p-6 md:p-10 rounded-[3rem] shadow-sm border border-slate-100 min-h-[500px] flex flex-col">
             
             {/* HEADER DE NAVEGACIÓN */}
-            <div className="flex items-center gap-2 mb-8 border-b border-slate-50 pb-4">
-                <button onClick={() => setViewState({ level: 'ROOT' })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'ROOT' ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:text-slate-600'}`}>
-                    <Home size={14}/> <span className="text-[10px] font-black uppercase tracking-widest">Resumen</span>
-                </button>
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8 border-b border-slate-50 pb-6">
+                <div className="flex items-center gap-2 self-start md:self-auto">
+                    <button onClick={() => setViewState({ level: 'ROOT' })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'ROOT' ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:text-slate-600'}`}>
+                        <Home size={14}/> <span className="text-[10px] font-black uppercase tracking-widest">Resumen</span>
+                    </button>
 
-                {viewState.level !== 'ROOT' && (
-                    <>
-                        <ChevronRight size={14} className="text-slate-300" />
-                        <button onClick={() => setViewState({ level: 'FAMILY', itemId: viewState.level === 'CATEGORY' ? data.categories.find(c=>c.id===viewState.itemId)?.familyId : viewState.itemId, itemName: viewState.level === 'CATEGORY' ? data.families.find(f=>f.id === data.categories.find(c=>c.id===viewState.itemId)?.familyId)?.name : viewState.itemName, itemType: viewState.itemType })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'FAMILY' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-400 hover:text-indigo-600'}`}>
-                            {viewState.itemType === 'INCOME' ? <ArrowUpCircle size={14}/> : <ArrowDownCircle size={14}/>}
-                            <span className="text-[10px] font-black uppercase tracking-widest">{viewState.level === 'CATEGORY' ? data.families.find(f=>f.id === data.categories.find(c=>c.id===viewState.itemId)?.familyId)?.name : viewState.itemName}</span>
-                        </button>
-                    </>
-                )}
+                    {viewState.level !== 'ROOT' && (
+                        <>
+                            <ChevronRight size={14} className="text-slate-300" />
+                            <button onClick={() => setViewState({ level: 'FAMILY', itemId: viewState.level === 'CATEGORY' ? data.categories.find(c=>c.id===viewState.itemId)?.familyId : viewState.itemId, itemName: viewState.level === 'CATEGORY' ? data.families.find(f=>f.id === data.categories.find(c=>c.id===viewState.itemId)?.familyId)?.name : viewState.itemName, itemType: viewState.itemType })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'FAMILY' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-400 hover:text-indigo-600'}`}>
+                                {viewState.itemType === 'INCOME' ? <ArrowUpCircle size={14}/> : <ArrowDownCircle size={14}/>}
+                                <span className="text-[10px] font-black uppercase tracking-widest">{viewState.level === 'CATEGORY' ? data.families.find(f=>f.id === data.categories.find(c=>c.id===viewState.itemId)?.familyId)?.name : viewState.itemName}</span>
+                            </button>
+                        </>
+                    )}
 
-                {viewState.level === 'CATEGORY' && (
-                    <>
-                        <ChevronRight size={14} className="text-slate-300" />
-                        <div className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-xl shadow-lg">
-                            <span className="text-[10px] font-black uppercase tracking-widest">{viewState.itemName}</span>
+                    {viewState.level === 'CATEGORY' && (
+                        <>
+                            <ChevronRight size={14} className="text-slate-300" />
+                            <div className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-xl shadow-lg">
+                                <span className="text-[10px] font-black uppercase tracking-widest">{viewState.itemName}</span>
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                {/* RESUMEN TOTALES DEL PERIODO */}
+                {viewState.level === 'ROOT' && (
+                    <div className="flex flex-wrap justify-center gap-2 md:gap-4 w-full md:w-auto">
+                        <div className="flex flex-col items-center px-4 py-2 bg-emerald-50 rounded-2xl border border-emerald-100 min-w-[100px]">
+                            <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Ingresos</span>
+                            <span className="text-sm font-black text-emerald-600 tracking-tighter">{compactCurrency(periodStats.income)}</span>
                         </div>
-                    </>
+                        <div className="flex flex-col items-center px-4 py-2 bg-slate-50 rounded-2xl border border-slate-100 min-w-[120px] relative overflow-hidden">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 relative z-10">Resultado</span>
+                            <span className={`text-xl font-black tracking-tighter relative z-10 ${getAmountColorClass(periodStats.result)}`}>{compactCurrency(periodStats.result)}</span>
+                            <div className={`absolute bottom-0 left-0 h-1 w-full ${periodStats.result >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
+                        </div>
+                        <div className="flex flex-col items-center px-4 py-2 bg-rose-50 rounded-2xl border border-rose-100 min-w-[100px]">
+                            <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Gastos</span>
+                            <span className="text-sm font-black text-rose-600 tracking-tighter">{compactCurrency(periodStats.expense)}</span>
+                        </div>
+                    </div>
                 )}
             </div>
 
