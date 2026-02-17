@@ -178,13 +178,13 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               }
           });
 
-          // Preparamos datos: value = signed (para texto), absValue = absolute (para dibujar donut)
+          // Preparamos datos: signedValue = con signo (para texto), absValue = absolute (para dibujar donut)
           const mapToPieData = (map: Map<string, number>) => Array.from(map.entries())
               .map(([id, value]) => ({ 
                   id, 
                   name: getFam(id)?.name || '?', 
-                  value: value, // Valor REAL con signo
-                  absValue: Math.abs(value), // Valor ABSOLUTO para renderizar gráfico
+                  signedValue: value, // Valor REAL con signo (para leyenda)
+                  absValue: Math.abs(value), // Valor ABSOLUTO (para renderizar)
                   icon: getFam(id)?.icon, 
                   type: getFam(id)?.type 
               }))
@@ -214,8 +214,8 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               .map(([id, value]) => ({ 
                   id, 
                   name: getCat(id)?.name || '?', 
-                  value: value, 
-                  absValue: Math.abs(value),
+                  signedValue: value, // Valor REAL con signo (para leyenda)
+                  absValue: Math.abs(value), // Valor ABSOLUTO (para renderizar)
                   icon: getCat(id)?.icon 
               }))
               .filter(item => item.absValue > 0.01)
@@ -254,8 +254,8 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
         const d = payload[0].payload;
-        // Detectar si estamos en AreaChart (tiene balance) o Pie/Line (tiene value)
-        const val = d.value !== undefined ? d.value : d.balance;
+        // Priorizar signedValue si existe (Pie), si no value (Line), si no balance (Area)
+        const val = d.signedValue !== undefined ? d.signedValue : (d.value !== undefined ? d.value : d.balance);
         
         return (
             <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs z-50">
@@ -415,7 +415,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                                         <div key={index} onClick={() => setViewState({ level: 'FAMILY', itemId: entry.payload.id, itemName: entry.payload.name, itemType: 'INCOME' })} className="flex items-center gap-1.5 cursor-pointer group hover:opacity-80 transition-opacity">
                                                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}/>
                                                             <span className="text-[9px] font-bold text-slate-500 uppercase group-hover:text-emerald-600">{entry.payload.name}</span>
-                                                            <span className={`text-[9px] font-black ${getAmountColorClass(entry.payload.value)}`}>{formatCurrency(entry.payload.value)}</span>
+                                                            <span className={`text-[9px] font-black ${getAmountColorClass(entry.payload.signedValue)}`}>{formatCurrency(entry.payload.signedValue)}</span>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -458,7 +458,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                                         <div key={index} onClick={() => setViewState({ level: 'FAMILY', itemId: entry.payload.id, itemName: entry.payload.name, itemType: 'EXPENSE' })} className="flex items-center gap-1.5 cursor-pointer group hover:opacity-80 transition-opacity">
                                                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}/>
                                                             <span className="text-[9px] font-bold text-slate-500 uppercase group-hover:text-rose-600">{entry.payload.name}</span>
-                                                            <span className={`text-[9px] font-black ${getAmountColorClass(entry.payload.value)}`}>{formatCurrency(entry.payload.value)}</span>
+                                                            <span className={`text-[9px] font-black ${getAmountColorClass(entry.payload.signedValue)}`}>{formatCurrency(entry.payload.signedValue)}</span>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -506,8 +506,8 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                                             <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }}/>
                                                             <span className="font-bold text-slate-500 uppercase truncate max-w-[120px] group-hover:text-indigo-600">{entry.payload.name}</span>
                                                         </div>
-                                                        <span className={`font-black whitespace-nowrap ${getAmountColorClass(entry.payload.value)}`}>
-                                                            {formatCurrency(entry.payload.value)}
+                                                        <span className={`font-black whitespace-nowrap ${getAmountColorClass(entry.payload.signedValue)}`}>
+                                                            {formatCurrency(entry.payload.signedValue)}
                                                         </span>
                                                     </div>
                                                 ))}
