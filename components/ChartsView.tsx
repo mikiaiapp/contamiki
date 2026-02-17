@@ -99,9 +99,8 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     let runningBalance = data.accounts.reduce((acc, a) => acc + a.initialBalance, 0);
     
     sortedTx.forEach(t => {
-      let amt = 0;
-      if (t.type === 'EXPENSE' || t.type === 'TRANSFER') amt = -Math.abs(t.amount);
-      else amt = Math.abs(t.amount);
+      let amt = t.amount;
+      // Handle Transfers: Internal transfers sum to 0 globally, External act as expense/income
       const isInternal = t.type === 'TRANSFER' && t.transferAccountId && data.accounts.find(a=>a.id===t.transferAccountId);
       if (isInternal) amt = 0;
 
@@ -137,64 +136,101 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
   }, [data.transactions, dateBounds, data.accounts, isMonthlyView]);
 
   const breakdownData = useMemo(() => {
-      const relevantTx = data.transactions.filter(t => t.date >= dateBounds.start && t.date <= dateBounds.end && t.type === activeTab);
+      // 1. Filtrar solo por fecha y excluir transferencias internas puras
+      const relevantTx = data.transactions.filter(t => 
+          t.date >= dateBounds.start && 
+          t.date <= dateBounds.end && 
+          t.type !== 'TRANSFER'
+      );
       
       let items: { id: string, name: string, value: number, icon: string, history: Map<string, number> }[] = [];
       const historyKeys = new Set<string>();
 
+      // Helpers
+      const getFam = (id: string) => data.families.find(f => f.id === id);
+      const getCat = (id: string) => data.categories.find(c => c.id === id);
+
       if (!drillPath.famId) {
+          // LEVEL 0: ROOT (FAMILIES)
           const map = new Map<string, typeof items[0]>();
           relevantTx.forEach(t => {
-              const cat = data.categories.find(c => c.id === t.categoryId);
+              const cat = getCat(t.categoryId);
               const famId = t.familyId || cat?.familyId;
-              if (famId) {
-                  if (!map.has(famId)) {
-                      const fam = data.families.find(f => f.id === famId);
-                      map.set(famId, { id: famId, name: fam?.name || '?', value: 0, icon: fam?.icon || '', history: new Map() });
+              const fam = famId ? getFam(famId) : null;
+
+              // CRITICAL FIX: Group by Family Type matching the Active Tab (INCOME vs EXPENSE)
+              // This ensures that refunds (positive amounts in Expense families) reduce the expense total correctly.
+              if (fam && fam.type === activeTab) {
+                  if (!map.has(fam.id)) {
+                      map.set(fam.id, { id: fam.id, name: fam.name, value: 0, icon: fam.icon, history: new Map() });
                   }
-                  const entry = map.get(famId)!;
-                  const val = Math.abs(t.amount);
-                  entry.value += val;
+                  const entry = map.get(fam.id)!;
+                  
+                  // Add signed amount directly (Expenses are negative, Income positive)
+                  entry.value += t.amount;
+
                   const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01');
-                  entry.history.set(key, (entry.history.get(key) || 0) + val);
+                  entry.history.set(key, (entry.history.get(key) || 0) + t.amount);
                   historyKeys.add(key);
               }
           });
           items = Array.from(map.values());
       } else if (!drillPath.catId) {
+          // LEVEL 1: CATEGORIES within selected Family
+          const targetFamId = drillPath.famId;
           const map = new Map<string, typeof items[0]>();
-          relevantTx.filter(t => {
-              const cat = data.categories.find(c => c.id === t.categoryId);
-              return t.familyId === drillPath.famId || cat?.familyId === drillPath.famId;
-          }).forEach(t => {
-              const catId = t.categoryId;
-              if (catId) {
-                  if (!map.has(catId)) {
-                      const cat = data.categories.find(c => c.id === catId);
-                      map.set(catId, { id: catId, name: cat?.name || '?', value: 0, icon: cat?.icon || '', history: new Map() });
+          
+          relevantTx.forEach(t => {
+              const cat = getCat(t.categoryId);
+              const famId = t.familyId || cat?.familyId;
+              
+              if (famId === targetFamId) {
+                  const catId = t.categoryId;
+                  if (catId) {
+                      if (!map.has(catId)) {
+                          const c = getCat(catId);
+                          map.set(catId, { id: catId, name: c?.name || '?', value: 0, icon: c?.icon || '', history: new Map() });
+                      }
+                      const entry = map.get(catId)!;
+                      entry.value += t.amount;
+                      
+                      const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01');
+                      entry.history.set(key, (entry.history.get(key) || 0) + t.amount);
+                      historyKeys.add(key);
                   }
-                  const entry = map.get(catId)!;
-                  const val = Math.abs(t.amount);
-                  entry.value += val;
-                  const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01');
-                  entry.history.set(key, (entry.history.get(key) || 0) + val);
-                  historyKeys.add(key);
               }
           });
           items = Array.from(map.values());
       } else {
-          const catId = drillPath.catId;
-          const cat = data.categories.find(c => c.id === catId);
+          // LEVEL 2: Specific Category History
+          const targetCatId = drillPath.catId;
+          const cat = getCat(targetCatId);
           const history = new Map<string, number>();
-          relevantTx.filter(t => t.categoryId === catId).forEach(t => {
-              const val = Math.abs(t.amount);
-              const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01');
-              history.set(key, (history.get(key) || 0) + val);
-              historyKeys.add(key);
+          
+          relevantTx.forEach(t => {
+              if (t.categoryId === targetCatId) {
+                  const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01');
+                  history.set(key, (history.get(key) || 0) + t.amount);
+                  historyKeys.add(key);
+              }
           });
-          items = [{ id: catId, name: cat?.name || '?', value: Array.from(history.values()).reduce((a,b)=>a+b,0), icon: cat?.icon || '', history }];
+          
+          // Total sum first, then absolute
+          const totalVal = Array.from(history.values()).reduce((a,b)=>a+b, 0);
+          items = [{ id: targetCatId, name: cat?.name || '?', value: totalVal, icon: cat?.icon || '', history }];
       }
 
+      // Final processing: Absolute values for chart display (Pie charts need positive magnitude)
+      items.forEach(item => {
+          item.value = Math.abs(item.value);
+          // Fix history for line chart magnitude as well
+          for (const [k, v] of item.history) {
+              item.history.set(k, Math.abs(v));
+          }
+      });
+
+      // Remove items with effectively 0 value to avoid clutter
+      items = items.filter(i => i.value > 0.01);
       items.sort((a, b) => b.value - a.value);
 
       const sortedDates = Array.from(historyKeys).sort();
