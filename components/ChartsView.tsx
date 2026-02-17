@@ -105,7 +105,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
       else amt = Math.abs(t.amount);
 
       // Correction: Internal transfers shouldn't change global balance unless one account is hidden/external
-      // Simplifying: assuming sum of all accounts
       const isInternal = t.type === 'TRANSFER' && t.transferAccountId && data.accounts.find(a=>a.id===t.transferAccountId);
       if (isInternal) amt = 0;
 
@@ -116,37 +115,49 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
          // Key determination: Day vs Month
          let key = t.date;
          if (!isMonthlyView) {
-             // For monthly view, we want the LAST balance of the month.
-             // Key format: YYYY-MM-01 (to parse correctly as date in charts) or just YYYY-MM
-             // We use YYYY-MM-01 to ensure it sorts and parses easily as a Date object
              key = t.date.substring(0, 7) + '-01'; 
          }
-         // Map.set overwrites, so we always get the balance after the LAST transaction of that period
          timeline.set(key, runningBalance);
       }
     });
 
-    const result = Array.from(timeline.entries())
-        .map(([date, balance]) => ({ date, balance }))
+    // Prepare real data points: { date, balance, projection: null }
+    let result: any[] = Array.from(timeline.entries())
+        .map(([date, balance]) => ({ date, balance, projection: null }))
         .sort((a, b) => a.date.localeCompare(b.date));
         
     if (result.length === 0) return [];
 
-    // Trend Calculation
+    // Trend Calculation & Projection (Horizon: 3 Months)
     if (result.length > 3) {
         const n = result.length;
         let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+        // Calculate regression based on indices
         result.forEach((p, i) => { sumX += i; sumY += p.balance; sumXY += i * p.balance; sumXX += i * i; });
         const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
         const intercept = (sumY - slope * sumX) / n;
 
-        const lastDate = new Date(result[result.length - 1].date);
+        // Start projection from the last real point to ensure continuity
+        const lastRealPoint = result[result.length - 1];
+        lastRealPoint.projection = lastRealPoint.balance; // Connect the lines
+
+        const lastDate = new Date(lastRealPoint.date);
+        
+        // Project 3 steps ahead (Months)
         for (let i = 1; i <= 3; i++) {
-            if (isMonthlyView) lastDate.setDate(lastDate.getDate() + 5);
-            else lastDate.setMonth(lastDate.getMonth() + 1); // Project next months
+            // Ensure we project months into the future regardless of current view granularity
+            // to show the "horizon" requested.
+            lastDate.setMonth(lastDate.getMonth() + 1);
+            // If strictly monthly view (days), setting date to 1st of next month keeps it clean on axis?
+            // Or just next month same day. Let's stick to simple month addition.
             
             const nextVal = slope * (n + i) + intercept;
-            result.push({ date: lastDate.toISOString().split('T')[0], balance: nextVal, isProjection: true } as any);
+            result.push({ 
+                date: lastDate.toISOString().split('T')[0], 
+                balance: null, // No real data
+                projection: nextVal, 
+                isProjection: true 
+            });
         }
     }
     return result;
@@ -251,15 +262,19 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
   const CustomTooltip = ({ active, payload, label }: any) => {
       if (active && payload && payload.length) {
           const title = formatDateTick(label); // Use the same formatter
+          const isProj = payload[0]?.payload?.isProjection;
           return (
               <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs">
-                  <p className="font-black text-slate-500 mb-2">{title}</p>
-                  {payload.map((p: any, idx: number) => (
-                      <div key={idx} style={{ color: p.color }} className="flex items-center gap-2 font-bold">
-                          <span>{p.name}:</span>
-                          <span>{NUMBER_FORMATTER.format(p.value)}€</span>
-                      </div>
-                  ))}
+                  <p className="font-black text-slate-500 mb-2">{title} {isProj ? '(Est.)' : ''}</p>
+                  {payload.map((p: any, idx: number) => {
+                      if (p.value === null || p.value === undefined) return null;
+                      return (
+                        <div key={idx} style={{ color: p.color }} className="flex items-center gap-2 font-bold">
+                            <span>{p.name === 'projection' ? 'Proyección' : p.name}:</span>
+                            <span>{NUMBER_FORMATTER.format(p.value)}€</span>
+                        </div>
+                      );
+                  })}
               </div>
           );
       }
@@ -343,7 +358,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
                 <div className="bg-slate-950 p-3 rounded-2xl text-white"><TrendingUp size={20}/></div>
                 <div>
                     <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Evolución de Patrimonio</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Tendencia proyectada a futuro</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Tendencia proyectada a 3 meses</p>
                 </div>
             </div>
             {savingsData.length === 0 ? (
@@ -377,7 +392,10 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
                             />
                             <Tooltip content={<CustomTooltip />} />
                             <ReferenceLine x={savingsData.find(d => (d as any).isProjection)?.date} stroke="#cbd5e1" strokeDasharray="3 3" />
-                            <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" name="Patrimonio" />
+                            {/* Real Data Area */}
+                            <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" name="Patrimonio" connectNulls={false} />
+                            {/* Projected Data Area (Different Color/Style) */}
+                            <Area type="monotone" dataKey="projection" stroke="#94a3b8" strokeWidth={3} strokeDasharray="5 5" fillOpacity={0.5} fill="url(#colorBalance)" name="Proyección" connectNulls={false} />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
