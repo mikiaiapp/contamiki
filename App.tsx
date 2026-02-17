@@ -3,7 +3,7 @@ import { Layout } from './Layout';
 import { Dashboard } from './Dashboard';
 import { TransactionView } from './TransactionView';
 import { SettingsView } from './components/SettingsView';
-import { ChartsView } from './components/ChartsView';
+import { ChartsView } from './ChartsView';
 import { AIInsights } from './components/AIInsights';
 import { LoginView } from './LoginView';
 import { AppState, View, Transaction, GlobalFilter, MultiBookState, BookMetadata, BookColor } from './types';
