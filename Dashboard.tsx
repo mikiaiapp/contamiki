@@ -61,10 +61,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return `${day}/${month}/${year.slice(-2)}`;
   };
 
+  const monthShorts = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
   const formatDateTick = (dateStr: string) => {
     if (!dateStr) return '';
     const date = new Date(dateStr);
-    return `${date.getDate()}/${date.getMonth() + 1}`;
+    if (isNaN(date.getTime())) return dateStr;
+
+    // Use local filter to decide formatting context
+    if (localChartFilter.timeRange === 'MONTH') {
+        return `${date.getDate()}/${date.getMonth() + 1}`;
+    } else {
+        return `${monthShorts[date.getMonth()]} ${date.getFullYear().toString().slice(-2)}`;
+    }
   };
 
   const compactCurrency = (value: number) => {
@@ -230,6 +239,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const categoryChartData = useMemo(() => {
       if (!categoryChartTarget) return [];
       
+      const isMonthly = localChartFilter.timeRange === 'MONTH';
+
       // Re-calculate bounds for local chart filter
       const y = localChartFilter.referenceDate.getFullYear();
       const m = localChartFilter.referenceDate.getMonth();
@@ -250,14 +261,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
           t.date >= start && t.date <= end
       ).sort((a, b) => a.date.localeCompare(b.date));
 
-      // Aggregate by date to handle multiple transactions in same day
-      const dailyMap = new Map<string, number>();
+      // Aggregate by date (Day or Month)
+      const dataMap = new Map<string, number>();
+      
       relevant.forEach(t => {
           const val = Math.abs(t.amount);
-          dailyMap.set(t.date, (dailyMap.get(t.date) || 0) + val);
+          // If monthly filter, key is full date. Else key is YYYY-MM
+          const key = isMonthly ? t.date : (t.date.substring(0, 7) + '-01');
+          dataMap.set(key, (dataMap.get(key) || 0) + val);
       });
 
-      return Array.from(dailyMap.entries())
+      return Array.from(dataMap.entries())
           .map(([date, amount]) => ({ date, amount }))
           .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -583,9 +597,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                 <Tooltip 
                                     content={({ active, payload, label }) => {
                                         if (active && payload && payload.length) {
+                                            const formattedLabel = formatDateTick(label);
                                             return (
                                                 <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs">
-                                                    <p className="font-black text-slate-500 mb-1">{formatDateDisplay(label)}</p>
+                                                    <p className="font-black text-slate-500 mb-1">{formattedLabel}</p>
                                                     <div className="flex items-center gap-2 font-bold text-indigo-600">
                                                         <span>Gasto:</span>
                                                         <span>{formatCurrency(payload[0].value as number)}</span>

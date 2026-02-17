@@ -20,12 +20,6 @@ const compactCurrency = (value: number) => {
     return value.toString();
 };
 
-const formatDateTick = (dateStr: string) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return `${date.getDate()}/${date.getMonth() + 1}`;
-};
-
 export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFilter, currentBook }) => {
   const [activeTab, setActiveTab] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [chartType, setChartType] = useState<'PIE' | 'LINE'>('PIE');
@@ -36,6 +30,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
   // Helpers for Header Navigation
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  const monthShorts = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
   const navigatePeriod = (direction: 'prev' | 'next') => {
     const newDate = new Date(filter.referenceDate);
@@ -52,6 +47,30 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
     }
     return logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
   }, [currentBook.logo]);
+
+  // Determine if we are in "Detailed Daily Mode" or "Aggregated Monthly Mode"
+  const isMonthlyView = filter.timeRange === 'MONTH';
+
+  const formatDateTick = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr; // Fallback for pure month strings if passed differently
+
+    if (isMonthlyView) {
+        // Daily view: 01/05
+        return `${date.getDate()}/${date.getMonth() + 1}`;
+    } else {
+        // Monthly view: Ene 24
+        return `${monthShorts[date.getMonth()]} ${date.getFullYear().toString().slice(-2)}`;
+    }
+  };
+
+  const renderIcon = (iconStr: string, className = "w-6 h-6") => {
+    if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) {
+        return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
+    }
+    return <span className="text-xl">{iconStr || '🔹'}</span>;
+  };
 
   // --- DATA PROCESSING HELPERS ---
 
@@ -75,64 +94,72 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
     const timeline = new Map<string, number>();
     const sortedTx = [...data.transactions].sort((a, b) => a.date.localeCompare(b.date));
     
-    // Initial balance calculation (sum of initial balances of all accounts)
+    // Initial balance calculation
     let runningBalance = data.accounts.reduce((acc, a) => acc + a.initialBalance, 0);
     
     // Fill timeline
     sortedTx.forEach(t => {
+      // Calculate effect on balance
+      let amt = 0;
+      if (t.type === 'EXPENSE' || t.type === 'TRANSFER') amt = -Math.abs(t.amount);
+      else amt = Math.abs(t.amount);
+
+      // Correction: Internal transfers shouldn't change global balance unless one account is hidden/external
+      // Simplifying: assuming sum of all accounts
+      const isInternal = t.type === 'TRANSFER' && t.transferAccountId && data.accounts.find(a=>a.id===t.transferAccountId);
+      if (isInternal) amt = 0;
+
       if (t.date < dateBounds.start) {
-         // Apply to initial balance if before period
-         const amt = t.type === 'EXPENSE' || t.type === 'TRANSFER' ? -Math.abs(t.amount) : Math.abs(t.amount);
-         // Correction: Transfers within own accounts shouldn't change global balance, 
-         // but here we simplify assuming simple sum. Ideally filter out internal transfers.
-         if (t.type !== 'TRANSFER' || (t.transferAccountId && !data.accounts.find(a=>a.id===t.transferAccountId))) {
-             runningBalance += amt;
-         }
+         runningBalance += amt;
       } else if (t.date <= dateBounds.end) {
-         const amt = t.type === 'EXPENSE' || t.type === 'TRANSFER' ? -Math.abs(t.amount) : Math.abs(t.amount);
-         if (t.type !== 'TRANSFER') {
-             runningBalance += amt;
-             timeline.set(t.date, runningBalance);
+         runningBalance += amt;
+         // Key determination: Day vs Month
+         let key = t.date;
+         if (!isMonthlyView) {
+             // For monthly view, we want the LAST balance of the month.
+             // Key format: YYYY-MM-01 (to parse correctly as date in charts) or just YYYY-MM
+             // We use YYYY-MM-01 to ensure it sorts and parses easily as a Date object
+             key = t.date.substring(0, 7) + '-01'; 
          }
+         // Map.set overwrites, so we always get the balance after the LAST transaction of that period
+         timeline.set(key, runningBalance);
       }
     });
 
-    const result = Array.from(timeline.entries()).map(([date, balance]) => ({ date, balance }));
+    const result = Array.from(timeline.entries())
+        .map(([date, balance]) => ({ date, balance }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+        
     if (result.length === 0) return [];
 
-    // Trend Calculation (Simple Linear Regression)
-    if (result.length > 5) {
+    // Trend Calculation
+    if (result.length > 3) {
         const n = result.length;
         let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-        result.forEach((p, i) => {
-            sumX += i;
-            sumY += p.balance;
-            sumXY += i * p.balance;
-            sumXX += i * i;
-        });
+        result.forEach((p, i) => { sumX += i; sumY += p.balance; sumXY += i * p.balance; sumXX += i * i; });
         const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
         const intercept = (sumY - slope * sumX) / n;
 
-        // Project 3 periods ahead
         const lastDate = new Date(result[result.length - 1].date);
         for (let i = 1; i <= 3; i++) {
-            lastDate.setDate(lastDate.getDate() + 10); // +10 days approx steps
+            if (isMonthlyView) lastDate.setDate(lastDate.getDate() + 5);
+            else lastDate.setMonth(lastDate.getMonth() + 1); // Project next months
+            
             const nextVal = slope * (n + i) + intercept;
             result.push({ date: lastDate.toISOString().split('T')[0], balance: nextVal, isProjection: true } as any);
         }
     }
     return result;
-  }, [data.transactions, dateBounds, data.accounts]);
+  }, [data.transactions, dateBounds, data.accounts, isMonthlyView]);
 
   // 2. BREAKDOWN DATA (Pie & Line)
   const breakdownData = useMemo(() => {
       const familyMap = new Map<string, { total: number, history: Map<string, number>, name: string, icon: string }>();
       const categoryMap = new Map<string, { total: number, history: Map<string, number>, name: string, icon: string }>();
 
-      // Filter active transactions
       const relevantTx = data.transactions.filter(t => 
           t.date >= dateBounds.start && t.date <= dateBounds.end &&
-          t.type === activeTab // INCOME or EXPENSE
+          t.type === activeTab
       );
 
       relevantTx.forEach(t => {
@@ -142,55 +169,68 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
           
           if (fam && cat) {
               const val = Math.abs(t.amount);
+              // Key: YYYY-MM-DD or YYYY-MM-01
+              const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01');
               
-              // Family Aggregation
               if (!familyMap.has(fam.id)) familyMap.set(fam.id, { total: 0, history: new Map(), name: fam.name, icon: fam.icon });
               const fEntry = familyMap.get(fam.id)!;
               fEntry.total += val;
-              fEntry.history.set(t.date, (fEntry.history.get(t.date) || 0) + val);
+              fEntry.history.set(key, (fEntry.history.get(key) || 0) + val);
 
-              // Category Aggregation (Only if belonging to selected family or generally)
               if (selectedFamilyId && fam.id === selectedFamilyId) {
                   if (!categoryMap.has(cat.id)) categoryMap.set(cat.id, { total: 0, history: new Map(), name: cat.name, icon: cat.icon });
                   const cEntry = categoryMap.get(cat.id)!;
                   cEntry.total += val;
-                  cEntry.history.set(t.date, (cEntry.history.get(t.date) || 0) + val);
+                  cEntry.history.set(key, (cEntry.history.get(key) || 0) + val);
               }
           }
       });
 
-      // Format for Pie Chart
       const pieData = Array.from(selectedFamilyId ? categoryMap.entries() : familyMap.entries()).map(([id, d]) => ({
           id, name: d.name, value: d.total, icon: d.icon
       })).sort((a, b) => b.value - a.value);
 
-      // Format for Line Chart
-      // Get all unique dates
+      // Line Data Construction
       const allDates = new Set<string>();
-      relevantTx.forEach(t => allDates.add(t.date));
+      // Collect all keys from all histories
+      const mapToUse = selectedFamilyId ? categoryMap : familyMap;
+      mapToUse.forEach(v => {
+          for (const k of v.history.keys()) allDates.add(k);
+      });
+      
       const sortedDates = Array.from(allDates).sort();
 
       const lineData = sortedDates.map(date => {
           const point: any = { date };
-          const mapToUse = selectedFamilyId ? categoryMap : familyMap;
           mapToUse.forEach((v, k) => {
               point[v.name] = v.history.get(date) || 0;
           });
           return point;
       });
 
-      // Specific Category Line Data (Section 4)
+      // Specific Category Line Data
       let catLineData: any[] = [];
       if (selectedCategoryId) {
           const cat = data.categories.find(c => c.id === selectedCategoryId);
           if (cat) {
-             const catTx = relevantTx.filter(t => t.categoryId === selectedCategoryId).sort((a, b) => a.date.localeCompare(b.date));
-             catLineData = catTx.map(t => ({ date: t.date, value: Math.abs(t.amount) }));
+             // We can reuse the loop or filter again. Filtering is cleaner.
+             const catTx = relevantTx.filter(t => t.categoryId === selectedCategoryId);
+             
+             // Aggregate manually
+             const aggMap = new Map<string, number>();
+             catTx.forEach(t => {
+                 const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01');
+                 aggMap.set(key, (aggMap.get(key) || 0) + Math.abs(t.amount));
+             });
+
+             catLineData = Array.from(aggMap.entries())
+                .map(([date, value]) => ({ date, value }))
+                .sort((a, b) => a.date.localeCompare(b.date));
           }
       }
 
       return { pieData, lineData, catLineData };
-  }, [data.transactions, activeTab, dateBounds, selectedFamilyId, selectedCategoryId, data.categories, data.families]);
+  }, [data.transactions, activeTab, dateBounds, selectedFamilyId, selectedCategoryId, data.categories, data.families, isMonthlyView]);
 
   // UI Components
   const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, icon }: any) => {
@@ -205,21 +245,15 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
     ) : null;
   };
 
-  const renderIcon = (iconStr: string, className = "w-6 h-6") => {
-    if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) {
-        return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
-    }
-    return <span className="text-xl">{iconStr || '🔹'}</span>;
-  };
-
   const selectedFamily = data.families.find(f => f.id === selectedFamilyId);
   const selectedCategory = data.categories.find(c => c.id === selectedCategoryId);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
       if (active && payload && payload.length) {
+          const title = formatDateTick(label); // Use the same formatter
           return (
               <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs">
-                  <p className="font-black text-slate-500 mb-2">{label}</p>
+                  <p className="font-black text-slate-500 mb-2">{title}</p>
                   {payload.map((p: any, idx: number) => (
                       <div key={idx} style={{ color: p.color }} className="flex items-center gap-2 font-bold">
                           <span>{p.name}:</span>
