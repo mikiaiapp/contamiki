@@ -1,22 +1,57 @@
 import React, { useMemo, useState } from 'react';
-import { AppState, GlobalFilter, Family, Category } from '../types';
+import { AppState, GlobalFilter, Family, Category, BookMetadata } from '../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, Legend, ReferenceLine } from 'recharts';
-import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, Wallet, X } from 'lucide-react';
+import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, Wallet, X, ChevronLeft } from 'lucide-react';
 
 interface ChartsViewProps {
   data: AppState;
   filter: GlobalFilter;
+  onUpdateFilter: (f: GlobalFilter) => void;
+  currentBook: BookMetadata;
 }
 
 const COLORS = ['#6366f1', '#10b981', '#f43f5e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 const NUMBER_FORMATTER = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter }) => {
+const compactCurrency = (value: number) => {
+    if (Math.abs(value) >= 1000) {
+        return (value / 1000).toFixed(1) + 'k';
+    }
+    return value.toString();
+};
+
+const formatDateTick = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return `${date.getDate()}/${date.getMonth() + 1}`;
+};
+
+export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFilter, currentBook }) => {
   const [activeTab, setActiveTab] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [chartType, setChartType] = useState<'PIE' | 'LINE'>('PIE');
   const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [catChartType, setCatChartType] = useState<'PIE' | 'LINE'>('PIE');
+
+  // Helpers for Header Navigation
+  const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
+  const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+  const navigatePeriod = (direction: 'prev' | 'next') => {
+    const newDate = new Date(filter.referenceDate);
+    const step = direction === 'next' ? 1 : -1;
+    if (filter.timeRange === 'MONTH') newDate.setMonth(newDate.getMonth() + step);
+    else if (filter.timeRange === 'YEAR') newDate.setFullYear(newDate.getFullYear() + step);
+    onUpdateFilter({ ...filter, referenceDate: newDate });
+  };
+
+  const displayLogo = useMemo(() => {
+    let logo = currentBook.logo;
+    if (logo && logo.startsWith('/api/')) {
+        return `${logo}&key=${localStorage.getItem('auth_token')}`;
+    }
+    return logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
+  }, [currentBook.logo]);
 
   // --- DATA PROCESSING HELPERS ---
 
@@ -193,12 +228,72 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter }) => {
   return (
     <div className="space-y-12 animate-in fade-in duration-500 pb-20">
         {/* HEADER */}
-        <div className="text-center md:text-left space-y-2">
-            <div className="flex items-center justify-center md:justify-start gap-4">
-                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center"><PieIcon size={24}/></div>
-                <h2 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tighter">Gráficos.</h2>
+        <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8">
+            <div className="space-y-4 w-full xl:w-auto">
+                <div className="flex items-center justify-center md:justify-start gap-6">
+                    <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-3xl shadow-sm border border-slate-100 p-1.5 shrink-0 overflow-hidden">
+                        <img src={displayLogo} className="w-full h-full object-cover rounded-2xl" onError={(e) => e.currentTarget.src = "/contamiki.jpg"} />
+                    </div>
+                    <h2 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tighter">Gráficos.</h2>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => navigatePeriod('prev')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={24} /></button>
+                        <button onClick={() => navigatePeriod('next')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={24} /></button>
+                    </div>
+
+                    <div className="bg-slate-100 p-2 rounded-2xl flex flex-wrap gap-1 shadow-inner border border-slate-200/50">
+                        {/* TODO */}
+                        <button 
+                            onClick={() => onUpdateFilter({...filter, timeRange: 'ALL'})} 
+                            className={`px-6 py-3 text-xs sm:text-sm font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                            Todo
+                        </button>
+
+                        {/* AÑO */}
+                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center ${filter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>
+                             {filter.timeRange === 'YEAR' ? (
+                                <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[60px]" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'YEAR', referenceDate: d}); }}>
+                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                             ) : (
+                                <button onClick={() => onUpdateFilter({...filter, timeRange: 'YEAR'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>
+                             )}
+                        </div>
+
+                        {/* MES */}
+                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-1 ${filter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>
+                            {filter.timeRange === 'MONTH' ? (
+                                <div className="flex items-center gap-2">
+                                    <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[80px]" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
+                                        {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                    </select>
+                                    <span className="text-slate-300 text-xs font-black">/</span>
+                                    <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[70px]" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
+                                        {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                    </select>
+                                </div>
+                            ) : (
+                                <button onClick={() => onUpdateFilter({...filter, timeRange: 'MONTH'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Mes</button>
+                            )}
+                        </div>
+
+                        {/* PERSONALIZADO */}
+                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-2 ${filter.timeRange === 'CUSTOM' ? 'bg-white shadow-sm' : ''}`}>
+                            {filter.timeRange === 'CUSTOM' ? (
+                                <div className="flex items-center gap-2">
+                                    <input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-28 sm:w-32 cursor-pointer py-1" value={filter.customStart} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customStart: e.target.value})} />
+                                    <span className="text-slate-300 text-[10px] font-black">➡</span>
+                                    <input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-28 sm:w-32 cursor-pointer py-1" value={filter.customEnd} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customEnd: e.target.value})} />
+                                </div>
+                            ) : (
+                                <button onClick={() => onUpdateFilter({...filter, timeRange: 'CUSTOM'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Pers.</button>
+                            )}
+                        </div>
+                    </div>
+                </div>
             </div>
-            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em]">Análisis visual de tendencias</p>
         </div>
 
         {/* SECTION 1: SAVINGS EVOLUTION */}
@@ -215,7 +310,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter }) => {
             ) : (
                 <div className="h-[300px] w-full">
                     <ResponsiveContainer width="99%" height="100%">
-                        <AreaChart data={savingsData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <AreaChart data={savingsData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
@@ -223,8 +318,22 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter }) => {
                                 </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis dataKey="date" hide />
-                            <YAxis hide domain={['auto', 'auto']} />
+                            <XAxis 
+                                dataKey="date" 
+                                tickFormatter={formatDateTick} 
+                                style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }}
+                                tickLine={false}
+                                axisLine={false}
+                                dy={10}
+                            />
+                            <YAxis 
+                                domain={['auto', 'auto']}
+                                tickFormatter={compactCurrency}
+                                style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }}
+                                tickLine={false}
+                                axisLine={false}
+                                width={40}
+                            />
                             <Tooltip content={<CustomTooltip />} />
                             <ReferenceLine x={savingsData.find(d => (d as any).isProjection)?.date} stroke="#cbd5e1" strokeDasharray="3 3" />
                             <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" name="Patrimonio" />
@@ -290,10 +399,23 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter }) => {
                                     />
                                 </PieChart>
                             ) : (
-                                <LineChart data={breakdownData.lineData}>
+                                <LineChart data={breakdownData.lineData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="date" hide />
-                                    <YAxis hide />
+                                    <XAxis 
+                                        dataKey="date" 
+                                        tickFormatter={formatDateTick} 
+                                        style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        dy={10}
+                                    />
+                                    <YAxis 
+                                        tickFormatter={compactCurrency} 
+                                        style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        width={40}
+                                    />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }} />
                                     {Object.keys(breakdownData.lineData[0] || {}).filter(k => k !== 'date').map((key, idx) => (
@@ -362,10 +484,23 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter }) => {
                                     />
                                 </PieChart>
                             ) : (
-                                <LineChart data={breakdownData.lineData}>
+                                <LineChart data={breakdownData.lineData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="date" hide />
-                                    <YAxis hide />
+                                    <XAxis 
+                                        dataKey="date" 
+                                        tickFormatter={formatDateTick} 
+                                        style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        dy={10}
+                                    />
+                                    <YAxis 
+                                        tickFormatter={compactCurrency} 
+                                        style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        width={40}
+                                    />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }} />
                                     {Object.keys(breakdownData.lineData[0] || {}).filter(k => k !== 'date').map((key, idx) => (
@@ -395,10 +530,23 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter }) => {
                 <div className="bg-white p-6 md:p-10 rounded-[3rem] shadow-sm border border-slate-100">
                     <div className="h-[250px] w-full">
                         <ResponsiveContainer width="99%" height="100%">
-                            <LineChart data={breakdownData.catLineData}>
+                            <LineChart data={breakdownData.catLineData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="date" hide />
-                                <YAxis hide />
+                                <XAxis 
+                                    dataKey="date" 
+                                    tickFormatter={formatDateTick} 
+                                    style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    dy={10}
+                                />
+                                <YAxis 
+                                    tickFormatter={compactCurrency} 
+                                    style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    width={40}
+                                />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', marginTop: '10px' }} />
                                 <Line type="monotone" dataKey="value" name={selectedCategory.name} stroke="#f59e0b" strokeWidth={4} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: 'white' }} activeDot={{ r: 6 }} />

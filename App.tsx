@@ -193,7 +193,7 @@ const App: React.FC = () => {
     >
       {currentView === 'RESUMEN' && <Dashboard data={currentAppData} onAddTransaction={(t) => updateCurrentBookData({ transactions: [t, ...currentAppData.transactions] })} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }} currentBook={currentBookMeta} />}
       {currentView === 'TRANSACTIONS' && <TransactionView data={currentAppData} onAddTransaction={(t) => updateCurrentBookData({ transactions: [t, ...currentAppData.transactions] })} onDeleteTransaction={(id) => updateCurrentBookData({ transactions: currentAppData.transactions.filter(tx => tx.id !== id) })} onUpdateTransaction={(t) => updateCurrentBookData({ transactions: currentAppData.transactions.map(tx => tx.id === t.id ? t : tx) })} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} initialSpecificFilters={pendingSpecificFilters} clearSpecificFilters={() => setPendingSpecificFilters(null)} currentBook={currentBookMeta} />}
-      {currentView === 'CHARTS' && <ChartsView data={currentAppData} filter={globalFilter} />}
+      {currentView === 'CHARTS' && <ChartsView data={currentAppData} filter={globalFilter} onUpdateFilter={setGlobalFilter} currentBook={currentBookMeta} />}
       {currentView === 'SETTINGS' && <SettingsView data={currentAppData} books={multiState.booksMetadata} currentBookId={multiState.currentBookId} multiState={multiState} onUpdateData={updateCurrentBookData} onReplaceFullState={handleReplaceFullState} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }} onDeleteBook={handleDeleteBook} />}
       {currentView === 'AI_INSIGHTS' && <AIInsights data={currentAppData} />}
       
@@ -205,7 +205,7 @@ const App: React.FC = () => {
                       <input type="text" className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500" placeholder="Nombre..." value={tempBookName} onChange={e => setTempBookName(e.target.value)} />
                       <div className="grid grid-cols-3 gap-2">{(['BLACK', 'BLUE', 'ROSE', 'EMERALD', 'AMBER', 'VIOLET'] as BookColor[]).map(c => (<button key={c} onClick={() => setTempBookColor(c)} className={`h-10 rounded-xl flex items-center justify-center transition-all ${tempBookColor === c ? 'ring-2 ring-indigo-500 scale-105' : 'opacity-60'}`} style={{ backgroundColor: c === 'BLACK' ? '#020617' : c === 'BLUE' ? '#2563eb' : c === 'ROSE' ? '#f43f5e' : c === 'EMERALD' ? '#10b981' : c === 'AMBER' ? '#f59e0b' : '#7c3aed' }}>{tempBookColor === c && <Check className="text-white" size={16} />}</button>))}</div>
                   </div>
-                  <button onClick={handleSaveBook} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] tracking-widest">Guardar</button>
+                  <button onClick={handleSaveBook} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest">Guardar</button>
               </div>
           </div>
       )}

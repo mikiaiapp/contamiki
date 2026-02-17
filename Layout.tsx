@@ -81,7 +81,16 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
   const bgClass = THEME_COLORS[currentBook.color] || THEME_COLORS.BLACK;
   const accentClass = THEME_ACCENTS[currentBook.color] || THEME_ACCENTS.BLACK;
 
-  const displayLogo = currentBook.logo || customLogo || "/contamiki.jpg";
+  // Lógica centralizada para mostrar el logo correcto en sidebar/mobile
+  const displayLogo = useMemo(() => {
+    let logo = currentBook.logo;
+    // Si es una ruta de API protegida, adjuntamos el token
+    if (logo && logo.startsWith('/api/')) {
+        return `${logo}&key=${localStorage.getItem('auth_token')}`;
+    }
+    // Fallback a customLogo local o default
+    return logo || customLogo || "/contamiki.jpg";
+  }, [currentBook.logo, customLogo]);
 
   const mainNavItems: { id: View; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'RESUMEN', label: 'Resumen', icon: <LayoutDashboard size={22} />, badge: pendingRecurrentsCount },
