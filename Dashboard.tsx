@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
-import { AppState, GlobalFilter, Transaction, BookMetadata } from './types';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { TrendingUp, TrendingDown, Wallet, ArrowUpCircle, ArrowDownCircle, X, Plus } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category, Family, BookMetadata } from './types';
+import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown, Calendar, TrendingUp } from 'lucide-react';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts';
 
 interface DashboardProps {
   data: AppState;
@@ -13,189 +13,678 @@ interface DashboardProps {
   currentBook: BookMetadata;
 }
 
-const numberFormatter = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const formatCurrency = (amount: number) => `${numberFormatter.format(amount)} €`;
-const formatDateDisplay = (dateStr: string) => {
-    if (!dateStr) return '--/--/--';
-    const [y, m, d] = dateStr.split('-');
-    return `${d}/${m}/${y.slice(-2)}`;
-};
-const getAmountColor = (amount: number) => amount > 0 ? 'text-emerald-600' : amount < 0 ? 'text-rose-600' : 'text-slate-400';
+// Formateador estático para evitar recreación en render
+const numberFormatter = new Intl.NumberFormat('de-DE', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, onUpdateData, filter, onUpdateFilter, onNavigateToTransactions, currentBook }) => {
-  const [pointDetailTxs, setPointDetailTxs] = useState<{ date: string, txs: Transaction[] } | null>(null);
+  const { transactions, accounts, families, categories, accountGroups, recurrents = [] } = data;
   const [showBalanceDetail, setShowBalanceDetail] = useState(false);
+  const [showRecurrentsModal, setShowRecurrentsModal] = useState(false);
+  
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
+  
+  // Chart Modal States
+  const [categoryChartTarget, setCategoryChartTarget] = useState<Category | null>(null);
+  const [localChartFilter, setLocalChartFilter] = useState<GlobalFilter>(filter);
+  
+  // Point Detail Modal State
+  const [pointDetailTxs, setPointDetailTxs] = useState<{ date: string, txs: Transaction[] } | null>(null);
 
-  // Filter transactions based on global filter
-  const filteredTransactions = useMemo(() => {
+  const displayLogo = useMemo(() => {
+    let logo = currentBook.logo;
+    if (logo && logo.startsWith('/api/')) {
+        return `${logo}&key=${localStorage.getItem('auth_token')}`;
+    }
+    return logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
+  }, [currentBook.logo]);
+
+  // Sync initial filter when opening chart to "Last 12 Closed Months"
+  useEffect(() => {
+      if (categoryChartTarget) {
+          const now = new Date();
+          // Calcular los últimos 12 meses FINALIZADOS
+          // Fecha Fin: Último día del mes anterior
+          const end = new Date(now.getFullYear(), now.getMonth(), 0);
+          // Fecha Inicio: Primer día del mes, 11 meses antes del mes fin (total 12 meses)
+          const start = new Date(end.getFullYear(), end.getMonth() - 11, 1);
+          
+          const fmt = (d: Date) => d.toISOString().split('T')[0];
+          
+          setLocalChartFilter({
+              timeRange: 'CUSTOM', // Usamos Custom para definir el rango exacto
+              referenceDate: now,
+              customStart: fmt(start),
+              customEnd: fmt(end)
+          });
+      }
+  }, [categoryChartTarget]);
+
+  // --- CAPA 1: INDEXACIÓN ESTRUCTURAL ---
+  const indices = useMemo(() => {
+      const acc = new Map(accounts.map(a => [a.id, a]));
+      const fam = new Map(families.map(f => [f.id, f]));
+      const cat = new Map(categories.map(c => [c.id, c]));
+      const grp = new Map(accountGroups.map(g => [g.id, g]));
+      return { acc, fam, cat, grp };
+  }, [accounts, families, categories, accountGroups]);
+
+  const formatDateDisplay = (dateStr: string) => {
+    if (!dateStr) return '--/--/--';
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year.slice(-2)}`;
+  };
+
+  const monthShorts = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+  const formatDateTick = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+
+    // Use local filter to decide formatting context
+    if (localChartFilter.timeRange === 'MONTH') {
+        return `${date.getDate()}/${date.getMonth() + 1}`;
+    } else {
+        return `${monthShorts[date.getMonth()]} ${date.getFullYear().toString().slice(-2)}`;
+    }
+  };
+
+  const compactCurrency = (value: number) => {
+    if (Math.abs(value) >= 1000) {
+        return (value / 1000).toFixed(1) + 'k';
+    }
+    return value.toString();
+  };
+
+  const formatCurrency = (amount: number) => `${numberFormatter.format(amount)} €`;
+
+  const getAmountColor = (amount: number) => {
+    if (amount > 0) return 'text-emerald-600';
+    if (amount < 0) return 'text-rose-600';
+    return 'text-slate-400';
+  };
+
+  const pendingRecurrents = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return recurrents.filter(r => r.active && r.nextDueDate <= today);
+  }, [recurrents]);
+
+  // --- CAPA 2: LÍMITES TEMPORALES ---
+  const dateBounds = useMemo(() => {
     const y = filter.referenceDate.getFullYear();
     const m = filter.referenceDate.getMonth();
-    let start = '', end = '';
+    let startStr = ''; let endStr = '';
 
     if (filter.timeRange === 'MONTH') {
-      start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
-      end = `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`;
+      startStr = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      endStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
     } else if (filter.timeRange === 'YEAR') {
-      start = `${y}-01-01`; end = `${y}-12-31`;
+      startStr = `${y}-01-01`; 
+      endStr = `${y}-12-31`;
     } else if (filter.timeRange === 'CUSTOM') {
-      start = filter.customStart || '1900-01-01'; end = filter.customEnd || '2100-12-31';
+      startStr = filter.customStart || '1900-01-01';
+      endStr = filter.customEnd || '2100-12-31';
+    } else {
+      startStr = '1900-01-01';
+      endStr = '2100-12-31';
     }
+    return { startStr, endStr };
+  }, [filter.timeRange, filter.referenceDate, filter.customStart, filter.customEnd]);
+
+  // --- CAPA 3: MOTOR DE CÁLCULO ---
+  const dashboardData = useMemo(() => {
+    const accTotals = new Map<string, number>();
+    accounts.forEach(a => accTotals.set(a.id, a.initialBalance));
+
+    const incomeFlow = new Map<string, { total: number, cats: Map<string, number> }>();
+    const expenseFlow = new Map<string, { total: number, cats: Map<string, number> }>();
+
+    const start = dateBounds.startStr;
+    const end = dateBounds.endStr;
+    const isAllTime = filter.timeRange === 'ALL';
+
+    for (const t of transactions) {
+      // A) Cálculo de Saldos (Acumulativo hasta fecha fin del filtro)
+      if (t.date <= end) {
+        let effectiveAmount = t.amount;
+        if (t.type === 'EXPENSE' || t.type === 'TRANSFER') effectiveAmount = -Math.abs(t.amount);
+        else effectiveAmount = Math.abs(t.amount);
+
+        const currentSrc = accTotals.get(t.accountId) || 0;
+        accTotals.set(t.accountId, currentSrc + effectiveAmount);
+
+        if (t.type === 'TRANSFER' && t.transferAccountId) {
+            const currentDst = accTotals.get(t.transferAccountId) || 0;
+            accTotals.set(t.transferAccountId, currentDst - effectiveAmount);
+        }
+      }
+
+      // B) Cálculo de Flujos del Periodo
+      const inPeriod = isAllTime || (t.date >= start && t.date <= end);
+      if (inPeriod && t.type !== 'TRANSFER') {
+          const cat = indices.cat.get(t.categoryId);
+          const familyId = t.familyId || cat?.familyId;
+          const fam = familyId ? indices.fam.get(familyId) : null;
+          
+          let flowAmount = t.amount; 
+          if (t.type === 'EXPENSE') flowAmount = -Math.abs(t.amount);
+          else flowAmount = Math.abs(t.amount);
+
+          if (fam) {
+              const targetFlow = fam.type === 'INCOME' ? incomeFlow : expenseFlow;
+              let famEntry = targetFlow.get(fam.id);
+              if (!famEntry) {
+                  famEntry = { total: 0, cats: new Map() };
+                  targetFlow.set(fam.id, famEntry);
+              }
+              famEntry.total += flowAmount;
+
+              if (cat) {
+                  const currentCatTotal = famEntry.cats.get(cat.id) || 0;
+                  famEntry.cats.set(cat.id, currentCatTotal + flowAmount);
+              }
+          }
+      }
+    }
+
+    const buildHierarchy = (flowMap: Map<string, { total: number, cats: Map<string, number> }>) => {
+        return Array.from(flowMap.entries())
+            .map(([famId, data]) => {
+                const fam = indices.fam.get(famId);
+                if (!fam) return null;
+                const catsArray = Array.from(data.cats.entries())
+                    .map(([catId, amount]) => ({ category: indices.cat.get(catId)!, total: amount }))
+                    .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+                return { family: fam, total: data.total, categories: catsArray };
+            })
+            .filter(Boolean)
+            .sort((a, b) => Math.abs(b!.total) - Math.abs(a!.total)) as { family: Family, total: number, categories: {category: Category, total: number}[] }[];
+    };
+
+    const finalIncomes = buildHierarchy(incomeFlow);
+    const finalExpenses = buildHierarchy(expenseFlow);
     
-    return data.transactions
-        .filter(t => t.date >= start && t.date <= end)
-        .sort((a, b) => b.date.localeCompare(a.date));
-  }, [data.transactions, filter]);
+    const totalIncomeFromFamilies = finalIncomes.reduce((acc, item) => acc + item.total, 0);
+    const totalExpenseFromFamilies = finalExpenses.reduce((acc, item) => acc + item.total, 0);
+    const globalBalance = Array.from(accTotals.values()).reduce((a, b) => a + b, 0);
 
-  // Calculations
-  const { totalIncome, totalExpense, balanceChange } = useMemo(() => {
-    let inc = 0, exp = 0;
-    filteredTransactions.forEach(t => {
-       if (t.type === 'INCOME') inc += t.amount;
-       else if (t.type === 'EXPENSE') exp += Math.abs(t.amount);
-    });
-    return { totalIncome: inc, totalExpense: exp, balanceChange: inc - exp };
-  }, [filteredTransactions]);
+    return {
+        stats: {
+            income: totalIncomeFromFamilies,
+            expense: totalExpenseFromFamilies,
+            balance: globalBalance,
+            periodBalance: totalIncomeFromFamilies + totalExpenseFromFamilies,
+            accTotals
+        },
+        flows: {
+            incomes: finalIncomes,
+            expenses: finalExpenses
+        }
+    };
+  }, [transactions, accounts, dateBounds, indices]);
 
-  const currentTotalBalance = useMemo(() => {
-      // Calculate total balance of all active accounts
-      let initial = 0;
-      data.accounts.forEach(a => { if(a.active !== false) initial += a.initialBalance; });
-      
-      // Add all transactions up to today (or end of filter?) -> Usually current balance implies ALL transactions
-      // But for dashboard context, maybe we want "End of Period Balance"? 
-      // Let's stick to Current Actual Balance (All time)
-      const allTxSum = data.transactions.reduce((acc, t) => {
-           // Exclude transfers that are internal if we sum everything, but here we just sum amounts relative to accounts.
-           // Actually simpler: sum(incomes) - sum(expenses). Transfers cancel out if both accounts are ours.
-           // However, if we filter by account active status it's complex.
-           // Simplification: Sum all transaction amounts.
-           return acc + t.amount;
-      }, 0);
-      
-      return initial + allTxSum;
-  }, [data.accounts, data.transactions]);
+  // --- CAPA 4: DATOS DE UI (Patrimonio Global corregido con filtros y orden) ---
+  const groupedBalances = useMemo(() => {
+    return accountGroups.map(group => {
+        const groupAccounts = accounts
+            .filter(a => a.groupId === group.id)
+            .map(acc => ({
+                ...acc,
+                balance: dashboardData.stats.accTotals.get(acc.id) || 0
+            }))
+            .filter(acc => Math.abs(acc.balance) >= 0.01) // Ocultar cuentas con saldo 0
+            .sort((a, b) => b.balance - a.balance); // Ordenar cuentas de mayor a menor saldo
+        
+        const groupTotal = groupAccounts.reduce((sum, acc) => sum + acc.balance, 0);
+        
+        return {
+            group,
+            total: groupTotal,
+            accounts: groupAccounts
+        };
+    })
+    .filter(g => Math.abs(g.total) >= 0.01) // Ocultar agrupaciones con saldo total 0
+    .sort((a, b) => b.total - a.total); // Ordenar agrupaciones de mayor a menor saldo total
+  }, [accountGroups, accounts, dashboardData.stats.accTotals]);
 
-  // Chart Data
-  const chartData = useMemo(() => {
-      if (filteredTransactions.length === 0) return [];
+  // --- CHART DATA PREPARATION ---
+  const categoryChartData = useMemo(() => {
+      if (!categoryChartTarget) return [];
       
-      const dailyMap = new Map<string, number>();
-      // Initialize with 0 for range? optional.
+      const isMonthly = localChartFilter.timeRange === 'MONTH';
+
+      // Re-calculate bounds for local chart filter
+      const y = localChartFilter.referenceDate.getFullYear();
+      const m = localChartFilter.referenceDate.getMonth();
+      let start = '', end = '';
+      if (localChartFilter.timeRange === 'MONTH') {
+        start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+        end = `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`;
+      } else if (localChartFilter.timeRange === 'YEAR') {
+        start = `${y}-01-01`; end = `${y}-12-31`;
+      } else if (localChartFilter.timeRange === 'CUSTOM') {
+        start = localChartFilter.customStart || '1900-01-01'; end = localChartFilter.customEnd || '2100-12-31';
+      } else {
+        start = '1900-01-01'; end = '2100-12-31';
+      }
+
+      const relevant = transactions.filter(t => 
+          t.categoryId === categoryChartTarget.id &&
+          t.date >= start && t.date <= end
+      ).sort((a, b) => a.date.localeCompare(b.date));
+
+      // Aggregate by date (Day or Month)
+      const dataMap = new Map<string, number>();
       
-      // We want cumulative or daily? Let's do Daily Net for now, or Cumulative for the period.
-      // Let's do Daily Flow (Income - Expense)
-      filteredTransactions.forEach(t => {
-          const val = t.type === 'EXPENSE' ? t.amount : t.type === 'INCOME' ? t.amount : 0; // Transfers 0 for net flow
-          dailyMap.set(t.date, (dailyMap.get(t.date) || 0) + val);
+      relevant.forEach(t => {
+          // TOTALIZAR DE FORMA NETA: Respetamos el signo.
+          // Gastos = Negativo, Ingresos = Positivo.
+          let effectiveAmount = 0;
+          if (t.type === 'EXPENSE' || t.type === 'TRANSFER') effectiveAmount = -Math.abs(t.amount);
+          else effectiveAmount = Math.abs(t.amount);
+
+          // If monthly filter, key is full date. Else key is YYYY-MM
+          const key = isMonthly ? t.date : (t.date.substring(0, 7) + '-01');
+          dataMap.set(key, (dataMap.get(key) || 0) + effectiveAmount);
       });
 
-      const sortedDates = Array.from(dailyMap.keys()).sort();
-      return sortedDates.map(date => ({ date, value: dailyMap.get(date) || 0 }));
-  }, [filteredTransactions]);
+      return Array.from(dataMap.entries())
+          .map(([date, amount]) => ({ date, amount }))
+          .sort((a, b) => a.date.localeCompare(b.date));
 
-  const handleChartClick = (data: any) => {
-      if (data && data.activePayload && data.activePayload.length > 0) {
-          const clickedDate = data.activePayload[0].payload.date;
-          const txs = filteredTransactions.filter(t => t.date === clickedDate);
-          setPointDetailTxs({ date: clickedDate, txs });
+  }, [categoryChartTarget, localChartFilter, transactions]);
+
+  // Handlers
+  const navigatePeriod = (direction: 'prev' | 'next') => {
+    const newDate = new Date(filter.referenceDate);
+    const step = direction === 'next' ? 1 : -1;
+    if (filter.timeRange === 'MONTH') newDate.setMonth(newDate.getMonth() + step);
+    else if (filter.timeRange === 'YEAR') newDate.setFullYear(newDate.getFullYear() + step);
+    onUpdateFilter({ ...filter, referenceDate: newDate });
+  };
+
+  const navigateChartPeriod = (direction: 'prev' | 'next') => {
+    const newDate = new Date(localChartFilter.referenceDate);
+    const step = direction === 'next' ? 1 : -1;
+    if (localChartFilter.timeRange === 'MONTH') newDate.setMonth(newDate.getMonth() + step);
+    else if (localChartFilter.timeRange === 'YEAR') newDate.setFullYear(newDate.getFullYear() + step);
+    setLocalChartFilter({ ...localChartFilter, referenceDate: newDate });
+  };
+
+  const handleProcessRecurrent = (r: RecurrentMovement) => {
+    const nextDate = calculateNextDate(r.nextDueDate, r.frequency, r.interval);
+    let isActive = true;
+
+    // Verificar si ha superado la fecha final
+    if (r.endDate && nextDate > r.endDate) {
+        isActive = false;
+    }
+
+    const newTx: Transaction = {
+        id: Math.random().toString(36).substring(2, 15),
+        date: r.nextDueDate,
+        description: r.description,
+        amount: r.amount,
+        accountId: r.accountId,
+        transferAccountId: r.transferAccountId,
+        familyId: r.familyId,
+        categoryId: r.categoryId,
+        type: r.type,
+        isFromRecurrence: r.id
+    };
+    onAddTransaction(newTx);
+    onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, nextDueDate: nextDate, active: isActive } : item) });
+  };
+
+  const calculateNextDate = (current: string, frequency: string, interval: number) => {
+    const d = new Date(current);
+    if (frequency === 'DAYS') d.setDate(d.getDate() + interval);
+    else if (frequency === 'WEEKS') d.setDate(d.getDate() + (interval * 7));
+    else if (frequency === 'MONTHLY') d.setMonth(d.getMonth() + interval);
+    else if (frequency === 'YEARS') d.setFullYear(d.getFullYear() + interval);
+    return d.toISOString().split('T')[0];
+  };
+
+  // --- CHART CLICK HANDLER ---
+  const handleChartPointClick = (dataPoint: any) => {
+      if (!dataPoint || !dataPoint.activePayload || !categoryChartTarget) return;
+      const { date } = dataPoint.activePayload[0].payload;
+      
+      const isMonthlyView = localChartFilter.timeRange === 'MONTH';
+      
+      const relatedTxs = transactions.filter(t => {
+          if (t.categoryId !== categoryChartTarget.id) return false;
+          
+          if (isMonthlyView) {
+              return t.date === date;
+          } else {
+              // Year/Custom View: Match YYYY-MM
+              const txMonth = t.date.substring(0, 7); // YYYY-MM
+              const pointMonth = date.substring(0, 7); // YYYY-MM
+              return txMonth === pointMonth;
+          }
+      }).sort((a, b) => a.date.localeCompare(b.date));
+
+      if (relatedTxs.length > 0) {
+          setPointDetailTxs({ date, txs: relatedTxs });
       }
   };
 
+  const renderIcon = (iconStr: string, className = "w-10 h-10") => {
+    if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
+    return <span className="text-xl flex items-center justify-center">{iconStr || '📂'}</span>;
+  };
+
+  const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
+  const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-      
-      {/* SUMMARY CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-slate-900 text-white p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform"><Wallet size={100}/></div>
-              <div className="relative z-10">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Balance Global</p>
-                  <h3 className="text-4xl font-black tracking-tighter mb-1">{formatCurrency(currentTotalBalance)}</h3>
-                  <div className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold uppercase ${balanceChange >= 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
-                      {balanceChange >= 0 ? <TrendingUp size={12}/> : <TrendingDown size={12}/>}
-                      <span>{balanceChange >= 0 ? '+' : ''}{formatCurrency(balanceChange)} este periodo</span>
+    <div className="space-y-8 md:space-y-12 pb-10">
+      {/* HEADER y NAVEGACIÓN TEMPORAL */}
+      <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8">
+        <div className="space-y-4 w-full xl:w-auto">
+            <div className="flex items-center justify-center md:justify-start gap-6">
+                {/* Logo Container - Visible on all screens, larger */}
+                <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-3xl shadow-sm border border-slate-100 p-1.5 shrink-0 overflow-hidden">
+                    <img src={displayLogo} className="w-full h-full object-cover rounded-2xl" onError={(e) => e.currentTarget.src = "/contamiki.jpg"} />
+                </div>
+
+                <div className="flex items-center gap-4">
+                    <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Resumen.</h2>
+                    {pendingRecurrents.length > 0 && (
+                        <button 
+                            onClick={() => setShowRecurrentsModal(true)}
+                            className="bg-rose-500 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg shadow-rose-200 animate-pulse hover:scale-105 transition-transform"
+                        >
+                            <Bell size={18} />
+                            <span className="text-[12px] font-black">{pendingRecurrents.length}</span>
+                        </button>
+                    )}
+                </div>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
+                <div className="flex items-center gap-2">
+                    <button onClick={() => navigatePeriod('prev')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={24} /></button>
+                    <button onClick={() => navigatePeriod('next')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={24} /></button>
+                </div>
+
+                <div className="bg-slate-100 p-2 rounded-2xl flex flex-wrap gap-1 shadow-inner border border-slate-200/50">
+                    {/* TODO */}
+                    <button 
+                        onClick={() => onUpdateFilter({...filter, timeRange: 'ALL'})} 
+                        className={`px-6 py-3 text-xs sm:text-sm font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                        Todo
+                    </button>
+
+                    {/* AÑO */}
+                    <div className={`px-5 py-3 rounded-xl transition-all flex items-center ${filter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>
+                         {filter.timeRange === 'YEAR' ? (
+                            <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[60px]" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'YEAR', referenceDate: d}); }}>
+                                {years.map(y => <option key={y} value={y}>{y}</option>)}
+                            </select>
+                         ) : (
+                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'YEAR'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>
+                         )}
+                    </div>
+
+                    {/* MES */}
+                    <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-1 ${filter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>
+                        {filter.timeRange === 'MONTH' ? (
+                            <div className="flex items-center gap-2">
+                                <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[80px]" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
+                                    {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                </select>
+                                <span className="text-slate-300 text-xs font-black">/</span>
+                                <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[70px]" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
+                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            </div>
+                        ) : (
+                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'MONTH'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Mes</button>
+                        )}
+                    </div>
+
+                    {/* PERSONALIZADO */}
+                    <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-2 ${filter.timeRange === 'CUSTOM' ? 'bg-white shadow-sm' : ''}`}>
+                        {filter.timeRange === 'CUSTOM' ? (
+                            <div className="flex items-center gap-2">
+                                <input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-28 sm:w-32 cursor-pointer py-1" value={filter.customStart} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customStart: e.target.value})} />
+                                <span className="text-slate-300 text-[10px] font-black">➡</span>
+                                <input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-28 sm:w-32 cursor-pointer py-1" value={filter.customEnd} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customEnd: e.target.value})} />
+                            </div>
+                        ) : (
+                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'CUSTOM'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Pers.</button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+      </div>
+
+      {/* TARJETAS KPI SUPERIORES */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-4xl">
+        <button 
+          onClick={() => setShowBalanceDetail(true)}
+          className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col justify-between min-h-[160px] text-left hover:shadow-xl hover:border-indigo-100 transition-all active:scale-[0.98] group"
+        >
+            <div className="bg-indigo-50 text-indigo-600 w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform"><Banknote size={26}/></div>
+            <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Patrimonio Global <span className="text-indigo-300 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">Ver detalle</span></p>
+                <p className={`text-3xl font-black tracking-tight ${getAmountColor(dashboardData.stats.balance)}`}>
+                    {formatCurrency(dashboardData.stats.balance)}
+                </p>
+            </div>
+        </button>
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col justify-between min-h-[160px]">
+            <div className={`${dashboardData.stats.periodBalance >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'} w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-sm`}><Scale size={26}/></div>
+            <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Ahorro del Periodo</p>
+                <p className={`text-3xl font-black tracking-tight ${getAmountColor(dashboardData.stats.periodBalance)}`}>
+                    {formatCurrency(dashboardData.stats.periodBalance)}
+                </p>
+            </div>
+        </div>
+      </div>
+
+      <div className="space-y-16">
+          <section className="space-y-6">
+              <div className="flex items-center justify-between border-b-2 border-emerald-100 pb-4">
+                  <div className="flex items-center gap-3">
+                      <div className="bg-emerald-100 text-emerald-600 p-2.5 rounded-2xl"><ArrowUpCircle size={28}/></div>
+                      <h3 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter">Ingresos</h3>
                   </div>
+                  <span className={`text-2xl md:text-3xl font-black tracking-tighter ${getAmountColor(dashboardData.stats.income)}`}>{formatCurrency(dashboardData.stats.income)}</span>
               </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-between group hover:border-emerald-200 transition-colors">
-              <div className="flex justify-between items-start">
-                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><ArrowUpCircle size={24}/></div>
-                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Ingresos</span>
-              </div>
-              <div>
-                  <h3 className="text-3xl font-black text-slate-900 tracking-tighter">{formatCurrency(totalIncome)}</h3>
-              </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-between group hover:border-rose-200 transition-colors">
-              <div className="flex justify-between items-start">
-                  <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl"><ArrowDownCircle size={24}/></div>
-                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Gastos</span>
-              </div>
-              <div>
-                  <h3 className="text-3xl font-black text-slate-900 tracking-tighter">{formatCurrency(totalExpense)}</h3>
-              </div>
-          </div>
-      </div>
-
-      {/* CHART AREA */}
-      <div className="bg-white p-6 md:p-10 rounded-[3rem] shadow-sm border border-slate-100">
-          <div className="flex justify-between items-center mb-6">
-               <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Flujo Diario</h3>
-          </div>
-          <div className="h-[250px] w-full">
-               {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} onClick={handleChartClick}>
-                        <defs>
-                            <linearGradient id="colorFlow" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
-                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                            </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="date" tickFormatter={(val) => val.split('-')[2]} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
-                        <Tooltip 
-                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                            labelStyle={{ color: '#64748b', fontWeight: 'bold', fontSize: '12px' }}
-                            formatter={(value: number) => [formatCurrency(value), 'Flujo Neto']}
-                        />
-                        <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorFlow)" />
-                    </AreaChart>
-                </ResponsiveContainer>
-               ) : (
-                   <div className="h-full flex items-center justify-center text-slate-300 text-xs font-bold uppercase tracking-widest">Sin datos para graficar</div>
-               )}
-          </div>
-      </div>
-
-      {/* RECENT TRANSACTIONS */}
-      <div className="bg-white p-6 md:p-8 rounded-[3rem] shadow-sm border border-slate-100">
-          <div className="flex justify-between items-center mb-6 px-2">
-              <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Movimientos Recientes</h3>
-              <button onClick={() => onNavigateToTransactions({})} className="text-xs font-black text-indigo-600 uppercase tracking-widest hover:underline">Ver Todo</button>
-          </div>
-          <div className="space-y-2">
-              {filteredTransactions.slice(0, 5).map(t => (
-                  <div key={t.id} className="flex items-center justify-between p-4 hover:bg-slate-50 rounded-2xl transition-colors group">
-                      <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${t.type === 'INCOME' ? 'bg-emerald-50' : t.type === 'EXPENSE' ? 'bg-rose-50' : 'bg-slate-100'}`}>
-                             {t.type === 'INCOME' ? '💰' : t.type === 'EXPENSE' ? '💸' : '↔️'}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {dashboardData.flows.incomes.map(item => (
+                      <div key={item.family.id} className={`bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all ${item.total === 0 ? 'opacity-60' : ''}`}>
+                          <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
+                              <div className="flex items-center gap-3">
+                                  <div className="bg-emerald-50 w-12 h-12 rounded-2xl flex items-center justify-center border border-emerald-100">
+                                      {renderIcon(item.family.icon, "w-7 h-7")}
+                                  </div>
+                                  <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.family.name}</span>
+                              </div>
+                              <span className={`text-lg font-black ${getAmountColor(item.total)}`}>{formatCurrency(item.total)}</span>
                           </div>
-                          <div>
-                              <div className="font-bold text-slate-700 text-sm">{t.description}</div>
-                              <div className="text-[10px] font-bold text-slate-400 uppercase">{formatDateDisplay(t.date)}</div>
+                          <div className="space-y-2">
+                              {item.categories.map(cat => (
+                                  <div key={cat.category.id} onClick={() => setSelectedCategoryAction(cat.category)} className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-emerald-50 cursor-pointer group transition-colors">
+                                      <div className="flex items-center gap-3 overflow-hidden">
+                                          <span className="text-lg group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
+                                          <span className="text-sm font-bold text-slate-600 truncate">{cat.category.name}</span>
+                                      </div>
+                                      <span className={`text-sm font-black opacity-80 group-hover:opacity-100 ${getAmountColor(cat.total)}`}>
+                                          {formatCurrency(cat.total)}
+                                      </span>
+                                  </div>
+                              ))}
                           </div>
                       </div>
-                      <span className={`font-black text-sm ${getAmountColor(t.amount)}`}>{formatCurrency(t.amount)}</span>
+                  ))}
+              </div>
+          </section>
+
+          <section className="space-y-6">
+              <div className="flex items-center justify-between border-b-2 border-rose-100 pb-4">
+                  <div className="flex items-center gap-3">
+                      <div className="bg-rose-100 text-rose-600 p-2.5 rounded-2xl"><ArrowDownCircle size={28}/></div>
+                      <h3 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter">Gastos</h3>
                   </div>
-              ))}
-              {filteredTransactions.length === 0 && (
-                  <div className="text-center py-10 text-slate-400 text-xs font-bold uppercase">No hay movimientos en este periodo</div>
-              )}
-          </div>
+                  <span className={`text-2xl md:text-3xl font-black tracking-tighter ${getAmountColor(dashboardData.stats.expense)}`}>{formatCurrency(dashboardData.stats.expense)}</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {dashboardData.flows.expenses.map(item => (
+                      <div key={item.family.id} className={`bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all ${item.total === 0 ? 'opacity-60' : ''}`}>
+                          <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
+                              <div className="flex items-center gap-3">
+                                  <div className="bg-rose-50 w-12 h-12 rounded-2xl flex items-center justify-center border border-rose-100">
+                                      {renderIcon(item.family.icon, "w-7 h-7")}
+                                  </div>
+                                  <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.family.name}</span>
+                              </div>
+                              <span className={`text-lg font-black ${getAmountColor(item.total)}`}>{formatCurrency(item.total)}</span>
+                          </div>
+                          <div className="space-y-2">
+                              {item.categories.map(cat => (
+                                  <div key={cat.category.id} onClick={() => setSelectedCategoryAction(cat.category)} className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-rose-50 cursor-pointer group transition-colors">
+                                      <div className="flex items-center gap-3 overflow-hidden">
+                                          <span className="text-lg group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
+                                          <span className="text-sm font-bold text-slate-600 truncate">{cat.category.name}</span>
+                                      </div>
+                                      <span className={`text-sm font-black opacity-80 group-hover:opacity-100 ${getAmountColor(cat.total)}`}>
+                                          {formatCurrency(cat.total)}
+                                      </span>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          </section>
       </div>
+
+      {/* MODALES */}
+      {selectedCategoryAction && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
+            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 text-center relative border border-white/20">
+                <button onClick={() => setSelectedCategoryAction(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button>
+                <div className="mx-auto w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 mb-6 shadow-sm text-3xl">
+                    {renderIcon(selectedCategoryAction.icon, "w-10 h-10")}
+                </div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-8">{selectedCategoryAction.name}</h3>
+                <div className="space-y-4">
+                    <button onClick={() => { setSelectedCategoryAction(null); onNavigateToTransactions({ filterCategory: selectedCategoryAction.id }); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-50 text-slate-700 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"><Search size={18}/> Ver Movimientos</button>
+                    <button onClick={() => { setCategoryChartTarget(selectedCategoryAction); setSelectedCategoryAction(null); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-50 text-slate-700 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"><TrendingUp size={18}/> Ver Evolución</button>
+                    <button onClick={() => { setSelectedCategoryAction(null); onNavigateToTransactions({ action: 'NEW', categoryId: selectedCategoryAction.id }); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 transition-all shadow-xl"><PlusCircle size={18}/> Entrada de Movimiento</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* CHART MODAL */}
+      {categoryChartTarget && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
+            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-3xl p-8 sm:p-10 relative border border-white/20">
+                <button onClick={() => setCategoryChartTarget(null)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all z-10"><X size={24}/></button>
+                
+                <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6 mb-8">
+                    <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 shadow-sm text-3xl">
+                            {renderIcon(categoryChartTarget.icon, "w-10 h-10")}
+                        </div>
+                        <div className="text-left">
+                            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{categoryChartTarget.name}</h3>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Análisis de Evolución</p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+                        <div className="flex items-center justify-center gap-1 mb-2 sm:mb-0">
+                            <button onClick={() => navigateChartPeriod('prev')} className="p-2 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100 shadow-sm"><ChevronLeft size={18} /></button>
+                            <button onClick={() => navigateChartPeriod('next')} className="p-2 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100 shadow-sm"><ChevronRight size={18} /></button>
+                        </div>
+                        <div className="bg-slate-100 p-1.5 rounded-2xl flex flex-wrap justify-center sm:justify-end gap-1 w-full sm:w-auto">
+                            {/* Botón 12 Meses (Interanual) */}
+                            <button onClick={() => {
+                                 const now = new Date();
+                                 const end = new Date(now.getFullYear(), now.getMonth(), 0);
+                                 const start = new Date(end.getFullYear(), end.getMonth() - 11, 1);
+                                 const fmt = (d: Date) => d.toISOString().split('T')[0];
+                                 setLocalChartFilter({ timeRange: 'CUSTOM', referenceDate: now, customStart: fmt(start), customEnd: fmt(end) });
+                            }} className={`flex-1 sm:flex-none px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${localChartFilter.timeRange === 'CUSTOM' && !localChartFilter.customStart.startsWith('1900') ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>12 Meses</button>
+
+                            <button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'ALL'})} className={`flex-1 sm:flex-none px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${localChartFilter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Todo</button>
+                            
+                            <div className={`flex-1 sm:flex-none px-3 py-2 rounded-xl transition-all flex items-center justify-center ${localChartFilter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>
+                                {localChartFilter.timeRange === 'YEAR' ? (<select className="bg-transparent text-[9px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'YEAR', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>) : (<button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'YEAR'})} className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>)}
+                            </div>
+                            <div className={`flex-1 sm:flex-none px-3 py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${localChartFilter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>
+                                {localChartFilter.timeRange === 'MONTH' ? (<div className="flex items-center gap-1"><select className="bg-transparent text-[9px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setMonth(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'MONTH', referenceDate: d}); }}>{months.map((m, i) => <option key={i} value={i}>{m.substring(0,3)}</option>)}</select><span className="text-slate-300 text-[9px] font-black">/</span><select className="bg-transparent text-[9px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'MONTH', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div>) : (<button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'MONTH'})} className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Mes</button>)}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="h-[300px] w-full bg-slate-50/50 rounded-[2rem] p-4 border border-slate-100">
+                    {categoryChartData.length > 0 ? (
+                        <ResponsiveContainer width="99%" height="100%">
+                            <LineChart data={categoryChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} onClick={handleChartPointClick} className="cursor-pointer">
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
+                                <XAxis 
+                                    dataKey="date" 
+                                    tickFormatter={formatDateTick} 
+                                    style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    dy={10}
+                                />
+                                <YAxis 
+                                    tickFormatter={compactCurrency} 
+                                    style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }}
+                                    tickLine={false}
+                                    axisLine={false}
+                                />
+                                <Tooltip 
+                                    content={({ active, payload, label }) => {
+                                        if (active && payload && payload.length) {
+                                            const formattedLabel = formatDateTick(label as string);
+                                            const val = payload[0].value as number;
+                                            return (
+                                                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs">
+                                                    <p className="font-black text-slate-500 mb-1">{formattedLabel}</p>
+                                                    <div className={`flex items-center gap-2 font-bold ${getAmountColor(val)}`}>
+                                                        <span>{val >= 0 ? 'Neto:' : 'Neto:'}</span>
+                                                        <span>{formatCurrency(val)}</span>
+                                                    </div>
+                                                    <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Clic para ver detalle</p>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    }}
+                                />
+                                <Line type="monotone" dataKey="amount" stroke="#6366f1" strokeWidth={4} dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: 'white' }} activeDot={{ r: 6 }} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
+                            <TrendingUp size={32} className="opacity-20"/>
+                            <p className="text-[10px] font-black uppercase tracking-widest opacity-50">Sin datos en este periodo</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* DETAIL MODAL FOR CHART POINT */}
       {pointDetailTxs && (
@@ -203,9 +692,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-6 sm:p-8 relative border border-white/20 flex flex-col max-h-[85vh]">
                   <div className="flex justify-between items-center mb-6">
                       <div className="flex flex-col">
-                          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Detalle del Día</h3>
+                          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Detalle del Periodo</h3>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                              {formatDateDisplay(pointDetailTxs.date)}
+                              {localChartFilter.timeRange === 'MONTH' ? formatDateDisplay(pointDetailTxs.date) : formatDateTick(pointDetailTxs.date + '-01')}
                           </p>
                       </div>
                       <button onClick={() => setPointDetailTxs(null)} className="p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button>
@@ -214,11 +703,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                   <div className="overflow-y-auto custom-scrollbar flex-1 -mx-2 px-2">
                       {pointDetailTxs.txs.map(t => (
                           <div key={t.id} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 rounded-xl px-2 transition-colors">
-                              <div className="flex flex-col gap-0.5 flex-1 min-w-0 pr-4">
-                                  <span className="text-xs font-bold text-slate-700 uppercase truncate" title={t.description}>{t.description}</span>
+                              <div className="flex flex-col gap-0.5">
+                                  <span className="text-xs font-bold text-slate-700 uppercase">{t.description}</span>
                                   <span className="text-[9px] text-slate-400 font-medium">{formatDateDisplay(t.date)}</span>
                               </div>
-                              <span className={`text-sm font-black whitespace-nowrap ${getAmountColor(t.amount)}`}>{formatCurrency(t.amount)}</span>
+                              <span className={`text-sm font-black ${getAmountColor(t.amount)}`}>{formatCurrency(t.amount)}</span>
                           </div>
                       ))}
                   </div>
@@ -226,37 +715,87 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
           </div>
       )}
 
-      {/* Balance Detail Modal (Placeholder if needed) */}
       {showBalanceDetail && (
-          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[250] p-4 animate-in fade-in zoom-in duration-300">
-              <div className="bg-white rounded-[2rem] shadow-2xl p-8 max-w-sm w-full relative">
-                  <button onClick={() => setShowBalanceDetail(false)} className="absolute top-4 right-4 p-2 bg-slate-50 rounded-full"><X size={16}/></button>
-                  <h3 className="text-lg font-black uppercase mb-4">Detalle de Cuentas</h3>
-                  <div className="space-y-2">
-                      {data.accounts.filter(a => a.active !== false).map(acc => {
-                          // Calculate balance per account (approx)
-                          // Note: Real balance calculation per account requires filtering all transactions by accountId
-                          const bal = acc.initialBalance + data.transactions.filter(t => t.accountId === acc.id || t.transferAccountId === acc.id).reduce((sum, t) => {
-                              if (t.accountId === acc.id) return sum + t.amount;
-                              if (t.transferAccountId === acc.id) return sum - t.amount; // Transfer IN is positive (t.amount is negative for sender, so we subtract negative? No, logic depends on how transfer is stored)
-                              // Assuming t.amount is negative for expense/transfer-out.
-                              // If t is TRANSFER, amount is negative. Sender (accountId) gets amount. Receiver (transferAccountId) gets -amount.
-                              // Wait, standard logic: Expense is negative. Income is positive. Transfer is negative from Source.
-                              // So Receiver should add abs(amount).
-                              if (t.transferAccountId === acc.id) return sum + Math.abs(t.amount);
-                              return sum;
-                          }, 0);
-                          
-                          return (
-                              <div key={acc.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
-                                  <span className="text-xs font-bold text-slate-600">{acc.name}</span>
-                                  <span className="text-xs font-black">{formatCurrency(bal)}</span>
-                              </div>
-                          );
-                      })}
-                  </div>
-              </div>
-          </div>
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl relative max-h-[90vh] flex flex-col border border-white/20 overflow-hidden">
+                <div className="p-8 sm:p-12 pb-6 flex-none bg-white border-b border-slate-50 relative z-10">
+                    <button onClick={() => setShowBalanceDetail(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                    <div className="flex items-center gap-4">
+                        <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Banknote size={28} /></div>
+                        <div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Desglose de Patrimonio</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Situación al {formatDateDisplay(dateBounds.endStr)}</p></div>
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-8 sm:p-12 pt-6">
+                    <div className="space-y-6">
+                        {groupedBalances.map(groupInfo => {
+                            const isExpanded = expandedGroups.has(groupInfo.group.id);
+                            return (
+                                <div key={groupInfo.group.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm transition-all">
+                                    <button onClick={() => { const newSet = new Set(expandedGroups); if (newSet.has(groupInfo.group.id)) newSet.delete(groupInfo.group.id); else newSet.add(groupInfo.group.id); setExpandedGroups(newSet); }} className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">{renderIcon(groupInfo.group.icon, "w-6 h-6")}</div>
+                                            <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight text-left">{groupInfo.group.name}</h4>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className={`text-base font-black tracking-tighter ${getAmountColor(groupInfo.total)}`}>{formatCurrency(groupInfo.total)}</span>
+                                            <ChevronDown className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} size={20} />
+                                        </div>
+                                    </button>
+                                    {isExpanded && (
+                                        <div className="border-t border-slate-50 bg-slate-50/50 p-3 space-y-2 animate-in slide-in-from-top-2 duration-200">
+                                            {groupInfo.accounts.map(acc => (
+                                                <div key={acc.id} onClick={() => { setShowBalanceDetail(false); onNavigateToTransactions({ filterAccount: acc.id }); }} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-2xl hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer group/row active:scale-[0.99]">
+                                                    <div className="flex items-center gap-3 ml-2">
+                                                        <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden group-hover/row:scale-110 transition-transform">{renderIcon(acc.icon, "w-5 h-5")}</div>
+                                                        <span className="text-[11px] font-bold text-slate-600 uppercase block">{acc.name}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mr-2">
+                                                        <span className={`text-xs font-black ${getAmountColor(acc.balance)}`}>{formatCurrency(acc.balance)}</span>
+                                                        <ChevronRight size={14} className="text-slate-300 group-hover/row:text-indigo-400" />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-center px-4">
+                        <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Patrimonio Neto Total</span>
+                        <span className={`text-3xl font-black tracking-tighter ${getAmountColor(dashboardData.stats.balance)}`}>{formatCurrency(dashboardData.stats.balance)}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {showRecurrentsModal && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
+            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 sm:p-12 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <button onClick={() => setShowRecurrentsModal(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                <div className="flex items-center gap-4 mb-10"><div className="bg-rose-500 p-4 rounded-3xl text-white shadow-xl shadow-rose-500/20"><Bell size={28} /></div><div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Vencimientos</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Movimientos recurrentes pendientes</p></div></div>
+                <div className="space-y-4">
+                    {pendingRecurrents.map(r => {
+                        const acc = indices.acc.get(r.accountId);
+                        const cat = indices.cat.get(r.categoryId);
+                        return (
+                            <div key={r.id} className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4 animate-in slide-in-from-right-4">
+                                <div className="flex justify-between items-start">
+                                    <div className="flex gap-3"><div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-200">{renderIcon(cat?.icon || '📅', "w-6 h-6")}</div><div><p className="text-sm font-black text-slate-900 uppercase tracking-tight">{r.description}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{acc?.name} • Venció el {formatDateDisplay(r.nextDueDate)}</p></div></div>
+                                    <span className={`text-base font-black ${getAmountColor(r.amount)}`}>{formatCurrency(r.amount)}</span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <button onClick={() => handleProcessRecurrent(r)} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-emerald-300 hover:bg-emerald-50 transition-all group active:scale-95"><Check className="text-slate-400 group-hover:text-emerald-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-emerald-600">Validar</span></button>
+                                    <button onClick={() => { const nextDate = calculateNextDate(r.nextDueDate, r.frequency, r.interval); onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, nextDueDate: nextDate } : item) }); }} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-amber-300 hover:bg-amber-50 transition-all group active:scale-95"><Clock className="text-slate-400 group-hover:text-amber-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-amber-600">Posponer</span></button>
+                                    <button onClick={() => onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, active: false } : item) })} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-rose-300 hover:bg-rose-50 transition-all group active:scale-95"><AlertCircle className="text-slate-400 group-hover:text-rose-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-rose-600">Anular</span></button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        </div>
       )}
     </div>
   );
