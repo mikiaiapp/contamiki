@@ -597,7 +597,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                 <Tooltip 
                                     content={({ active, payload, label }) => {
                                         if (active && payload && payload.length) {
-                                            const formattedLabel = formatDateTick(label);
+                                            const formattedLabel = formatDateTick(label as string);
                                             return (
                                                 <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs">
                                                     <p className="font-black text-slate-500 mb-1">{formattedLabel}</p>
