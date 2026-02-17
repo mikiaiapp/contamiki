@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { AppState, GlobalFilter, BookMetadata, Transaction } from './types';
+import { AppState, GlobalFilter, BookMetadata, Transaction } from '../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, Legend, ReferenceLine, BarChart, Bar } from 'recharts';
-import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, ChevronLeft, Home, BarChart3, Grip, Search, X, Scale } from 'lucide-react';
+import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, ChevronLeft, Home, BarChart3, Grip, Search, X } from 'lucide-react';
 
 interface ChartsViewProps {
   data: AppState;
@@ -14,18 +14,32 @@ const COLORS = ['#6366f1', '#10b981', '#f43f5e', '#f59e0b', '#8b5cf6', '#ec4899'
 const NUMBER_FORMATTER = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const compactCurrency = (value: number) => {
-    if (Math.abs(value) >= 1000) {
-        return (value / 1000).toFixed(1).replace('.', ',') + 'k';
-    }
-    return value.toString().replace('.', ',');
+    if (Math.abs(value) >= 1000) return (value / 1000).toFixed(1) + 'k';
+    return value.toString();
 };
 
 const formatCurrency = (amount: number) => `${NUMBER_FORMATTER.format(amount)} €`;
 
-// Helper para color de importe en gráficos
-const getAmountColorClass = (val: number) => {
-    if (val > 0) return 'text-emerald-600';
-    if (val < 0) return 'text-rose-600';
+const formatDateDisplay = (dateStr: string) => {
+    if (!dateStr) return '--/--/--';
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}/${y.slice(-2)}`;
+};
+
+const formatDateLabel = (dateStr: string) => {
+    // For Month format YYYY-MM
+    if (dateStr.length === 7) {
+        const [y, m] = dateStr.split('-');
+        const monthShorts = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+        return `${monthShorts[parseInt(m) - 1]} ${y.substring(2)}`;
+    }
+    // For Full Date
+    return formatDateDisplay(dateStr);
+};
+
+const getAmountColorClass = (amount: number) => {
+    if (amount > 0) return 'text-emerald-600';
+    if (amount < 0) return 'text-rose-600';
     return 'text-slate-500';
 };
 
@@ -116,14 +130,10 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
       const isInternal = t.type === 'TRANSFER' && t.transferAccountId && data.accounts.find(a=>a.id===t.transferAccountId);
       if (isInternal) amt = 0;
 
-      // Calcular balance, sumando con signo (gastos negativos restan)
       if (t.date < dateBounds.start) {
-         if (t.type === 'EXPENSE' || t.type === 'TRANSFER') runningBalance -= Math.abs(amt);
-         else runningBalance += Math.abs(amt);
+         runningBalance += amt;
       } else if (t.date <= dateBounds.end) {
-         if (t.type === 'EXPENSE' || t.type === 'TRANSFER') runningBalance -= Math.abs(amt);
-         else runningBalance += Math.abs(amt);
-         
+         runningBalance += amt;
          const key = isMonthlyGranularity ? t.date : (t.date.substring(0, 7) + '-01'); 
          timeline.set(key, runningBalance);
       }
@@ -155,7 +165,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               const fam = cat ? getFam(cat.familyId) : null;
               if (!fam) return;
 
-              // IMPORTANTE: Sumamos el importe CON SIGNO para que las devoluciones resten al total
+              // IMPORTANTE: Sumamos el importe CON SIGNO para que las devoluciones resten
               const val = t.amount; 
               
               if (fam.type === 'INCOME') {
@@ -165,18 +175,17 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               }
           });
 
-          // Preparamos datos: signedValue = con signo (para texto), absValue = absolute (para dibujar donut)
+          // Al generar los datos del gráfico, tomamos el valor ABSOLUTO del total neto
           const mapToPieData = (map: Map<string, number>) => Array.from(map.entries())
               .map(([id, value]) => ({ 
                   id, 
                   name: getFam(id)?.name || '?', 
-                  signedValue: value, // Valor REAL con signo (para leyenda)
-                  absValue: Math.abs(value), // Valor ABSOLUTO (para renderizar)
+                  value: Math.abs(value), // Valor absoluto del saldo neto
                   icon: getFam(id)?.icon, 
                   type: getFam(id)?.type 
               }))
-              .filter(item => item.absValue > 0.01) // Filtramos saldos 0
-              .sort((a, b) => b.absValue - a.absValue);
+              .filter(item => item.value > 0.01) // Filtramos saldos 0
+              .sort((a, b) => b.value - a.value);
 
           return {
               type: 'ROOT',
@@ -201,12 +210,11 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               .map(([id, value]) => ({ 
                   id, 
                   name: getCat(id)?.name || '?', 
-                  signedValue: value, // Valor REAL con signo (para leyenda)
-                  absValue: Math.abs(value), // Valor ABSOLUTO (para renderizar)
+                  value: Math.abs(value), // Valor absoluto del saldo neto
                   icon: getCat(id)?.icon 
               }))
-              .filter(item => item.absValue > 0.01)
-              .sort((a, b) => b.absValue - a.absValue);
+              .filter(item => item.value > 0.01)
+              .sort((a, b) => b.value - a.value);
 
           return { type: 'FAMILY', data: pieData };
       }
@@ -226,7 +234,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
           const lineData = Array.from(timeMap.entries())
               .map(([date, value]) => ({ 
                   date, 
-                  value: value // Valor real con signo para gráfica de líneas
+                  value: Math.abs(value) // Valor absoluto para la gráfica
               }))
               .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -237,88 +245,37 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
 
   }, [data.transactions, viewState, dateBounds, isMonthlyGranularity, data.categories, data.families]);
 
-  // --- DATA: TOTALES DEL PERIODO (DERIVADOS DEL CHART DATA PARA CONSISTENCIA) ---
-  const periodStats = useMemo(() => {
-      // Si estamos en la vista ROOT, calculamos los totales sumando las categorías/familias del gráfico.
-      // Esto asegura que el total mostrado coincida exactamente con la suma de las porciones del gráfico.
-      if ((chartData as any).type === 'ROOT') {
-          const incomeData = (chartData as any).incomeData || [];
-          const expenseData = (chartData as any).expenseData || [];
-
-          // Sumamos signedValue (Ingresos positivos, Gastos negativos)
-          const totalIncome = incomeData.reduce((acc: number, item: any) => acc + item.signedValue, 0);
-          const totalExpense = expenseData.reduce((acc: number, item: any) => acc + item.signedValue, 0);
-
-          return {
-              income: totalIncome,
-              expense: totalExpense,
-              result: totalIncome + totalExpense
-          };
-      }
-      
-      // Fallback (aunque la UI oculta estos datos si no es ROOT)
-      return { income: 0, expense: 0, result: 0 };
-  }, [chartData]);
-
-  // Tooltip Customizado Inteligente (Maneja Area, Pie y Line)
+  // Tooltip Customizado
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
         const d = payload[0].payload;
-        // Priorizar signedValue si existe (Pie), si no value (Line), si no balance (Area)
-        const val = d.signedValue !== undefined ? d.signedValue : (d.value !== undefined ? d.value : d.balance);
-        
         return (
             <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs z-50">
                 <div className="font-black text-slate-700 mb-1">{label || d.name}</div>
-                <div className={`flex items-center gap-2 font-bold ${getAmountColorClass(val)}`}>
-                    <span>{formatCurrency(val)}</span>
+                <div className="flex items-center gap-2 text-indigo-600 font-bold">
+                    <span>{formatCurrency(d.value)}</span>
                 </div>
-                {viewState.level === 'CATEGORY' && (
-                    <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Clic para ver detalle</p>
-                )}
             </div>
         );
     }
     return null;
   };
 
-  const formatDateLabel = (val: string) => {
-      if (isMonthlyGranularity) {
-          const d = new Date(val);
-          return `${d.getDate()}`;
-      }
-      const [y, m] = val.split('-');
-      return monthShorts[parseInt(m)-1];
-  };
-
-  const formatDateDisplay = (dateStr: string) => {
-    if (!dateStr) return '--/--/--';
-    const [year, month, day] = dateStr.split('-');
-    return `${day}/${month}/${year.slice(-2)}`;
-  };
-
-  // --- CHART CLICK HANDLER ---
-  const handleChartPointClick = (dataPoint: any) => {
-      if (!dataPoint || !dataPoint.activePayload || viewState.level !== 'CATEGORY' || !viewState.itemId) return;
-      const { date } = dataPoint.activePayload[0].payload;
-      
-      const isMonthlyView = localFilter.timeRange === 'MONTH';
-      
-      const relatedTxs = data.transactions.filter(t => {
-          if (t.categoryId !== viewState.itemId) return false;
+  const handleLineChartClick = (data: any) => {
+      if (data && data.activePayload && data.activePayload.length > 0 && viewState.level === 'CATEGORY') {
+          const date = data.activePayload[0].payload.date; // "YYYY-MM-DD" or "YYYY-MM"
           
-          if (isMonthlyView) {
-              return t.date === date;
+          let txs = data.transactions.filter(t => t.categoryId === viewState.itemId);
+          
+          if (isMonthlyGranularity) {
+              // Exact date match
+              txs = txs.filter(t => t.date === date);
           } else {
-              // Year/Custom View: Match YYYY-MM
-              const txMonth = t.date.substring(0, 7); // YYYY-MM
-              const pointMonth = date.substring(0, 7); // YYYY-MM
-              return txMonth === pointMonth;
+              // Month match
+              txs = txs.filter(t => t.date.startsWith(date));
           }
-      }).sort((a, b) => a.date.localeCompare(b.date));
-
-      if (relatedTxs.length > 0) {
-          setPointDetailTxs({ date, txs: relatedTxs });
+          
+          setPointDetailTxs({ date, txs });
       }
   };
 
@@ -365,9 +322,8 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                     <AreaChart data={savingsData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                         <defs><linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
-                        <XAxis dataKey="date" tickFormatter={formatDateLabel} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
-                        <YAxis domain={['auto', 'auto']} tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={50} />
+                        <XAxis dataKey="date" tickFormatter={(val) => formatDateLabel(val + '-01').split(' ')[0]} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
+                        <YAxis domain={['auto', 'auto']} tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={40} />
                         <Tooltip content={<CustomTooltip />} />
                         <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" name="Patrimonio" connectNulls={false} />
                     </AreaChart>
@@ -379,49 +335,28 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
         <div className="bg-white p-6 md:p-10 rounded-[3rem] shadow-sm border border-slate-100 min-h-[500px] flex flex-col">
             
             {/* HEADER DE NAVEGACIÓN */}
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8 border-b border-slate-50 pb-6">
-                <div className="flex items-center gap-2 self-start md:self-auto">
-                    <button onClick={() => setViewState({ level: 'ROOT' })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'ROOT' ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:text-slate-600'}`}>
-                        <Home size={14}/> <span className="text-[10px] font-black uppercase tracking-widest">Resumen</span>
-                    </button>
+            <div className="flex items-center gap-2 mb-8 border-b border-slate-50 pb-4">
+                <button onClick={() => setViewState({ level: 'ROOT' })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'ROOT' ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:text-slate-600'}`}>
+                    <Home size={14}/> <span className="text-[10px] font-black uppercase tracking-widest">Resumen</span>
+                </button>
 
-                    {viewState.level !== 'ROOT' && (
-                        <>
-                            <ChevronRight size={14} className="text-slate-300" />
-                            <button onClick={() => setViewState({ level: 'FAMILY', itemId: viewState.level === 'CATEGORY' ? data.categories.find(c=>c.id===viewState.itemId)?.familyId : viewState.itemId, itemName: viewState.level === 'CATEGORY' ? data.families.find(f=>f.id === data.categories.find(c=>c.id===viewState.itemId)?.familyId)?.name : viewState.itemName, itemType: viewState.itemType })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'FAMILY' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-400 hover:text-indigo-600'}`}>
-                                {viewState.itemType === 'INCOME' ? <ArrowUpCircle size={14}/> : <ArrowDownCircle size={14}/>}
-                                <span className="text-[10px] font-black uppercase tracking-widest">{viewState.level === 'CATEGORY' ? data.families.find(f=>f.id === data.categories.find(c=>c.id===viewState.itemId)?.familyId)?.name : viewState.itemName}</span>
-                            </button>
-                        </>
-                    )}
+                {viewState.level !== 'ROOT' && (
+                    <>
+                        <ChevronRight size={14} className="text-slate-300" />
+                        <button onClick={() => setViewState({ level: 'FAMILY', itemId: viewState.level === 'CATEGORY' ? data.categories.find(c=>c.id===viewState.itemId)?.familyId : viewState.itemId, itemName: viewState.level === 'CATEGORY' ? data.families.find(f=>f.id === data.categories.find(c=>c.id===viewState.itemId)?.familyId)?.name : viewState.itemName, itemType: viewState.itemType })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'FAMILY' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-400 hover:text-indigo-600'}`}>
+                            {viewState.itemType === 'INCOME' ? <ArrowUpCircle size={14}/> : <ArrowDownCircle size={14}/>}
+                            <span className="text-[10px] font-black uppercase tracking-widest">{viewState.level === 'CATEGORY' ? data.families.find(f=>f.id === data.categories.find(c=>c.id===viewState.itemId)?.familyId)?.name : viewState.itemName}</span>
+                        </button>
+                    </>
+                )}
 
-                    {viewState.level === 'CATEGORY' && (
-                        <>
-                            <ChevronRight size={14} className="text-slate-300" />
-                            <div className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-xl shadow-lg">
-                                <span className="text-[10px] font-black uppercase tracking-widest">{viewState.itemName}</span>
-                            </div>
-                        </>
-                    )}
-                </div>
-
-                {/* RESUMEN TOTALES DEL PERIODO */}
-                {viewState.level === 'ROOT' && (
-                    <div className="flex flex-wrap justify-center gap-2 md:gap-4 w-full md:w-auto">
-                        <div className="flex flex-col items-center px-4 py-2 bg-emerald-50 rounded-2xl border border-emerald-100 min-w-[100px]">
-                            <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Ingresos</span>
-                            <span className="text-sm font-black text-emerald-600 tracking-tighter">{formatCurrency(periodStats.income)}</span>
+                {viewState.level === 'CATEGORY' && (
+                    <>
+                        <ChevronRight size={14} className="text-slate-300" />
+                        <div className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-xl shadow-lg">
+                            <span className="text-[10px] font-black uppercase tracking-widest">{viewState.itemName}</span>
                         </div>
-                        <div className="flex flex-col items-center px-4 py-2 bg-rose-50 rounded-2xl border border-rose-100 min-w-[100px]">
-                            <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Gastos</span>
-                            <span className="text-sm font-black text-rose-600 tracking-tighter">{formatCurrency(periodStats.expense)}</span>
-                        </div>
-                        <div className="flex flex-col items-center px-4 py-2 bg-slate-50 rounded-2xl border border-slate-100 min-w-[120px] relative overflow-hidden">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 relative z-10">Resultado</span>
-                            <span className={`text-xl font-black tracking-tighter relative z-10 ${getAmountColorClass(periodStats.result)}`}>{formatCurrency(periodStats.result)}</span>
-                            <div className={`absolute bottom-0 left-0 h-1 w-full ${periodStats.result >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
-                        </div>
-                    </div>
+                    </>
                 )}
             </div>
 
@@ -430,160 +365,106 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                 {viewState.level === 'ROOT' && (chartData as any).type === 'ROOT' && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 h-full">
                         {/* IZQUIERDA: INGRESOS */}
-                        <div className="flex flex-col items-center h-full">
+                        <div className="flex flex-col items-center">
                             <div className="flex items-center gap-2 mb-4 text-emerald-600">
                                 <ArrowUpCircle size={20}/>
                                 <span className="text-sm font-black uppercase tracking-widest">Ingresos por Familia</span>
                             </div>
-                            <div className="flex flex-col xl:flex-row items-center justify-center w-full h-full gap-4">
-                                <div className="w-full h-[250px] xl:flex-1 relative">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie
-                                                data={(chartData as any).incomeData}
-                                                innerRadius={60}
-                                                outerRadius={100}
-                                                paddingAngle={5}
-                                                dataKey="absValue" // Usamos valor absoluto para el dibujo
-                                                onClick={(entry) => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'INCOME' })}
-                                                cursor="pointer"
-                                            >
-                                                {(chartData as any).incomeData.map((entry: any, index: number) => (
-                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                                                ))}
-                                            </Pie>
-                                            <Tooltip content={<CustomTooltip />} />
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                    {(chartData as any).incomeData.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-slate-300 text-xs font-bold uppercase">Sin datos</div>}
-                                </div>
-                                {/* LEYENDA PERSONALIZADA VERTICAL */}
-                                <div className="w-full xl:w-64 max-h-[250px] overflow-y-auto custom-scrollbar">
-                                    <div className="flex flex-col gap-2 pr-2">
-                                        {(chartData as any).incomeData.map((entry: any, index: number) => (
-                                            <div 
-                                                key={`legend-inc-${index}`} 
-                                                onClick={() => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'INCOME' })} 
-                                                className="flex items-center justify-between gap-3 w-full p-2 rounded-xl hover:bg-slate-50 cursor-pointer group transition-all border border-transparent hover:border-slate-100"
-                                            >
-                                                <div className="flex items-center gap-3 overflow-hidden">
-                                                    <div className="w-3 h-3 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }}/>
-                                                    <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[120px] group-hover:text-emerald-600 transition-colors">{entry.name}</span>
-                                                </div>
-                                                <span className={`text-xs font-black whitespace-nowrap ${getAmountColorClass(entry.signedValue)}`}>{formatCurrency(entry.signedValue)}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
+                            <div className="w-full h-[300px] relative">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={(chartData as any).incomeData}
+                                            innerRadius={60}
+                                            outerRadius={100}
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                            onClick={(entry) => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'INCOME' })}
+                                            cursor="pointer"
+                                        >
+                                            {(chartData as any).incomeData.map((entry: any, index: number) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 'bold'}}/>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                {(chartData as any).incomeData.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-slate-300 text-xs font-bold uppercase">Sin datos</div>}
                             </div>
                         </div>
 
                         {/* DERECHA: GASTOS */}
-                        <div className="flex flex-col items-center h-full">
+                        <div className="flex flex-col items-center">
                             <div className="flex items-center gap-2 mb-4 text-rose-500">
                                 <ArrowDownCircle size={20}/>
                                 <span className="text-sm font-black uppercase tracking-widest">Gastos por Familia</span>
                             </div>
-                            <div className="flex flex-col xl:flex-row items-center justify-center w-full h-full gap-4">
-                                <div className="w-full h-[250px] xl:flex-1 relative">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie
-                                                data={(chartData as any).expenseData}
-                                                innerRadius={60}
-                                                outerRadius={100}
-                                                paddingAngle={5}
-                                                dataKey="absValue" // Usamos valor absoluto para el dibujo
-                                                onClick={(entry) => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'EXPENSE' })}
-                                                cursor="pointer"
-                                            >
-                                                {(chartData as any).expenseData.map((entry: any, index: number) => (
-                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                                                ))}
-                                            </Pie>
-                                            <Tooltip content={<CustomTooltip />} />
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                    {(chartData as any).expenseData.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-slate-300 text-xs font-bold uppercase">Sin datos</div>}
-                                </div>
-                                {/* LEYENDA PERSONALIZADA VERTICAL */}
-                                <div className="w-full xl:w-64 max-h-[250px] overflow-y-auto custom-scrollbar">
-                                    <div className="flex flex-col gap-2 pr-2">
-                                        {(chartData as any).expenseData.map((entry: any, index: number) => (
-                                            <div 
-                                                key={`legend-exp-${index}`} 
-                                                onClick={() => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'EXPENSE' })} 
-                                                className="flex items-center justify-between gap-3 w-full p-2 rounded-xl hover:bg-slate-50 cursor-pointer group transition-all border border-transparent hover:border-slate-100"
-                                            >
-                                                <div className="flex items-center gap-3 overflow-hidden">
-                                                    <div className="w-3 h-3 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }}/>
-                                                    <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[120px] group-hover:text-rose-600 transition-colors">{entry.name}</span>
-                                                </div>
-                                                <span className={`text-xs font-black whitespace-nowrap ${getAmountColorClass(entry.signedValue)}`}>{formatCurrency(entry.signedValue)}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
+                            <div className="w-full h-[300px] relative">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={(chartData as any).expenseData}
+                                            innerRadius={60}
+                                            outerRadius={100}
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                            onClick={(entry) => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'EXPENSE' })}
+                                            cursor="pointer"
+                                        >
+                                            {(chartData as any).expenseData.map((entry: any, index: number) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 'bold'}}/>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                {(chartData as any).expenseData.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-slate-300 text-xs font-bold uppercase">Sin datos</div>}
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* NIVEL 1: FAMILIA - UN DONUT (Categorías) - REFACTORED FOR RESPONSIVE LEGEND */}
+                {/* NIVEL 1: FAMILIA - UN DONUT (Categorías) */}
                 {viewState.level === 'FAMILY' && (chartData as any).type === 'FAMILY' && (
-                    <div className="flex flex-col h-full animate-in zoom-in-95 duration-300">
-                        <div className="flex items-center gap-2 mb-6 self-center">
+                    <div className="flex flex-col items-center h-full animate-in zoom-in-95 duration-300">
+                        <div className="flex items-center gap-2 mb-6">
                             <span className="text-slate-400 text-xs font-bold uppercase">Desglose de:</span>
                             <span className={`text-xl font-black uppercase tracking-tighter ${viewState.itemType === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>{viewState.itemName}</span>
                         </div>
-                        
-                        <div className="flex flex-col lg:flex-row items-center lg:items-start justify-center w-full h-full min-h-[350px]">
-                            {/* CHART CONTAINER */}
-                            <div className="w-full h-[300px] lg:flex-1 lg:h-[400px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={(chartData as any).data}
-                                            innerRadius={80}
-                                            outerRadius={120}
-                                            paddingAngle={2}
-                                            dataKey="absValue"
-                                            onClick={(entry) => setViewState({ level: 'CATEGORY', itemId: entry.id, itemName: entry.name, itemType: viewState.itemType })}
-                                            cursor="pointer"
-                                        >
-                                            {(chartData as any).data.map((entry: any, index: number) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip content={<CustomTooltip />} />
-                                        {/* No internal Legend, using custom external one */}
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                            {/* CUSTOM LEGEND CONTAINER (Responsive: Bottom on mobile, Right on Desktop) */}
-                            <div className="w-full lg:w-80 mt-4 lg:mt-0 lg:ml-8 max-h-[300px] lg:max-h-[400px] overflow-y-auto custom-scrollbar">
-                                <div className="flex flex-col gap-2 pr-2">
-                                    {(chartData as any).data.map((entry: any, index: number) => (
-                                        <div 
-                                            key={`legend-item-${index}`} 
-                                            className="flex items-center justify-between gap-3 w-full p-2 rounded-xl hover:bg-slate-50 cursor-pointer group transition-all border border-transparent hover:border-slate-100" 
-                                            onClick={() => setViewState({ level: 'CATEGORY', itemId: entry.id, itemName: entry.name, itemType: viewState.itemType })}
-                                        >
-                                            <div className="flex items-center gap-3 overflow-hidden">
-                                                <div className="w-3 h-3 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }}/>
-                                                <div className="flex flex-col">
-                                                    <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[120px] group-hover:text-indigo-600 transition-colors">{entry.name}</span>
-                                                    {/* Optional: Add percentage or secondary info here if available in future */}
-                                                </div>
+                        <div className="w-full h-[350px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={(chartData as any).data}
+                                        innerRadius={80}
+                                        outerRadius={140}
+                                        paddingAngle={2}
+                                        dataKey="value"
+                                        onClick={(entry) => setViewState({ level: 'CATEGORY', itemId: entry.id, itemName: entry.name, itemType: viewState.itemType })}
+                                        cursor="pointer"
+                                    >
+                                        {(chartData as any).data.map((entry: any, index: number) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Legend 
+                                        layout="vertical" verticalAlign="middle" align="right" 
+                                        content={(props) => (
+                                            <div className="flex flex-col gap-2 ml-4">
+                                                {props.payload?.map((entry: any, index: number) => (
+                                                    <div key={`item-${index}`} className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => setViewState({ level: 'CATEGORY', itemId: (chartData as any).data[index].id, itemName: (chartData as any).data[index].name, itemType: viewState.itemType })}>
+                                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}/>
+                                                        {entry.value}
+                                                    </div>
+                                                ))}
                                             </div>
-                                            <span className={`text-xs font-black whitespace-nowrap ${getAmountColorClass(entry.signedValue)}`}>
-                                                {formatCurrency(entry.signedValue)}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                                        )}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
                         </div>
                     </div>
                 )}
@@ -597,15 +478,14 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                         </div>
                         <div className="w-full h-[350px]">
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={(chartData as any).data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} onClick={handleChartPointClick} className="cursor-pointer">
+                                <LineChart data={(chartData as any).data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} onClick={handleLineChartClick}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
-                                    <XAxis dataKey="date" tickFormatter={formatDateLabel} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
-                                    <YAxis tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={50} />
+                                    <XAxis dataKey="date" tickFormatter={(val) => formatDateLabel(val + '-01').split(' ')[0]} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
+                                    <YAxis tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={40} />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Line 
                                         type="monotone" 
-                                        dataKey="value" // Usamos valor real con signo
+                                        dataKey="value" 
                                         stroke={viewState.itemType === 'INCOME' ? '#10b981' : '#f43f5e'} 
                                         strokeWidth={4} 
                                         dot={{ r: 4, strokeWidth: 2, stroke: '#fff', fill: viewState.itemType === 'INCOME' ? '#10b981' : '#f43f5e' }} 
@@ -637,11 +517,11 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                     <div className="overflow-y-auto custom-scrollbar flex-1 -mx-2 px-2">
                         {pointDetailTxs.txs.map(t => (
                             <div key={t.id} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 rounded-xl px-2 transition-colors">
-                                <div className="flex flex-col gap-0.5">
-                                    <span className="text-xs font-bold text-slate-700 uppercase">{t.description}</span>
+                                <div className="flex flex-col gap-0.5 flex-1 min-w-0 pr-4">
+                                    <span className="text-xs font-bold text-slate-700 uppercase truncate" title={t.description}>{t.description}</span>
                                     <span className="text-[9px] text-slate-400 font-medium">{formatDateDisplay(t.date)}</span>
                                 </div>
-                                <span className={`text-sm font-black ${getAmountColorClass(t.amount)}`}>{formatCurrency(t.amount)}</span>
+                                <span className={`text-sm font-black whitespace-nowrap ${getAmountColorClass(t.amount)}`}>{formatCurrency(t.amount)}</span>
                             </div>
                         ))}
                     </div>
