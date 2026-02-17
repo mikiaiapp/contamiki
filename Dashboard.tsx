@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category, Family, BookMetadata } from './types';
-import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown, Calendar } from 'lucide-react';
+import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown, Calendar, TrendingUp } from 'lucide-react';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 interface DashboardProps {
   data: AppState;
@@ -25,6 +26,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
+  
+  // Chart Modal States
+  const [categoryChartTarget, setCategoryChartTarget] = useState<Category | null>(null);
+  const [localChartFilter, setLocalChartFilter] = useState<GlobalFilter>(filter);
 
   const displayLogo = useMemo(() => {
     let logo = currentBook.logo;
@@ -33,6 +38,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     }
     return logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
   }, [currentBook.logo]);
+
+  // Sync initial filter when opening chart
+  useEffect(() => {
+      if (categoryChartTarget) {
+          setLocalChartFilter(filter);
+      }
+  }, [categoryChartTarget]);
 
   // --- CAPA 1: INDEXACIÓN ESTRUCTURAL ---
   const indices = useMemo(() => {
@@ -47,6 +59,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     if (!dateStr) return '--/--/--';
     const [year, month, day] = dateStr.split('-');
     return `${day}/${month}/${year.slice(-2)}`;
+  };
+
+  const formatDateTick = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return `${date.getDate()}/${date.getMonth() + 1}`;
+  };
+
+  const compactCurrency = (value: number) => {
+    if (Math.abs(value) >= 1000) {
+        return (value / 1000).toFixed(1) + 'k';
+    }
+    return value.toString();
   };
 
   const formatCurrency = (amount: number) => `${numberFormatter.format(amount)} €`;
@@ -201,6 +226,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     .sort((a, b) => b.total - a.total); // Ordenar agrupaciones de mayor a menor saldo total
   }, [accountGroups, accounts, dashboardData.stats.accTotals]);
 
+  // --- CHART DATA PREPARATION ---
+  const categoryChartData = useMemo(() => {
+      if (!categoryChartTarget) return [];
+      
+      // Re-calculate bounds for local chart filter
+      const y = localChartFilter.referenceDate.getFullYear();
+      const m = localChartFilter.referenceDate.getMonth();
+      let start = '', end = '';
+      if (localChartFilter.timeRange === 'MONTH') {
+        start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+        end = `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`;
+      } else if (localChartFilter.timeRange === 'YEAR') {
+        start = `${y}-01-01`; end = `${y}-12-31`;
+      } else if (localChartFilter.timeRange === 'CUSTOM') {
+        start = localChartFilter.customStart || '1900-01-01'; end = localChartFilter.customEnd || '2100-12-31';
+      } else {
+        start = '1900-01-01'; end = '2100-12-31';
+      }
+
+      const relevant = transactions.filter(t => 
+          t.categoryId === categoryChartTarget.id &&
+          t.date >= start && t.date <= end
+      ).sort((a, b) => a.date.localeCompare(b.date));
+
+      // Aggregate by date to handle multiple transactions in same day
+      const dailyMap = new Map<string, number>();
+      relevant.forEach(t => {
+          const val = Math.abs(t.amount);
+          dailyMap.set(t.date, (dailyMap.get(t.date) || 0) + val);
+      });
+
+      return Array.from(dailyMap.entries())
+          .map(([date, amount]) => ({ date, amount }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+
+  }, [categoryChartTarget, localChartFilter, transactions]);
+
   // Handlers
   const navigatePeriod = (direction: 'prev' | 'next') => {
     const newDate = new Date(filter.referenceDate);
@@ -208,6 +270,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     if (filter.timeRange === 'MONTH') newDate.setMonth(newDate.getMonth() + step);
     else if (filter.timeRange === 'YEAR') newDate.setFullYear(newDate.getFullYear() + step);
     onUpdateFilter({ ...filter, referenceDate: newDate });
+  };
+
+  const navigateChartPeriod = (direction: 'prev' | 'next') => {
+    const newDate = new Date(localChartFilter.referenceDate);
+    const step = direction === 'next' ? 1 : -1;
+    if (localChartFilter.timeRange === 'MONTH') newDate.setMonth(newDate.getMonth() + step);
+    else if (localChartFilter.timeRange === 'YEAR') newDate.setFullYear(newDate.getFullYear() + step);
+    setLocalChartFilter({ ...localChartFilter, referenceDate: newDate });
   };
 
   const handleProcessRecurrent = (r: RecurrentMovement) => {
@@ -451,7 +521,90 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-8">{selectedCategoryAction.name}</h3>
                 <div className="space-y-4">
                     <button onClick={() => { setSelectedCategoryAction(null); onNavigateToTransactions({ filterCategory: selectedCategoryAction.id }); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-50 text-slate-700 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"><Search size={18}/> Ver Movimientos</button>
+                    <button onClick={() => { setCategoryChartTarget(selectedCategoryAction); setSelectedCategoryAction(null); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-50 text-slate-700 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"><TrendingUp size={18}/> Ver Evolución</button>
                     <button onClick={() => { setSelectedCategoryAction(null); onNavigateToTransactions({ action: 'NEW', categoryId: selectedCategoryAction.id }); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 transition-all shadow-xl"><PlusCircle size={18}/> Entrada de Movimiento</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {categoryChartTarget && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
+            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-3xl p-8 sm:p-10 relative border border-white/20">
+                <button onClick={() => setCategoryChartTarget(null)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all z-10"><X size={24}/></button>
+                
+                <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6 mb-8">
+                    <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 shadow-sm text-3xl">
+                            {renderIcon(categoryChartTarget.icon, "w-10 h-10")}
+                        </div>
+                        <div className="text-left">
+                            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{categoryChartTarget.name}</h3>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Análisis de Evolución</p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-2">
+                        <div className="flex items-center gap-1">
+                            <button onClick={() => navigateChartPeriod('prev')} className="p-2 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100 shadow-sm"><ChevronLeft size={18} /></button>
+                            <button onClick={() => navigateChartPeriod('next')} className="p-2 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100 shadow-sm"><ChevronRight size={18} /></button>
+                        </div>
+                        <div className="bg-slate-100 p-1.5 rounded-2xl flex gap-1">
+                            <button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'ALL'})} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${localChartFilter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Todo</button>
+                            <div className={`px-4 py-2 rounded-xl transition-all flex items-center ${localChartFilter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>
+                                {localChartFilter.timeRange === 'YEAR' ? (<select className="bg-transparent text-[10px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'YEAR', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>) : (<button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'YEAR'})} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>)}
+                            </div>
+                            <div className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1 ${localChartFilter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>
+                                {localChartFilter.timeRange === 'MONTH' ? (<div className="flex items-center gap-1"><select className="bg-transparent text-[10px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setMonth(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'MONTH', referenceDate: d}); }}>{months.map((m, i) => <option key={i} value={i}>{m.substring(0,3)}</option>)}</select><span className="text-slate-300 text-[10px] font-black">/</span><select className="bg-transparent text-[10px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'MONTH', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div>) : (<button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'MONTH'})} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Mes</button>)}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="h-[300px] w-full bg-slate-50/50 rounded-[2rem] p-4 border border-slate-100">
+                    {categoryChartData.length > 0 ? (
+                        <ResponsiveContainer width="99%" height="100%">
+                            <LineChart data={categoryChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                <XAxis 
+                                    dataKey="date" 
+                                    tickFormatter={formatDateTick} 
+                                    style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    dy={10}
+                                />
+                                <YAxis 
+                                    tickFormatter={compactCurrency} 
+                                    style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }}
+                                    tickLine={false}
+                                    axisLine={false}
+                                />
+                                <Tooltip 
+                                    content={({ active, payload, label }) => {
+                                        if (active && payload && payload.length) {
+                                            return (
+                                                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs">
+                                                    <p className="font-black text-slate-500 mb-1">{formatDateDisplay(label)}</p>
+                                                    <div className="flex items-center gap-2 font-bold text-indigo-600">
+                                                        <span>Gasto:</span>
+                                                        <span>{formatCurrency(payload[0].value as number)}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    }}
+                                />
+                                <Line type="monotone" dataKey="amount" stroke="#6366f1" strokeWidth={4} dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: 'white' }} activeDot={{ r: 6 }} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
+                            <TrendingUp size={32} className="opacity-20"/>
+                            <p className="text-[10px] font-black uppercase tracking-widest opacity-50">Sin datos en este periodo</p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
