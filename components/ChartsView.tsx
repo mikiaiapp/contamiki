@@ -5,8 +5,8 @@ import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, A
 
 interface ChartsViewProps {
   data: AppState;
-  filter: GlobalFilter;
-  onUpdateFilter: (f: GlobalFilter) => void;
+  filter: GlobalFilter; // Prop kept for interface compatibility but ignored
+  onUpdateFilter: (f: GlobalFilter) => void; // Prop kept but ignored
   currentBook: BookMetadata;
 }
 
@@ -20,12 +20,31 @@ const compactCurrency = (value: number) => {
     return value.toString();
 };
 
-export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFilter, currentBook }) => {
+export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => {
   const [activeTab, setActiveTab] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [chartType, setChartType] = useState<'PIE' | 'LINE'>('PIE');
   const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [catChartType, setCatChartType] = useState<'PIE' | 'LINE'>('PIE');
+
+  // --- LOCAL INDEPENDENT FILTER STATE ---
+  // Default: Interanual (Last 12 months)
+  const [localFilter, setLocalFilter] = useState<GlobalFilter>(() => {
+      const now = new Date();
+      // Start: 1st day of month, 1 year ago
+      const start = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+      // End: Last day of current month
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      
+      const fmt = (d: Date) => d.toISOString().split('T')[0];
+      
+      return {
+          timeRange: 'CUSTOM',
+          referenceDate: now,
+          customStart: fmt(start),
+          customEnd: fmt(end)
+      };
+  });
 
   // Helpers for Header Navigation
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
@@ -33,11 +52,11 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
   const monthShorts = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
   const navigatePeriod = (direction: 'prev' | 'next') => {
-    const newDate = new Date(filter.referenceDate);
+    const newDate = new Date(localFilter.referenceDate);
     const step = direction === 'next' ? 1 : -1;
-    if (filter.timeRange === 'MONTH') newDate.setMonth(newDate.getMonth() + step);
-    else if (filter.timeRange === 'YEAR') newDate.setFullYear(newDate.getFullYear() + step);
-    onUpdateFilter({ ...filter, referenceDate: newDate });
+    if (localFilter.timeRange === 'MONTH') newDate.setMonth(newDate.getMonth() + step);
+    else if (localFilter.timeRange === 'YEAR') newDate.setFullYear(newDate.getFullYear() + step);
+    setLocalFilter({ ...localFilter, referenceDate: newDate });
   };
 
   const displayLogo = useMemo(() => {
@@ -49,7 +68,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
   }, [currentBook.logo]);
 
   // Determine if we are in "Detailed Daily Mode" or "Aggregated Monthly Mode"
-  const isMonthlyView = filter.timeRange === 'MONTH';
+  const isMonthlyView = localFilter.timeRange === 'MONTH';
 
   const formatDateTick = (dateStr: string) => {
     if (!dateStr) return '';
@@ -75,19 +94,19 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
   // --- DATA PROCESSING HELPERS ---
 
   const dateBounds = useMemo(() => {
-    const y = filter.referenceDate.getFullYear();
-    const m = filter.referenceDate.getMonth();
+    const y = localFilter.referenceDate.getFullYear();
+    const m = localFilter.referenceDate.getMonth();
     let start = '', end = '';
-    if (filter.timeRange === 'MONTH') {
+    if (localFilter.timeRange === 'MONTH') {
       start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
       end = `${y}-${String(m + 1).padStart(2, '0')}-${new Date(y, m + 1, 0).getDate()}`;
-    } else if (filter.timeRange === 'YEAR') {
+    } else if (localFilter.timeRange === 'YEAR') {
       start = `${y}-01-01`; end = `${y}-12-31`;
     } else {
-      start = filter.customStart || '1900-01-01'; end = filter.customEnd || '2100-12-31';
+      start = localFilter.customStart || '1900-01-01'; end = localFilter.customEnd || '2100-12-31';
     }
     return { start, end };
-  }, [filter]);
+  }, [localFilter]);
 
   // 1. SAVINGS EVOLUTION (Accumulated Balance)
   const savingsData = useMemo(() => {
@@ -148,8 +167,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
             // Ensure we project months into the future regardless of current view granularity
             // to show the "horizon" requested.
             lastDate.setMonth(lastDate.getMonth() + 1);
-            // If strictly monthly view (days), setting date to 1st of next month keeps it clean on axis?
-            // Or just next month same day. Let's stick to simple month addition.
             
             const nextVal = slope * (n + i) + intercept;
             result.push({ 
@@ -301,50 +318,50 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
                     <div className="bg-slate-100 p-2 rounded-2xl flex flex-wrap gap-1 shadow-inner border border-slate-200/50">
                         {/* TODO */}
                         <button 
-                            onClick={() => onUpdateFilter({...filter, timeRange: 'ALL'})} 
-                            className={`px-6 py-3 text-xs sm:text-sm font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                            onClick={() => setLocalFilter({...localFilter, timeRange: 'ALL'})} 
+                            className={`px-6 py-3 text-xs sm:text-sm font-black uppercase tracking-widest rounded-xl transition-all ${localFilter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             Todo
                         </button>
 
                         {/* AÑO */}
-                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center ${filter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>
-                             {filter.timeRange === 'YEAR' ? (
-                                <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[60px]" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'YEAR', referenceDate: d}); }}>
+                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center ${localFilter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>
+                             {localFilter.timeRange === 'YEAR' ? (
+                                <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[60px]" value={localFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalFilter({...localFilter, timeRange: 'YEAR', referenceDate: d}); }}>
                                     {years.map(y => <option key={y} value={y}>{y}</option>)}
                                 </select>
                              ) : (
-                                <button onClick={() => onUpdateFilter({...filter, timeRange: 'YEAR'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>
+                                <button onClick={() => setLocalFilter({...localFilter, timeRange: 'YEAR'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>
                              )}
                         </div>
 
                         {/* MES */}
-                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-1 ${filter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>
-                            {filter.timeRange === 'MONTH' ? (
+                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-1 ${localFilter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>
+                            {localFilter.timeRange === 'MONTH' ? (
                                 <div className="flex items-center gap-2">
-                                    <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[80px]" value={filter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setMonth(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
+                                    <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[80px]" value={localFilter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(localFilter.referenceDate); d.setMonth(parseInt(e.target.value)); setLocalFilter({...localFilter, timeRange: 'MONTH', referenceDate: d}); }}>
                                         {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
                                     </select>
                                     <span className="text-slate-300 text-xs font-black">/</span>
-                                    <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[70px]" value={filter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(filter.referenceDate); d.setFullYear(parseInt(e.target.value)); onUpdateFilter({...filter, timeRange: 'MONTH', referenceDate: d}); }}>
+                                    <select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[70px]" value={localFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalFilter({...localFilter, timeRange: 'MONTH', referenceDate: d}); }}>
                                         {years.map(y => <option key={y} value={y}>{y}</option>)}
                                     </select>
                                 </div>
                             ) : (
-                                <button onClick={() => onUpdateFilter({...filter, timeRange: 'MONTH'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Mes</button>
+                                <button onClick={() => setLocalFilter({...localFilter, timeRange: 'MONTH'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Mes</button>
                             )}
                         </div>
 
                         {/* PERSONALIZADO */}
-                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-2 ${filter.timeRange === 'CUSTOM' ? 'bg-white shadow-sm' : ''}`}>
-                            {filter.timeRange === 'CUSTOM' ? (
+                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-2 ${localFilter.timeRange === 'CUSTOM' ? 'bg-white shadow-sm' : ''}`}>
+                            {localFilter.timeRange === 'CUSTOM' ? (
                                 <div className="flex items-center gap-2">
-                                    <input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-28 sm:w-32 cursor-pointer py-1" value={filter.customStart} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customStart: e.target.value})} />
+                                    <input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-28 sm:w-32 cursor-pointer py-1" value={localFilter.customStart} onChange={(e) => setLocalFilter({...localFilter, timeRange: 'CUSTOM', customStart: e.target.value})} />
                                     <span className="text-slate-300 text-[10px] font-black">➡</span>
-                                    <input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-28 sm:w-32 cursor-pointer py-1" value={filter.customEnd} onChange={(e) => onUpdateFilter({...filter, timeRange: 'CUSTOM', customEnd: e.target.value})} />
+                                    <input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-28 sm:w-32 cursor-pointer py-1" value={localFilter.customEnd} onChange={(e) => setLocalFilter({...localFilter, timeRange: 'CUSTOM', customEnd: e.target.value})} />
                                 </div>
                             ) : (
-                                <button onClick={() => onUpdateFilter({...filter, timeRange: 'CUSTOM'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Pers.</button>
+                                <button onClick={() => setLocalFilter({...localFilter, timeRange: 'CUSTOM'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Pers.</button>
                             )}
                         </div>
                     </div>
