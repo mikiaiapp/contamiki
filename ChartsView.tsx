@@ -106,10 +106,14 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
       const isInternal = t.type === 'TRANSFER' && t.transferAccountId && data.accounts.find(a=>a.id===t.transferAccountId);
       if (isInternal) amt = 0;
 
+      // Calcular balance, sumando con signo (gastos negativos restan)
       if (t.date < dateBounds.start) {
-         runningBalance += amt;
+         if (t.type === 'EXPENSE' || t.type === 'TRANSFER') runningBalance -= Math.abs(amt);
+         else runningBalance += Math.abs(amt);
       } else if (t.date <= dateBounds.end) {
-         runningBalance += amt;
+         if (t.type === 'EXPENSE' || t.type === 'TRANSFER') runningBalance -= Math.abs(amt);
+         else runningBalance += Math.abs(amt);
+         
          const key = isMonthlyGranularity ? t.date : (t.date.substring(0, 7) + '-01'); 
          timeline.set(key, runningBalance);
       }
@@ -141,7 +145,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               const fam = cat ? getFam(cat.familyId) : null;
               if (!fam) return;
 
-              // IMPORTANTE: Sumamos el importe CON SIGNO para que las devoluciones resten
+              // IMPORTANTE: Sumamos el importe CON SIGNO para que las devoluciones resten al total
               const val = t.amount; 
               
               if (fam.type === 'INCOME') {
@@ -151,17 +155,18 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               }
           });
 
-          // Al generar los datos del gráfico, tomamos el valor ABSOLUTO del total neto
+          // Preparamos datos: value = signed (para texto), absValue = absolute (para dibujar donut)
           const mapToPieData = (map: Map<string, number>) => Array.from(map.entries())
               .map(([id, value]) => ({ 
                   id, 
                   name: getFam(id)?.name || '?', 
-                  value: Math.abs(value), // Valor absoluto del saldo neto
+                  value: value, // Valor REAL con signo
+                  absValue: Math.abs(value), // Valor ABSOLUTO para renderizar gráfico
                   icon: getFam(id)?.icon, 
                   type: getFam(id)?.type 
               }))
-              .filter(item => item.value > 0.01) // Filtramos saldos 0
-              .sort((a, b) => b.value - a.value);
+              .filter(item => item.absValue > 0.01) // Filtramos saldos 0
+              .sort((a, b) => b.absValue - a.absValue);
 
           return {
               type: 'ROOT',
@@ -186,11 +191,12 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               .map(([id, value]) => ({ 
                   id, 
                   name: getCat(id)?.name || '?', 
-                  value: Math.abs(value), // Valor absoluto del saldo neto
+                  value: value, 
+                  absValue: Math.abs(value),
                   icon: getCat(id)?.icon 
               }))
-              .filter(item => item.value > 0.01)
-              .sort((a, b) => b.value - a.value);
+              .filter(item => item.absValue > 0.01)
+              .sort((a, b) => b.absValue - a.absValue);
 
           return { type: 'FAMILY', data: pieData };
       }
@@ -210,7 +216,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
           const lineData = Array.from(timeMap.entries())
               .map(([date, value]) => ({ 
                   date, 
-                  value: Math.abs(value) // Valor absoluto para la gráfica
+                  value: value // Valor real con signo para gráfica de líneas
               }))
               .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -221,15 +227,18 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
 
   }, [data.transactions, viewState, dateBounds, isMonthlyGranularity, data.categories, data.families]);
 
-  // Tooltip Customizado
+  // Tooltip Customizado Inteligente (Maneja Area, Pie y Line)
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
         const d = payload[0].payload;
+        // Detectar si estamos en AreaChart (tiene balance) o Pie/Line (tiene value)
+        const val = d.value !== undefined ? d.value : d.balance;
+        
         return (
             <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs z-50">
                 <div className="font-black text-slate-700 mb-1">{label || d.name}</div>
                 <div className="flex items-center gap-2 text-indigo-600 font-bold">
-                    <span>{formatCurrency(d.value)}</span>
+                    <span>{formatCurrency(val)}</span>
                 </div>
             </div>
         );
@@ -345,7 +354,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                             innerRadius={60}
                                             outerRadius={100}
                                             paddingAngle={5}
-                                            dataKey="value"
+                                            dataKey="absValue" // Usamos valor absoluto para el dibujo
                                             onClick={(entry) => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'INCOME' })}
                                             cursor="pointer"
                                         >
@@ -375,7 +384,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                             innerRadius={60}
                                             outerRadius={100}
                                             paddingAngle={5}
-                                            dataKey="value"
+                                            dataKey="absValue" // Usamos valor absoluto para el dibujo
                                             onClick={(entry) => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'EXPENSE' })}
                                             cursor="pointer"
                                         >
@@ -408,7 +417,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                         innerRadius={80}
                                         outerRadius={140}
                                         paddingAngle={2}
-                                        dataKey="value"
+                                        dataKey="absValue" // Usamos valor absoluto para el dibujo
                                         onClick={(entry) => setViewState({ level: 'CATEGORY', itemId: entry.id, itemName: entry.name, itemType: viewState.itemType })}
                                         cursor="pointer"
                                     >
@@ -424,7 +433,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                                 {props.payload?.map((entry: any, index: number) => (
                                                     <div key={`item-${index}`} className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => setViewState({ level: 'CATEGORY', itemId: (chartData as any).data[index].id, itemName: (chartData as any).data[index].name, itemType: viewState.itemType })}>
                                                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}/>
-                                                        {entry.value}
+                                                        {entry.payload.value /* Mostramos valor real con signo en leyenda */ } 
                                                     </div>
                                                 ))}
                                             </div>
@@ -452,7 +461,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                     <Tooltip content={<CustomTooltip />} />
                                     <Line 
                                         type="monotone" 
-                                        dataKey="value" 
+                                        dataKey="value" // Usamos valor real con signo
                                         stroke={viewState.itemType === 'INCOME' ? '#10b981' : '#f43f5e'} 
                                         strokeWidth={4} 
                                         dot={{ r: 4, strokeWidth: 2, stroke: '#fff', fill: viewState.itemType === 'INCOME' ? '#10b981' : '#f43f5e' }} 
