@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category, Family, BookMetadata } from './types';
 import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown, Calendar, TrendingUp } from 'lucide-react';
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts';
 
 interface DashboardProps {
   data: AppState;
@@ -39,10 +39,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
   }, [currentBook.logo]);
 
-  // Sync initial filter when opening chart
+  // Sync initial filter when opening chart to "Last 12 Closed Months"
   useEffect(() => {
       if (categoryChartTarget) {
-          setLocalChartFilter(filter);
+          const now = new Date();
+          // Calcular los últimos 12 meses FINALIZADOS
+          // Fecha Fin: Último día del mes anterior
+          const end = new Date(now.getFullYear(), now.getMonth(), 0);
+          // Fecha Inicio: Primer día del mes, 11 meses antes del mes fin (total 12 meses)
+          const start = new Date(end.getFullYear(), end.getMonth() - 11, 1);
+          
+          const fmt = (d: Date) => d.toISOString().split('T')[0];
+          
+          setLocalChartFilter({
+              timeRange: 'CUSTOM', // Usamos Custom para definir el rango exacto
+              referenceDate: now,
+              customStart: fmt(start),
+              customEnd: fmt(end)
+          });
       }
   }, [categoryChartTarget]);
 
@@ -265,10 +279,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       const dataMap = new Map<string, number>();
       
       relevant.forEach(t => {
-          const val = Math.abs(t.amount);
+          // TOTALIZAR DE FORMA NETA: Respetamos el signo.
+          // Gastos = Negativo, Ingresos = Positivo.
+          let effectiveAmount = 0;
+          if (t.type === 'EXPENSE' || t.type === 'TRANSFER') effectiveAmount = -Math.abs(t.amount);
+          else effectiveAmount = Math.abs(t.amount);
+
           // If monthly filter, key is full date. Else key is YYYY-MM
           const key = isMonthly ? t.date : (t.date.substring(0, 7) + '-01');
-          dataMap.set(key, (dataMap.get(key) || 0) + val);
+          dataMap.set(key, (dataMap.get(key) || 0) + effectiveAmount);
       });
 
       return Array.from(dataMap.entries())
@@ -563,8 +582,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                             <button onClick={() => navigateChartPeriod('prev')} className="p-2 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100 shadow-sm"><ChevronLeft size={18} /></button>
                             <button onClick={() => navigateChartPeriod('next')} className="p-2 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100 shadow-sm"><ChevronRight size={18} /></button>
                         </div>
-                        <div className="bg-slate-100 p-1.5 rounded-2xl flex gap-1">
+                        <div className="bg-slate-100 p-1.5 rounded-2xl flex flex-wrap gap-1">
+                            {/* Botón 12 Meses (Interanual) */}
+                            <button onClick={() => {
+                                 const now = new Date();
+                                 const end = new Date(now.getFullYear(), now.getMonth(), 0);
+                                 const start = new Date(end.getFullYear(), end.getMonth() - 11, 1);
+                                 const fmt = (d: Date) => d.toISOString().split('T')[0];
+                                 setLocalChartFilter({ timeRange: 'CUSTOM', referenceDate: now, customStart: fmt(start), customEnd: fmt(end) });
+                            }} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${localChartFilter.timeRange === 'CUSTOM' && !localChartFilter.customStart.startsWith('1900') ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>12 Meses</button>
+
                             <button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'ALL'})} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${localChartFilter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Todo</button>
+                            
                             <div className={`px-4 py-2 rounded-xl transition-all flex items-center ${localChartFilter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>
                                 {localChartFilter.timeRange === 'YEAR' ? (<select className="bg-transparent text-[10px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'YEAR', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>) : (<button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'YEAR'})} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>)}
                             </div>
@@ -580,6 +609,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                         <ResponsiveContainer width="99%" height="100%">
                             <LineChart data={categoryChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
                                 <XAxis 
                                     dataKey="date" 
                                     tickFormatter={formatDateTick} 
@@ -598,12 +628,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                     content={({ active, payload, label }) => {
                                         if (active && payload && payload.length) {
                                             const formattedLabel = formatDateTick(label as string);
+                                            const val = payload[0].value as number;
                                             return (
                                                 <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs">
                                                     <p className="font-black text-slate-500 mb-1">{formattedLabel}</p>
-                                                    <div className="flex items-center gap-2 font-bold text-indigo-600">
-                                                        <span>Gasto:</span>
-                                                        <span>{formatCurrency(payload[0].value as number)}</span>
+                                                    <div className={`flex items-center gap-2 font-bold ${getAmountColor(val)}`}>
+                                                        <span>{val >= 0 ? 'Neto:' : 'Neto:'}</span>
+                                                        <span>{formatCurrency(val)}</span>
                                                     </div>
                                                 </div>
                                             );

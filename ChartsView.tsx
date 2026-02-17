@@ -365,16 +365,16 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                     <div className="flex flex-wrap justify-center gap-2 md:gap-4 w-full md:w-auto">
                         <div className="flex flex-col items-center px-4 py-2 bg-emerald-50 rounded-2xl border border-emerald-100 min-w-[100px]">
                             <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Ingresos</span>
-                            <span className="text-sm font-black text-emerald-600 tracking-tighter">{compactCurrency(periodStats.income)}</span>
+                            <span className="text-sm font-black text-emerald-600 tracking-tighter">{formatCurrency(periodStats.income)}</span>
                         </div>
                         <div className="flex flex-col items-center px-4 py-2 bg-slate-50 rounded-2xl border border-slate-100 min-w-[120px] relative overflow-hidden">
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 relative z-10">Resultado</span>
-                            <span className={`text-xl font-black tracking-tighter relative z-10 ${getAmountColorClass(periodStats.result)}`}>{compactCurrency(periodStats.result)}</span>
+                            <span className={`text-xl font-black tracking-tighter relative z-10 ${getAmountColorClass(periodStats.result)}`}>{formatCurrency(periodStats.result)}</span>
                             <div className={`absolute bottom-0 left-0 h-1 w-full ${periodStats.result >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
                         </div>
                         <div className="flex flex-col items-center px-4 py-2 bg-rose-50 rounded-2xl border border-rose-100 min-w-[100px]">
                             <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Gastos</span>
-                            <span className="text-sm font-black text-rose-600 tracking-tighter">{compactCurrency(periodStats.expense)}</span>
+                            <span className="text-sm font-black text-rose-600 tracking-tighter">{formatCurrency(periodStats.expense)}</span>
                         </div>
                     </div>
                 )}
