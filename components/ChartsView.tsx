@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { AppState, GlobalFilter, Family, Category, BookMetadata } from '../types';
+import { AppState, GlobalFilter, BookMetadata } from '../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, Legend, ReferenceLine } from 'recharts';
-import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, Wallet, X, ChevronLeft } from 'lucide-react';
+import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, ChevronLeft, Home } from 'lucide-react';
 
 interface ChartsViewProps {
   data: AppState;
-  filter: GlobalFilter; // Prop kept for interface compatibility but ignored
-  onUpdateFilter: (f: GlobalFilter) => void; // Prop kept but ignored
+  filter: GlobalFilter;
+  onUpdateFilter: (f: GlobalFilter) => void;
   currentBook: BookMetadata;
 }
 
@@ -23,21 +23,16 @@ const compactCurrency = (value: number) => {
 export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => {
   const [activeTab, setActiveTab] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [chartType, setChartType] = useState<'PIE' | 'LINE'>('PIE');
-  const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  // Removed catChartType state as logic is now integrated
+  
+  // Navigation State: Stack of IDs. Empty = Root.
+  const [drillPath, setDrillPath] = useState<{ famId?: string, catId?: string }>({});
 
   // --- LOCAL INDEPENDENT FILTER STATE ---
-  // Default: Interanual (Last 12 months)
   const [localFilter, setLocalFilter] = useState<GlobalFilter>(() => {
       const now = new Date();
-      // Start: 1st day of month, 1 year ago
       const start = new Date(now.getFullYear() - 1, now.getMonth(), 1);
-      // End: Last day of current month
       const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      
       const fmt = (d: Date) => d.toISOString().split('T')[0];
-      
       return {
           timeRange: 'CUSTOM',
           referenceDate: now,
@@ -46,7 +41,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
       };
   });
 
-  // Helpers for Header Navigation
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
   const monthShorts = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
@@ -61,27 +55,19 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
 
   const displayLogo = useMemo(() => {
     let logo = currentBook.logo;
-    if (logo && logo.startsWith('/api/')) {
-        return `${logo}&key=${localStorage.getItem('auth_token')}`;
-    }
+    if (logo && logo.startsWith('/api/')) return `${logo}&key=${localStorage.getItem('auth_token')}`;
     return logo || localStorage.getItem('contamiki_custom_logo') || "/contamiki.jpg";
   }, [currentBook.logo]);
 
-  // Determine if we are in "Detailed Daily Mode" or "Aggregated Monthly Mode"
   const isMonthlyView = localFilter.timeRange === 'MONTH';
 
   const formatDateTick = (dateStr: string) => {
     if (!dateStr) return '';
     const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr; // Fallback for pure month strings if passed differently
-
-    if (isMonthlyView) {
-        // Daily view: 01/05
-        return `${date.getDate()}/${date.getMonth() + 1}`;
-    } else {
-        // Monthly view: Ene 24
-        return `${monthShorts[date.getMonth()]} ${date.getFullYear().toString().slice(-2)}`;
-    }
+    if (isNaN(date.getTime())) return dateStr;
+    return isMonthlyView 
+        ? `${date.getDate()}/${date.getMonth() + 1}` 
+        : `${monthShorts[date.getMonth()]} ${date.getFullYear().toString().slice(-2)}`;
   };
 
   const renderIcon = (iconStr: string, className = "w-6 h-6") => {
@@ -90,8 +76,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     }
     return <span className="text-xl">{iconStr || '🔹'}</span>;
   };
-
-  // --- DATA PROCESSING HELPERS ---
 
   const dateBounds = useMemo(() => {
     const y = localFilter.referenceDate.getFullYear();
@@ -108,22 +92,15 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     return { start, end };
   }, [localFilter]);
 
-  // 1. SAVINGS EVOLUTION (Accumulated Balance)
   const savingsData = useMemo(() => {
     const timeline = new Map<string, number>();
     const sortedTx = [...data.transactions].sort((a, b) => a.date.localeCompare(b.date));
-    
-    // Initial balance calculation
     let runningBalance = data.accounts.reduce((acc, a) => acc + a.initialBalance, 0);
     
-    // Fill timeline
     sortedTx.forEach(t => {
-      // Calculate effect on balance
       let amt = 0;
       if (t.type === 'EXPENSE' || t.type === 'TRANSFER') amt = -Math.abs(t.amount);
       else amt = Math.abs(t.amount);
-
-      // Correction: Internal transfers shouldn't change global balance unless one account is hidden/external
       const isInternal = t.type === 'TRANSFER' && t.transferAccountId && data.accounts.find(a=>a.id===t.transferAccountId);
       if (isInternal) amt = 0;
 
@@ -131,154 +108,104 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
          runningBalance += amt;
       } else if (t.date <= dateBounds.end) {
          runningBalance += amt;
-         // Key determination: Day vs Month
-         let key = t.date;
-         if (!isMonthlyView) {
-             key = t.date.substring(0, 7) + '-01'; 
-         }
+         const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01'); 
          timeline.set(key, runningBalance);
       }
     });
 
-    // Prepare real data points: { date, balance, projection: null }
-    let result: any[] = Array.from(timeline.entries())
-        .map(([date, balance]) => ({ date, balance, projection: null }))
-        .sort((a, b) => a.date.localeCompare(b.date));
-        
-    if (result.length === 0) return [];
-
-    // Trend Calculation & Projection (Horizon: 3 Months)
+    let result: any[] = Array.from(timeline.entries()).map(([date, balance]) => ({ date, balance, projection: null })).sort((a, b) => a.date.localeCompare(b.date));
     if (result.length > 3) {
         const n = result.length;
         let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-        // Calculate regression based on indices
         result.forEach((p, i) => { sumX += i; sumY += p.balance; sumXY += i * p.balance; sumXX += i * i; });
         const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
         const intercept = (sumY - slope * sumX) / n;
-
-        // Start projection from the last real point to ensure continuity
         const lastRealPoint = result[result.length - 1];
-        lastRealPoint.projection = lastRealPoint.balance; // Connect the lines
-
+        lastRealPoint.projection = lastRealPoint.balance; 
         const lastDate = new Date(lastRealPoint.date);
-        
-        // Project 3 steps ahead (Months)
         for (let i = 1; i <= 3; i++) {
-            // Ensure we project months into the future regardless of current view granularity
-            // to show the "horizon" requested.
             lastDate.setMonth(lastDate.getMonth() + 1);
-            
             const nextVal = slope * (n + i) + intercept;
-            result.push({ 
-                date: lastDate.toISOString().split('T')[0], 
-                balance: null, // No real data
-                projection: nextVal, 
-                isProjection: true 
-            });
+            result.push({ date: lastDate.toISOString().split('T')[0], balance: null, projection: nextVal, isProjection: true });
         }
     }
     return result;
   }, [data.transactions, dateBounds, data.accounts, isMonthlyView]);
 
-  // 2. BREAKDOWN DATA (Pie & Line)
   const breakdownData = useMemo(() => {
-      const familyMap = new Map<string, { total: number, history: Map<string, number>, name: string, icon: string }>();
-      const categoryMap = new Map<string, { total: number, history: Map<string, number>, name: string, icon: string }>();
-
-      const relevantTx = data.transactions.filter(t => 
-          t.date >= dateBounds.start && t.date <= dateBounds.end &&
-          t.type === activeTab
-      );
-
-      relevantTx.forEach(t => {
-          const cat = data.categories.find(c => c.id === t.categoryId);
-          const famId = t.familyId || cat?.familyId;
-          const fam = data.families.find(f => f.id === famId);
-          
-          if (fam && cat) {
-              const val = Math.abs(t.amount);
-              // Key: YYYY-MM-DD or YYYY-MM-01
-              const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01');
-              
-              if (!familyMap.has(fam.id)) familyMap.set(fam.id, { total: 0, history: new Map(), name: fam.name, icon: fam.icon });
-              const fEntry = familyMap.get(fam.id)!;
-              fEntry.total += val;
-              fEntry.history.set(key, (fEntry.history.get(key) || 0) + val);
-
-              if (selectedFamilyId && fam.id === selectedFamilyId) {
-                  if (!categoryMap.has(cat.id)) categoryMap.set(cat.id, { total: 0, history: new Map(), name: cat.name, icon: cat.icon });
-                  const cEntry = categoryMap.get(cat.id)!;
-                  cEntry.total += val;
-                  cEntry.history.set(key, (cEntry.history.get(key) || 0) + val);
-              }
-          }
-      });
-
-      const pieData = Array.from(selectedFamilyId ? categoryMap.entries() : familyMap.entries()).map(([id, d]) => ({
-          id, name: d.name, value: d.total, icon: d.icon
-      })).sort((a, b) => b.value - a.value);
-
-      // Line Data Construction
-      const allDates = new Set<string>();
-      // Collect all keys from all histories
-      const mapToUse = selectedFamilyId ? categoryMap : familyMap;
-      mapToUse.forEach(v => {
-          for (const k of v.history.keys()) allDates.add(k);
-      });
+      const relevantTx = data.transactions.filter(t => t.date >= dateBounds.start && t.date <= dateBounds.end && t.type === activeTab);
       
-      const sortedDates = Array.from(allDates).sort();
+      let items: { id: string, name: string, value: number, icon: string, history: Map<string, number> }[] = [];
+      const historyKeys = new Set<string>();
 
+      if (!drillPath.famId) {
+          const map = new Map<string, typeof items[0]>();
+          relevantTx.forEach(t => {
+              const cat = data.categories.find(c => c.id === t.categoryId);
+              const famId = t.familyId || cat?.familyId;
+              if (famId) {
+                  if (!map.has(famId)) {
+                      const fam = data.families.find(f => f.id === famId);
+                      map.set(famId, { id: famId, name: fam?.name || '?', value: 0, icon: fam?.icon || '', history: new Map() });
+                  }
+                  const entry = map.get(famId)!;
+                  const val = Math.abs(t.amount);
+                  entry.value += val;
+                  const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01');
+                  entry.history.set(key, (entry.history.get(key) || 0) + val);
+                  historyKeys.add(key);
+              }
+          });
+          items = Array.from(map.values());
+      } else if (!drillPath.catId) {
+          const map = new Map<string, typeof items[0]>();
+          relevantTx.filter(t => {
+              const cat = data.categories.find(c => c.id === t.categoryId);
+              return t.familyId === drillPath.famId || cat?.familyId === drillPath.famId;
+          }).forEach(t => {
+              const catId = t.categoryId;
+              if (catId) {
+                  if (!map.has(catId)) {
+                      const cat = data.categories.find(c => c.id === catId);
+                      map.set(catId, { id: catId, name: cat?.name || '?', value: 0, icon: cat?.icon || '', history: new Map() });
+                  }
+                  const entry = map.get(catId)!;
+                  const val = Math.abs(t.amount);
+                  entry.value += val;
+                  const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01');
+                  entry.history.set(key, (entry.history.get(key) || 0) + val);
+                  historyKeys.add(key);
+              }
+          });
+          items = Array.from(map.values());
+      } else {
+          const catId = drillPath.catId;
+          const cat = data.categories.find(c => c.id === catId);
+          const history = new Map<string, number>();
+          relevantTx.filter(t => t.categoryId === catId).forEach(t => {
+              const val = Math.abs(t.amount);
+              const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01');
+              history.set(key, (history.get(key) || 0) + val);
+              historyKeys.add(key);
+          });
+          items = [{ id: catId, name: cat?.name || '?', value: Array.from(history.values()).reduce((a,b)=>a+b,0), icon: cat?.icon || '', history }];
+      }
+
+      items.sort((a, b) => b.value - a.value);
+
+      const sortedDates = Array.from(historyKeys).sort();
       const lineData = sortedDates.map(date => {
           const point: any = { date };
-          mapToUse.forEach((v, k) => {
-              point[v.name] = v.history.get(date) || 0;
-          });
+          items.forEach(item => { point[item.name] = item.history.get(date) || 0; });
           return point;
       });
 
-      // Specific Category Line Data
-      let catLineData: any[] = [];
-      if (selectedCategoryId) {
-          const cat = data.categories.find(c => c.id === selectedCategoryId);
-          if (cat) {
-             // We can reuse the loop or filter again. Filtering is cleaner.
-             const catTx = relevantTx.filter(t => t.categoryId === selectedCategoryId);
-             
-             // Aggregate manually
-             const aggMap = new Map<string, number>();
-             catTx.forEach(t => {
-                 const key = isMonthlyView ? t.date : (t.date.substring(0, 7) + '-01');
-                 aggMap.set(key, (aggMap.get(key) || 0) + Math.abs(t.amount));
-             });
-
-             catLineData = Array.from(aggMap.entries())
-                .map(([date, value]) => ({ date, value }))
-                .sort((a, b) => a.date.localeCompare(b.date));
-          }
-      }
-
-      return { pieData, lineData, catLineData };
-  }, [data.transactions, activeTab, dateBounds, selectedFamilyId, selectedCategoryId, data.categories, data.families, isMonthlyView]);
-
-  // UI Components
-  const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, icon }: any) => {
-    const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-    return percent > 0.05 ? (
-      <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={10} fontWeight="bold">
-        {`${(percent * 100).toFixed(0)}%`}
-      </text>
-    ) : null;
-  };
-
-  const selectedFamily = data.families.find(f => f.id === selectedFamilyId);
-  const selectedCategory = data.categories.find(c => c.id === selectedCategoryId);
+      return { items, lineData };
+  }, [data.transactions, activeTab, dateBounds, drillPath, isMonthlyView, data.categories, data.families]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
       if (active && payload && payload.length) {
-          const title = formatDateTick(label); // Use the same formatter
+          const title = formatDateTick(label);
           const isProj = payload[0]?.payload?.isProjection;
           return (
               <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs">
@@ -298,6 +225,26 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
       return null;
   };
 
+  const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    return percent > 0.05 ? (
+      <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={10} fontWeight="bold">
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    ) : null;
+  };
+
+  const handleSliceClick = (data: any) => {
+      if (!drillPath.famId) {
+          setDrillPath({ famId: data.id });
+      } else if (!drillPath.catId) {
+          setDrillPath({ ...drillPath, catId: data.id });
+      }
+  };
+
   return (
     <div className="space-y-12 animate-in fade-in duration-500 pb-20">
         {/* HEADER */}
@@ -314,5 +261,137 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                         <button onClick={() => navigatePeriod('prev')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={24} /></button>
                         <button onClick={() => navigatePeriod('next')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={24} /></button>
                     </div>
+                    <div className="bg-slate-100 p-2 rounded-2xl flex flex-wrap gap-1 shadow-inner border border-slate-200/50">
+                        <button onClick={() => setLocalFilter({...localFilter, timeRange: 'ALL'})} className={`px-6 py-3 text-xs sm:text-sm font-black uppercase tracking-widest rounded-xl transition-all ${localFilter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Todo</button>
+                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center ${localFilter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>{localFilter.timeRange === 'YEAR' ? (<select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[60px]" value={localFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalFilter({...localFilter, timeRange: 'YEAR', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>) : (<button onClick={() => setLocalFilter({...localFilter, timeRange: 'YEAR'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>)}</div>
+                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-1 ${localFilter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>{localFilter.timeRange === 'MONTH' ? (<div className="flex items-center gap-2"><select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[80px]" value={localFilter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(localFilter.referenceDate); d.setMonth(parseInt(e.target.value)); setLocalFilter({...localFilter, timeRange: 'MONTH', referenceDate: d}); }}>{months.map((m, i) => <option key={i} value={i}>{m}</option>)}</select><span className="text-slate-300 text-xs font-black">/</span><select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[70px]" value={localFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalFilter({...localFilter, timeRange: 'MONTH', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div>) : (<button onClick={() => setLocalFilter({...localFilter, timeRange: 'MONTH'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Mes</button>)}</div>
+                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-2 ${localFilter.timeRange === 'CUSTOM' ? 'bg-white shadow-sm' : ''}`}>{localFilter.timeRange === 'CUSTOM' ? (<div className="flex items-center gap-2"><input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-28 sm:w-32 cursor-pointer py-1" value={localFilter.customStart} onChange={(e) => setLocalFilter({...localFilter, timeRange: 'CUSTOM', customStart: e.target.value})} /><span className="text-slate-300 text-[10px] font-black">➡</span><input type="date" className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 outline-none w-28 sm:w-32 cursor-pointer py-1" value={localFilter.customEnd} onChange={(e) => setLocalFilter({...localFilter, timeRange: 'CUSTOM', customEnd: e.target.value})} /></div>) : (<button onClick={() => setLocalFilter({...localFilter, timeRange: 'CUSTOM'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Pers.</button>)}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-                    <div className="bg-slate-100 p-2 rounded-2xl flex flex-wrap gap-1 shadow-inner
+        {/* SECTION 1: SAVINGS EVOLUTION */}
+        <div className="bg-white p-6 md:p-10 rounded-[3rem] shadow-sm border border-slate-100">
+            <div className="flex items-center gap-4 mb-8">
+                <div className="bg-slate-950 p-3 rounded-2xl text-white"><TrendingUp size={20}/></div>
+                <div><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Evolución de Patrimonio</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Tendencia proyectada a 3 meses</p></div>
+            </div>
+            {savingsData.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-slate-300 opacity-50"><TrendingUp size={48}/><p className="text-[10px] font-black uppercase mt-4">Sin datos de evolución</p></div>
+            ) : (
+                <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="99%" height="100%">
+                        <AreaChart data={savingsData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                            <defs><linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="date" tickFormatter={formatDateTick} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} />
+                            <YAxis domain={['auto', 'auto']} tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={40} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <ReferenceLine x={savingsData.find(d => (d as any).isProjection)?.date} stroke="#cbd5e1" strokeDasharray="3 3" />
+                            <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" name="Patrimonio" connectNulls={false} />
+                            <Area type="monotone" dataKey="projection" stroke="#94a3b8" strokeWidth={3} strokeDasharray="5 5" fillOpacity={0.5} fill="url(#colorBalance)" name="Proyección" connectNulls={false} />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            )}
+        </div>
+
+        {/* SECTION 2: GLOBAL COMPOSITION & DRILL DOWN */}
+        <div className="bg-white p-6 md:p-10 rounded-[3rem] shadow-sm border border-slate-100 min-h-[500px] flex flex-col">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8 border-b border-slate-50 pb-6">
+                <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
+                    {/* BREADCRUMBS */}
+                    <button onClick={() => setDrillPath({})} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${!drillPath.famId ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:text-slate-600'}`}>
+                        <Home size={14}/> <span className="text-[10px] font-black uppercase tracking-widest">{activeTab === 'INCOME' ? 'Ingresos' : 'Gastos'}</span>
+                    </button>
+                    {drillPath.famId && (
+                        <>
+                            <span className="text-slate-300"><ChevronRight size={14}/></span>
+                            <button onClick={() => setDrillPath({ famId: drillPath.famId })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${!drillPath.catId ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-400 hover:text-indigo-600'}`}>
+                                {renderIcon(data.families.find(f=>f.id===drillPath.famId)?.icon || '', "w-4 h-4")} <span className="text-[10px] font-black uppercase tracking-widest">{data.families.find(f=>f.id===drillPath.famId)?.name}</span>
+                            </button>
+                        </>
+                    )}
+                    {drillPath.catId && (
+                        <>
+                            <span className="text-slate-300"><ChevronRight size={14}/></span>
+                            <div className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-xl shadow-lg animate-in slide-in-from-left-2">
+                                {renderIcon(data.categories.find(c=>c.id===drillPath.catId)?.icon || '', "w-4 h-4")} <span className="text-[10px] font-black uppercase tracking-widest">{data.categories.find(c=>c.id===drillPath.catId)?.name}</span>
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-4">
+                    {/* TYPE TOGGLE (Only at root) */}
+                    {!drillPath.famId && (
+                        <div className="bg-slate-100 p-1 rounded-xl flex shadow-inner">
+                            <button onClick={() => setActiveTab('INCOME')} className={`p-2 rounded-lg transition-all ${activeTab === 'INCOME' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}><ArrowUpCircle size={16}/></button>
+                            <button onClick={() => setActiveTab('EXPENSE')} className={`p-2 rounded-lg transition-all ${activeTab === 'EXPENSE' ? 'bg-white text-rose-500 shadow-sm' : 'text-slate-400'}`}><ArrowDownCircle size={16}/></button>
+                        </div>
+                    )}
+                    {/* CHART TYPE TOGGLE */}
+                    <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-1">
+                        <button onClick={() => setChartType('PIE')} className={`p-2 rounded-lg transition-all ${chartType === 'PIE' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-indigo-600'}`} disabled={!!drillPath.catId}><PieIcon size={16}/></button>
+                        <button onClick={() => setChartType('LINE')} className={`p-2 rounded-lg transition-all ${chartType === 'LINE' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-indigo-600'}`}><LineIcon size={16}/></button>
+                    </div>
+                </div>
+            </div>
+
+            {breakdownData.items.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-slate-300 opacity-50"><PieIcon size={48}/><p className="text-[10px] font-black uppercase mt-4">Sin datos en este periodo</p></div>
+            ) : (
+                <div className="flex-1 min-h-[300px] w-full animate-in fade-in duration-300">
+                    <ResponsiveContainer width="99%" height="100%">
+                        {(chartType === 'PIE' && !drillPath.catId) ? (
+                            <PieChart>
+                                <Pie
+                                    data={breakdownData.items}
+                                    cx="50%" cy="50%"
+                                    innerRadius={80} outerRadius={120}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                    label={renderCustomLabel}
+                                    labelLine={false}
+                                    onClick={handleSliceClick}
+                                    cursor="pointer"
+                                >
+                                    {breakdownData.items.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                                    ))}
+                                </Pie>
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend 
+                                    verticalAlign="bottom" height={36} 
+                                    content={(props) => (
+                                        <div className="flex flex-wrap justify-center gap-4 mt-8">
+                                            {props.payload?.map((entry: any, index: number) => (
+                                                <div key={`item-${index}`} className="flex items-center gap-1.5 cursor-pointer opacity-80 hover:opacity-100 transition-opacity" onClick={() => handleSliceClick(breakdownData.items[index])}>
+                                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}/>
+                                                    <span className="text-[9px] font-bold text-slate-600 uppercase">{entry.value}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                />
+                            </PieChart>
+                        ) : (
+                            <LineChart data={breakdownData.lineData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="date" tickFormatter={formatDateTick} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} />
+                                <YAxis tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={40} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', marginTop: '20px' }} />
+                                {breakdownData.items.map((item, idx) => (
+                                    <Line key={item.id} type="monotone" dataKey={item.name} stroke={COLORS[idx % COLORS.length]} strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                                ))}
+                            </LineChart>
+                        )}
+                    </ResponsiveContainer>
+                </div>
+            )}
+        </div>
+    </div>
+  );
+};
