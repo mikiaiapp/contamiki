@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AppState, GlobalFilter, BookMetadata } from '../types';
+import { AppState, GlobalFilter, BookMetadata, Transaction } from '../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, Legend, ReferenceLine, BarChart, Bar } from 'recharts';
 import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, ChevronLeft, Home, BarChart3, Grip, Search, X } from 'lucide-react';
 
@@ -32,6 +32,7 @@ interface ViewState {
 export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => {
   // Estado de navegación (Drill-down)
   const [viewState, setViewState] = useState<ViewState>({ level: 'ROOT' });
+  const [pointDetailTxs, setPointDetailTxs] = useState<{ date: string, txs: Transaction[] } | null>(null);
 
   // --- FILTRO LOCAL INTERANUAL POR DEFECTO ---
   const [localFilter, setLocalFilter] = useState<GlobalFilter>(() => {
@@ -93,6 +94,40 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
         return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
     }
     return <span className="text-xl">{iconStr || '🔹'}</span>;
+  };
+
+  const formatDateDisplay = (dateStr: string) => {
+    if (!dateStr) return '--/--/--';
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year.slice(-2)}`;
+  };
+
+  const getAmountColor = (amount: number) => {
+    if (amount > 0) return 'text-emerald-600';
+    if (amount < 0) return 'text-rose-600';
+    return 'text-slate-400';
+  };
+
+  const handleChartPointClick = (dataPoint: any) => {
+      if (!dataPoint || !dataPoint.activePayload) return;
+      const { date } = dataPoint.activePayload[0].payload;
+      
+      const categoryId = viewState.itemId;
+      if (!categoryId) return;
+
+      const txs = data.transactions.filter(t => {
+          if (t.categoryId !== categoryId) return false;
+          // Filter by date match
+          if (isMonthlyGranularity) {
+              return t.date === date;
+          } else {
+              return t.date.startsWith(date); // date is YYYY-MM
+          }
+      }).sort((a, b) => a.date.localeCompare(b.date));
+
+      if (txs.length > 0) {
+          setPointDetailTxs({ date, txs });
+      }
   };
 
   // --- DATA: EVOLUCIÓN PATRIMONIO (Sección 1) ---
@@ -445,7 +480,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                         </div>
                         <div className="w-full h-[350px]">
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={(chartData as any).data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                                <LineChart data={(chartData as any).data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} onClick={handleChartPointClick} cursor="pointer">
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                     <XAxis dataKey="date" tickFormatter={formatDateLabel} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
                                     <YAxis tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={40} />
@@ -466,6 +501,35 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                 )}
             </div>
         </div>
+
+        {/* DETAIL MODAL FOR CHART POINT */}
+        {pointDetailTxs && (
+            <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[250] p-4 animate-in fade-in zoom-in duration-300">
+                <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-6 sm:p-8 relative border border-white/20 flex flex-col max-h-[85vh]">
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="flex flex-col">
+                            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Detalle del Periodo</h3>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                {localFilter.timeRange === 'MONTH' ? formatDateDisplay(pointDetailTxs.date) : formatDateLabel(pointDetailTxs.date + '-01')}
+                            </p>
+                        </div>
+                        <button onClick={() => setPointDetailTxs(null)} className="p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button>
+                    </div>
+                    
+                    <div className="overflow-y-auto custom-scrollbar flex-1 -mx-2 px-2">
+                        {pointDetailTxs.txs.map(t => (
+                            <div key={t.id} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 rounded-xl px-2 transition-colors">
+                                <div className="flex flex-col gap-0.5 flex-1 min-w-0 pr-4">
+                                    <span className="text-xs font-bold text-slate-700 uppercase truncate" title={t.description}>{t.description}</span>
+                                    <span className="text-[9px] text-slate-400 font-medium">{formatDateDisplay(t.date)}</span>
+                                </div>
+                                <span className={`text-sm font-black whitespace-nowrap ${getAmountColor(t.amount)}`}>{formatCurrency(t.amount)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 };
