@@ -30,6 +30,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   // Chart Modal States
   const [categoryChartTarget, setCategoryChartTarget] = useState<Category | null>(null);
   const [localChartFilter, setLocalChartFilter] = useState<GlobalFilter>(filter);
+  
+  // Point Detail Modal State
+  const [pointDetailTxs, setPointDetailTxs] = useState<{ date: string, txs: Transaction[] } | null>(null);
 
   const displayLogo = useMemo(() => {
     let logo = currentBook.logo;
@@ -347,6 +350,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return d.toISOString().split('T')[0];
   };
 
+  // --- CHART CLICK HANDLER ---
+  const handleChartPointClick = (dataPoint: any) => {
+      if (!dataPoint || !dataPoint.activePayload || !categoryChartTarget) return;
+      const { date } = dataPoint.activePayload[0].payload;
+      
+      const isMonthlyView = localChartFilter.timeRange === 'MONTH';
+      
+      const relatedTxs = transactions.filter(t => {
+          if (t.categoryId !== categoryChartTarget.id) return false;
+          
+          if (isMonthlyView) {
+              return t.date === date;
+          } else {
+              // Year/Custom View: Match YYYY-MM
+              const txMonth = t.date.substring(0, 7); // YYYY-MM
+              const pointMonth = date.substring(0, 7); // YYYY-MM
+              return txMonth === pointMonth;
+          }
+      }).sort((a, b) => a.date.localeCompare(b.date));
+
+      if (relatedTxs.length > 0) {
+          setPointDetailTxs({ date, txs: relatedTxs });
+      }
+  };
+
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
     if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
     return <span className="text-xl flex items-center justify-center">{iconStr || '📂'}</span>;
@@ -561,6 +589,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         </div>
       )}
 
+      {/* CHART MODAL */}
       {categoryChartTarget && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-3xl p-8 sm:p-10 relative border border-white/20">
@@ -607,7 +636,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                 <div className="h-[300px] w-full bg-slate-50/50 rounded-[2rem] p-4 border border-slate-100">
                     {categoryChartData.length > 0 ? (
                         <ResponsiveContainer width="99%" height="100%">
-                            <LineChart data={categoryChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <LineChart data={categoryChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} onClick={handleChartPointClick} className="cursor-pointer">
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                                 <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
                                 <XAxis 
@@ -636,6 +665,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                                         <span>{val >= 0 ? 'Neto:' : 'Neto:'}</span>
                                                         <span>{formatCurrency(val)}</span>
                                                     </div>
+                                                    <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Clic para ver detalle</p>
                                                 </div>
                                             );
                                         }
@@ -654,6 +684,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                 </div>
             </div>
         </div>
+      )}
+
+      {/* DETAIL MODAL FOR CHART POINT */}
+      {pointDetailTxs && (
+          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[250] p-4 animate-in fade-in zoom-in duration-300">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-6 sm:p-8 relative border border-white/20 flex flex-col max-h-[85vh]">
+                  <div className="flex justify-between items-center mb-6">
+                      <div className="flex flex-col">
+                          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Detalle del Periodo</h3>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                              {localChartFilter.timeRange === 'MONTH' ? formatDateDisplay(pointDetailTxs.date) : formatDateTick(pointDetailTxs.date + '-01')}
+                          </p>
+                      </div>
+                      <button onClick={() => setPointDetailTxs(null)} className="p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button>
+                  </div>
+                  
+                  <div className="overflow-y-auto custom-scrollbar flex-1 -mx-2 px-2">
+                      {pointDetailTxs.txs.map(t => (
+                          <div key={t.id} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 rounded-xl px-2 transition-colors">
+                              <div className="flex flex-col gap-0.5">
+                                  <span className="text-xs font-bold text-slate-700 uppercase">{t.description}</span>
+                                  <span className="text-[9px] text-slate-400 font-medium">{formatDateDisplay(t.date)}</span>
+                              </div>
+                              <span className={`text-sm font-black ${getAmountColor(t.amount)}`}>{formatCurrency(t.amount)}</span>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          </div>
       )}
 
       {showBalanceDetail && (

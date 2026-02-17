@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AppState, GlobalFilter, BookMetadata } from './types';
+import { AppState, GlobalFilter, BookMetadata, Transaction } from './types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, Legend, ReferenceLine, BarChart, Bar } from 'recharts';
 import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, ChevronLeft, Home, BarChart3, Grip, Search, X, Scale } from 'lucide-react';
 
@@ -41,6 +41,7 @@ interface ViewState {
 export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => {
   // Estado de navegación (Drill-down)
   const [viewState, setViewState] = useState<ViewState>({ level: 'ROOT' });
+  const [pointDetailTxs, setPointDetailTxs] = useState<{ date: string, txs: Transaction[] } | null>(null);
 
   // --- FILTRO LOCAL INTERANUAL POR DEFECTO ---
   const [localFilter, setLocalFilter] = useState<GlobalFilter>(() => {
@@ -272,6 +273,9 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                 <div className={`flex items-center gap-2 font-bold ${getAmountColorClass(val)}`}>
                     <span>{formatCurrency(val)}</span>
                 </div>
+                {viewState.level === 'CATEGORY' && (
+                    <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Clic para ver detalle</p>
+                )}
             </div>
         );
     }
@@ -285,6 +289,37 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
       }
       const [y, m] = val.split('-');
       return monthShorts[parseInt(m)-1];
+  };
+
+  const formatDateDisplay = (dateStr: string) => {
+    if (!dateStr) return '--/--/--';
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year.slice(-2)}`;
+  };
+
+  // --- CHART CLICK HANDLER ---
+  const handleChartPointClick = (dataPoint: any) => {
+      if (!dataPoint || !dataPoint.activePayload || viewState.level !== 'CATEGORY' || !viewState.itemId) return;
+      const { date } = dataPoint.activePayload[0].payload;
+      
+      const isMonthlyView = localFilter.timeRange === 'MONTH';
+      
+      const relatedTxs = data.transactions.filter(t => {
+          if (t.categoryId !== viewState.itemId) return false;
+          
+          if (isMonthlyView) {
+              return t.date === date;
+          } else {
+              // Year/Custom View: Match YYYY-MM
+              const txMonth = t.date.substring(0, 7); // YYYY-MM
+              const pointMonth = date.substring(0, 7); // YYYY-MM
+              return txMonth === pointMonth;
+          }
+      }).sort((a, b) => a.date.localeCompare(b.date));
+
+      if (relatedTxs.length > 0) {
+          setPointDetailTxs({ date, txs: relatedTxs });
+      }
   };
 
   return (
@@ -562,7 +597,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                         </div>
                         <div className="w-full h-[350px]">
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={(chartData as any).data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                                <LineChart data={(chartData as any).data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} onClick={handleChartPointClick} className="cursor-pointer">
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                     <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
                                     <XAxis dataKey="date" tickFormatter={formatDateLabel} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
@@ -584,6 +619,35 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                 )}
             </div>
         </div>
+
+        {/* DETAIL MODAL FOR CHART POINT */}
+        {pointDetailTxs && (
+            <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[250] p-4 animate-in fade-in zoom-in duration-300">
+                <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-6 sm:p-8 relative border border-white/20 flex flex-col max-h-[85vh]">
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="flex flex-col">
+                            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Detalle del Periodo</h3>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                {localFilter.timeRange === 'MONTH' ? formatDateDisplay(pointDetailTxs.date) : formatDateLabel(pointDetailTxs.date + '-01')}
+                            </p>
+                        </div>
+                        <button onClick={() => setPointDetailTxs(null)} className="p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button>
+                    </div>
+                    
+                    <div className="overflow-y-auto custom-scrollbar flex-1 -mx-2 px-2">
+                        {pointDetailTxs.txs.map(t => (
+                            <div key={t.id} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 rounded-xl px-2 transition-colors">
+                                <div className="flex flex-col gap-0.5">
+                                    <span className="text-xs font-bold text-slate-700 uppercase">{t.description}</span>
+                                    <span className="text-[9px] text-slate-400 font-medium">{formatDateDisplay(t.date)}</span>
+                                </div>
+                                <span className={`text-sm font-black ${getAmountColorClass(t.amount)}`}>{formatCurrency(t.amount)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 };
