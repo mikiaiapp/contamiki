@@ -20,6 +20,9 @@ const compactCurrency = (value: number) => {
 
 const formatCurrency = (amount: number) => `${NUMBER_FORMATTER.format(amount)} €`;
 
+// Helper para color de importe en gráficos
+const getAmountColorClass = (val: number) => val >= 0 ? 'text-emerald-600' : 'text-rose-600';
+
 // Estado de Navegación del Gráfico
 type ViewLevel = 'ROOT' | 'FAMILY' | 'CATEGORY';
 interface ViewState {
@@ -237,7 +240,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
         return (
             <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs z-50">
                 <div className="font-black text-slate-700 mb-1">{label || d.name}</div>
-                <div className="flex items-center gap-2 text-indigo-600 font-bold">
+                <div className={`flex items-center gap-2 font-bold ${getAmountColorClass(val)}`}>
                     <span>{formatCurrency(val)}</span>
                 </div>
             </div>
@@ -363,7 +366,20 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                             ))}
                                         </Pie>
                                         <Tooltip content={<CustomTooltip />} />
-                                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 'bold'}}/>
+                                        <Legend 
+                                            verticalAlign="bottom" 
+                                            content={(props) => (
+                                                <div className="flex flex-wrap justify-center gap-x-3 gap-y-2 mt-2">
+                                                    {props.payload?.map((entry: any, index: number) => (
+                                                        <div key={index} onClick={() => setViewState({ level: 'FAMILY', itemId: entry.payload.id, itemName: entry.payload.name, itemType: 'INCOME' })} className="flex items-center gap-1.5 cursor-pointer group hover:opacity-80 transition-opacity">
+                                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}/>
+                                                            <span className="text-[9px] font-bold text-slate-500 uppercase group-hover:text-emerald-600">{entry.payload.name}</span>
+                                                            <span className={`text-[9px] font-black ${getAmountColorClass(entry.payload.value)}`}>{formatCurrency(entry.payload.value)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        />
                                     </PieChart>
                                 </ResponsiveContainer>
                                 {(chartData as any).incomeData.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-slate-300 text-xs font-bold uppercase">Sin datos</div>}
@@ -393,7 +409,20 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                             ))}
                                         </Pie>
                                         <Tooltip content={<CustomTooltip />} />
-                                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 'bold'}}/>
+                                        <Legend 
+                                            verticalAlign="bottom" 
+                                            content={(props) => (
+                                                <div className="flex flex-wrap justify-center gap-x-3 gap-y-2 mt-2">
+                                                    {props.payload?.map((entry: any, index: number) => (
+                                                        <div key={index} onClick={() => setViewState({ level: 'FAMILY', itemId: entry.payload.id, itemName: entry.payload.name, itemType: 'EXPENSE' })} className="flex items-center gap-1.5 cursor-pointer group hover:opacity-80 transition-opacity">
+                                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}/>
+                                                            <span className="text-[9px] font-bold text-slate-500 uppercase group-hover:text-rose-600">{entry.payload.name}</span>
+                                                            <span className={`text-[9px] font-black ${getAmountColorClass(entry.payload.value)}`}>{formatCurrency(entry.payload.value)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        />
                                     </PieChart>
                                 </ResponsiveContainer>
                                 {(chartData as any).expenseData.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-slate-300 text-xs font-bold uppercase">Sin datos</div>}
@@ -429,11 +458,16 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                     <Legend 
                                         layout="vertical" verticalAlign="middle" align="right" 
                                         content={(props) => (
-                                            <div className="flex flex-col gap-2 ml-4">
+                                            <div className="flex flex-col gap-2 ml-4 max-h-[250px] overflow-y-auto custom-scrollbar pr-2">
                                                 {props.payload?.map((entry: any, index: number) => (
-                                                    <div key={`item-${index}`} className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => setViewState({ level: 'CATEGORY', itemId: (chartData as any).data[index].id, itemName: (chartData as any).data[index].name, itemType: viewState.itemType })}>
-                                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}/>
-                                                        {entry.payload.value /* Mostramos valor real con signo en leyenda */ } 
+                                                    <div key={`item-${index}`} className="flex items-center justify-between gap-3 w-full text-[10px] cursor-pointer group hover:bg-slate-50 p-1 rounded-lg transition-colors" onClick={() => setViewState({ level: 'CATEGORY', itemId: (chartData as any).data[index].id, itemName: (chartData as any).data[index].name, itemType: viewState.itemType })}>
+                                                        <div className="flex items-center gap-2 overflow-hidden">
+                                                            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }}/>
+                                                            <span className="font-bold text-slate-500 uppercase truncate max-w-[120px] group-hover:text-indigo-600">{entry.payload.name}</span>
+                                                        </div>
+                                                        <span className={`font-black whitespace-nowrap ${getAmountColorClass(entry.payload.value)}`}>
+                                                            {formatCurrency(entry.payload.value)}
+                                                        </span>
                                                     </div>
                                                 ))}
                                             </div>
