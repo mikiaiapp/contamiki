@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AppState, GlobalFilter, BookMetadata } from '../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, Legend, ReferenceLine } from 'recharts';
-import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, ChevronLeft, Home, BarChart3, Grip } from 'lucide-react';
+import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, ChevronLeft, Home, BarChart3 } from 'lucide-react';
 
 interface ChartsViewProps {
   data: AppState;
@@ -144,8 +144,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
       } else if (t.date <= dateBounds.end) {
          runningBalance += amt;
          // For savings chart, we always use the granularity determined by filter
-         // BUT standard area chart often looks better with full date if points are sparse, 
-         // however to match the request logic, let's align with the filter
          const key = isMonthlyGranularity ? t.date : (t.date.substring(0, 7) + '-01'); 
          timeline.set(key, runningBalance);
       }
@@ -198,7 +196,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               const timeKey = getGranularityKey(t.date);
               
               // Determine if it acts as Income or Expense based on CATEGORY FAMILY TYPE
-              // This is crucial: A positive amount in an EXPENSE family is a refund (reduces expense).
               const cat = getCat(t.categoryId);
               const fam = cat ? getFam(cat.familyId) : null;
               
@@ -211,12 +208,9 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                   // Income families: Sum raw amount (usually positive)
                   point.income += t.amount;
               } else {
-                  // Expense families: Sum raw amount (usually negative), then flip for display
-                  // We sum raw first to handle refunds correctly
-                  // Note: We store the raw SUM here, we will flip later or handle logic below
-                  // Actually, for the chart we want "Total Expense" to be a positive number representing magnitude
-                  // So we subtract the amount (since expenses are negative). 
-                  // If t.amount is -50, -= -50 is +50. If t.amount is +10 (refund), -= 10 is -10. Correct.
+                  // Expense families: Sum raw amount. 
+                  // If t.amount is -50, -= -50 is +50. If t.amount is +10 (refund), -= 10 is -10. 
+                  // Result is positive magnitude of expense.
                   point.expense -= t.amount; 
               }
           });
@@ -232,7 +226,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               return (f?.type === 'EXPENSE') ? acc - t.amount : acc;
           }, 0);
 
-          // For ROOT, aggregateMap isn't used for Pie, but we can use it for summary buttons
           aggregateMap.set('INCOME', { id: 'INCOME', name: 'Ingresos', value: totalIncome, icon: '💰' });
           aggregateMap.set('EXPENSE', { id: 'EXPENSE', name: 'Gastos', value: totalExpense, icon: '💸' });
 
@@ -246,7 +239,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               const fam = cat ? getFam(cat.familyId) : null;
               
               if (fam && fam.type === targetType) {
-                  // Processing
+                  // Processing: Flip sign for Expenses to show positive magnitude
                   const val = targetType === 'EXPENSE' ? -t.amount : t.amount;
                   const timeKey = getGranularityKey(t.date);
 
@@ -334,7 +327,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
           <p className="font-black text-slate-500 mb-1">{formatKeyTooltip(label)}</p>
           {payload.map((p: any, idx: number) => (
             <div key={idx} className="flex items-center gap-2 font-bold" style={{ color: p.color || p.stroke || '#6366f1' }}>
-              <span>{p.name}:</span>
+              <span>{p.name === 'income' ? 'Ingresos' : p.name === 'expense' ? 'Gastos' : p.name}:</span>
               <span>{formatCurrency(p.value as number)}</span>
             </div>
           ))}
