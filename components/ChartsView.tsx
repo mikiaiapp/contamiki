@@ -210,24 +210,28 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter }) => {
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Tendencia proyectada a futuro</p>
                 </div>
             </div>
-            <div className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={savingsData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                        <defs>
-                            <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
-                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                            </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="date" hide />
-                        <YAxis hide domain={['auto', 'auto']} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <ReferenceLine x={savingsData.find(d => (d as any).isProjection)?.date} stroke="#cbd5e1" strokeDasharray="3 3" />
-                        <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" name="Patrimonio" />
-                    </AreaChart>
-                </ResponsiveContainer>
-            </div>
+            {savingsData.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-slate-300 opacity-50"><TrendingUp size={48}/><p className="text-[10px] font-black uppercase mt-4">Sin datos de evolución</p></div>
+            ) : (
+                <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="99%" height="100%">
+                        <AreaChart data={savingsData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
+                                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="date" hide />
+                            <YAxis hide domain={['auto', 'auto']} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <ReferenceLine x={savingsData.find(d => (d as any).isProjection)?.date} stroke="#cbd5e1" strokeDasharray="3 3" />
+                            <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" name="Patrimonio" />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            )}
         </div>
 
         {/* SECTION 2: GLOBAL COMPOSITION */}
@@ -252,7 +256,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter }) => {
                     <div className="h-64 flex flex-col items-center justify-center text-slate-300 opacity-50"><PieIcon size={48}/><p className="text-[10px] font-black uppercase mt-4">Sin datos en este periodo</p></div>
                 ) : (
                     <div className="h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="99%" height="100%">
                             {chartType === 'PIE' ? (
                                 <PieChart>
                                     <Pie
@@ -325,7 +329,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter }) => {
                     <h3 className="text-center text-sm font-black text-slate-900 uppercase tracking-widest mb-8">Desglose por Categorías</h3>
                     
                     <div className="h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="99%" height="100%">
                             {catChartType === 'PIE' ? (
                                 <PieChart>
                                     <Pie
@@ -390,7 +394,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter }) => {
 
                 <div className="bg-white p-6 md:p-10 rounded-[3rem] shadow-sm border border-slate-100">
                     <div className="h-[250px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="99%" height="100%">
                             <LineChart data={breakdownData.catLineData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis dataKey="date" hide />
