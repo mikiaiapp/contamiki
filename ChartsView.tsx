@@ -130,22 +130,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     return result;
   }, [data.transactions, dateBounds, data.accounts, isMonthlyGranularity]);
 
-  // --- DATA: TOTALES DEL PERIODO ---
-  const periodStats = useMemo(() => {
-      let income = 0;
-      let expense = 0;
-      data.transactions.forEach(t => {
-          if (t.date >= dateBounds.start && t.date <= dateBounds.end && t.type !== 'TRANSFER') {
-              // Asumimos que expense es negativo en DB, si no, lo forzamos
-              const val = t.type === 'EXPENSE' ? -Math.abs(t.amount) : Math.abs(t.amount);
-              
-              if (val > 0) income += val;
-              else expense += val;
-          }
-      });
-      return { income, expense, result: income + expense };
-  }, [data.transactions, dateBounds]);
-
   // --- DATA: DRILL DOWN DINÁMICO (Sección 2) ---
   const chartData = useMemo(() => {
       // 1. Transacciones en rango
@@ -249,6 +233,29 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
       return { type: 'EMPTY' };
 
   }, [data.transactions, viewState, dateBounds, isMonthlyGranularity, data.categories, data.families]);
+
+  // --- DATA: TOTALES DEL PERIODO (DERIVADOS DEL CHART DATA PARA CONSISTENCIA) ---
+  const periodStats = useMemo(() => {
+      // Si estamos en la vista ROOT, calculamos los totales sumando las categorías/familias del gráfico.
+      // Esto asegura que el total mostrado coincida exactamente con la suma de las porciones del gráfico.
+      if ((chartData as any).type === 'ROOT') {
+          const incomeData = (chartData as any).incomeData || [];
+          const expenseData = (chartData as any).expenseData || [];
+
+          // Sumamos signedValue (Ingresos positivos, Gastos negativos)
+          const totalIncome = incomeData.reduce((acc: number, item: any) => acc + item.signedValue, 0);
+          const totalExpense = expenseData.reduce((acc: number, item: any) => acc + item.signedValue, 0);
+
+          return {
+              income: totalIncome,
+              expense: totalExpense,
+              result: totalIncome + totalExpense
+          };
+      }
+      
+      // Fallback (aunque la UI oculta estos datos si no es ROOT)
+      return { income: 0, expense: 0, result: 0 };
+  }, [chartData]);
 
   // Tooltip Customizado Inteligente (Maneja Area, Pie y Line)
   const CustomTooltip = ({ active, payload, label }: any) => {
