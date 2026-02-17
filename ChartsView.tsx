@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AppState, GlobalFilter, BookMetadata, Transaction } from '../types';
+import { AppState, GlobalFilter, BookMetadata, Transaction } from './types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, Legend, ReferenceLine, BarChart, Bar } from 'recharts';
 import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, ChevronLeft, Home, BarChart3, Grip, Search, X } from 'lucide-react';
 
@@ -19,29 +19,12 @@ const compactCurrency = (value: number) => {
 };
 
 const formatCurrency = (amount: number) => `${NUMBER_FORMATTER.format(amount)} €`;
-
 const formatDateDisplay = (dateStr: string) => {
     if (!dateStr) return '--/--/--';
     const [y, m, d] = dateStr.split('-');
     return `${d}/${m}/${y.slice(-2)}`;
 };
-
-const formatDateLabel = (dateStr: string) => {
-    // For Month format YYYY-MM
-    if (dateStr.length === 7) {
-        const [y, m] = dateStr.split('-');
-        const monthShorts = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-        return `${monthShorts[parseInt(m) - 1]} ${y.substring(2)}`;
-    }
-    // For Full Date
-    return formatDateDisplay(dateStr);
-};
-
-const getAmountColorClass = (amount: number) => {
-    if (amount > 0) return 'text-emerald-600';
-    if (amount < 0) return 'text-rose-600';
-    return 'text-slate-500';
-};
+const getAmountColorClass = (amount: number) => amount > 0 ? 'text-emerald-600' : amount < 0 ? 'text-rose-600' : 'text-slate-400';
 
 // Estado de Navegación del Gráfico
 type ViewLevel = 'ROOT' | 'FAMILY' | 'CATEGORY';
@@ -87,6 +70,22 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     setLocalFilter({ ...localFilter, referenceDate: newDate });
   };
 
+  const formatDateLabel = (val: string) => {
+      const isMonthlyGranularity = localFilter.timeRange === 'MONTH';
+      if (isMonthlyGranularity) {
+          const d = new Date(val);
+          return `${d.getDate()}`;
+      }
+      const parts = val.split('-');
+      if (parts.length >= 2) {
+        const m = parseInt(parts[1]);
+        if (!isNaN(m) && m >= 1 && m <= 12) {
+             return monthShorts[m-1];
+        }
+      }
+      return val;
+  };
+
   const displayLogo = useMemo(() => {
     let logo = currentBook.logo;
     if (logo && logo.startsWith('/api/')) return `${logo}&key=${localStorage.getItem('auth_token')}`;
@@ -112,13 +111,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     return { dateBounds: { start, end }, isMonthlyGranularity };
   }, [localFilter]);
 
-  const renderIcon = (iconStr: string, className = "w-6 h-6") => {
-    if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) {
-        return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
-    }
-    return <span className="text-xl">{iconStr || '🔹'}</span>;
-  };
-
   // --- DATA: EVOLUCIÓN PATRIMONIO (Sección 1) ---
   const savingsData = useMemo(() => {
     const timeline = new Map<string, number>();
@@ -142,6 +134,40 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     let result: any[] = Array.from(timeline.entries()).map(([date, balance]) => ({ date, balance })).sort((a, b) => a.date.localeCompare(b.date));
     return result;
   }, [data.transactions, dateBounds, data.accounts, isMonthlyGranularity]);
+
+  const handleSavingsChartClick = (data: any) => {
+    if (data && data.activePayload && data.activePayload.length > 0) {
+        const payloadDate = data.activePayload[0].payload.date;
+        // Logic to show modal for specific date/month
+        // For simplicity, we just look for transactions in that granularity
+        let txs: Transaction[] = [];
+        const dateStr = payloadDate as string;
+        
+        if (isMonthlyGranularity) {
+            // Daily granularity
+            txs = this.props?.data?.transactions?.filter((t:Transaction) => t.date === dateStr) || [];
+        } else {
+            // Monthly granularity (dateStr is YYYY-MM-01)
+            const yearMonth = dateStr.substring(0, 7);
+            txs = this.props?.data?.transactions?.filter((t:Transaction) => t.date.startsWith(yearMonth)) || [];
+        }
+        
+        // As we are inside a functional component, we can access 'data' from props directly
+        // Fixing the logic above:
+        if (isMonthlyGranularity) {
+             txs = (window as any)._txsCache ? (window as any)._txsCache.filter((t:Transaction) => t.date === dateStr) : [];
+             // Better: use filteredTransactions logic if available, or filter raw data
+             // Let's filter raw data for now
+             txs = (data as any).transactions.filter((t:Transaction) => t.date === dateStr);
+        } else {
+             const yearMonth = dateStr.substring(0, 7);
+             txs = (data as any).transactions.filter((t:Transaction) => t.date.startsWith(yearMonth));
+        }
+        
+        setPointDetailTxs({ date: dateStr, txs });
+    }
+  };
+
 
   // --- DATA: DRILL DOWN DINÁMICO (Sección 2) ---
   const chartData = useMemo(() => {
@@ -261,24 +287,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     return null;
   };
 
-  const handleLineChartClick = (data: any) => {
-      if (data && data.activePayload && data.activePayload.length > 0 && viewState.level === 'CATEGORY') {
-          const date = data.activePayload[0].payload.date; // "YYYY-MM-DD" or "YYYY-MM"
-          
-          let txs = data.transactions.filter(t => t.categoryId === viewState.itemId);
-          
-          if (isMonthlyGranularity) {
-              // Exact date match
-              txs = txs.filter(t => t.date === date);
-          } else {
-              // Month match
-              txs = txs.filter(t => t.date.startsWith(date));
-          }
-          
-          setPointDetailTxs({ date, txs });
-      }
-  };
-
   return (
     <div className="space-y-12 animate-in fade-in duration-500 pb-20">
         {/* HEADER & FILTROS */}
@@ -314,15 +322,27 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
         {/* SECTION 1: EVOLUCIÓN PATRIMONIO */}
         <div className="bg-white p-6 md:p-10 rounded-[3rem] shadow-sm border border-slate-100">
             <div className="flex items-center gap-4 mb-8">
-                <div className="bg-slate-950 p-3 rounded-2xl text-white"><TrendingUp size={20}/></div>
+                <div className="bg-slate-900 p-3 rounded-2xl text-white"><TrendingUp size={20}/></div>
                 <div><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Patrimonio Neto</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Evolución de saldo acumulado</p></div>
             </div>
             <div className="h-[250px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={savingsData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <AreaChart data={savingsData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }} onClick={(data) => {
+                         if (data && data.activePayload && data.activePayload.length > 0) {
+                             const dateStr = data.activePayload[0].payload.date;
+                             let txs: Transaction[] = [];
+                             if (isMonthlyGranularity) {
+                                  txs = (this.props?.data?.transactions || data.transactions).filter(t => t.date === dateStr);
+                             } else {
+                                  const yearMonth = dateStr.substring(0, 7);
+                                  txs = (this.props?.data?.transactions || data.transactions).filter(t => t.date.startsWith(yearMonth));
+                             }
+                             setPointDetailTxs({ date: dateStr, txs });
+                         }
+                    }}>
                         <defs><linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="date" tickFormatter={(val) => formatDateLabel(val + '-01').split(' ')[0]} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
                         <YAxis domain={['auto', 'auto']} tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={40} />
                         <Tooltip content={<CustomTooltip />} />
                         <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" name="Patrimonio" connectNulls={false} />
@@ -478,9 +498,9 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                         </div>
                         <div className="w-full h-[350px]">
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={(chartData as any).data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} onClick={handleLineChartClick}>
+                                <LineChart data={(chartData as any).data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="date" tickFormatter={(val) => formatDateLabel(val + '-01').split(' ')[0]} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
+                                    <XAxis dataKey="date" tickFormatter={formatDateLabel} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
                                     <YAxis tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={40} />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Line 
