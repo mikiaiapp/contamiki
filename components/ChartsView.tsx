@@ -205,6 +205,13 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
     ) : null;
   };
 
+  const renderIcon = (iconStr: string, className = "w-6 h-6") => {
+    if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) {
+        return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />;
+    }
+    return <span className="text-xl">{iconStr || '🔹'}</span>;
+  };
+
   const selectedFamily = data.families.find(f => f.id === selectedFamilyId);
   const selectedCategory = data.categories.find(c => c.id === selectedCategoryId);
 
@@ -434,7 +441,9 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
             <div className="space-y-6 animate-in slide-in-from-bottom-8 fade-in">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl text-xl">{selectedFamily.icon}</div>
+                        <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl w-12 h-12 flex items-center justify-center">
+                            {renderIcon(selectedFamily.icon, "w-8 h-8")}
+                        </div>
                         <h3 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tighter">
                             Detalle: <span className="text-indigo-600">{selectedFamily.name}</span>
                         </h3>
@@ -519,7 +528,9 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, filter, onUpdateFi
             <div className="space-y-6 animate-in slide-in-from-bottom-8 fade-in">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="bg-white border border-slate-200 p-2 rounded-xl text-xl">{selectedCategory.icon}</div>
+                        <div className="bg-white border border-slate-200 p-2 rounded-xl w-12 h-12 flex items-center justify-center">
+                            {renderIcon(selectedCategory.icon, "w-8 h-8")}
+                        </div>
                         <h3 className="text-lg md:text-xl font-black text-slate-900 uppercase tracking-tighter">
                             Foco: <span className="text-slate-500">{selectedCategory.name}</span>
                         </h3>
