@@ -39,8 +39,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
   const [viewState, setViewState] = useState<ViewState>({ level: 'ROOT' });
 
   // --- FILTRO LOCAL INDEPENDIENTE ---
-  // Permite navegar por fechas en los gráficos sin afectar al resto de la app si se desea, 
-  // aunque por defecto se inicializa con una lógica coherente.
   const [localFilter, setLocalFilter] = useState<GlobalFilter>(() => {
       const now = new Date();
       const start = new Date(now.getFullYear(), 0, 1);
@@ -87,7 +85,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
       start = localFilter.customStart || '1900-01-01'; end = localFilter.customEnd || '2100-12-31';
     }
 
-    // Si el filtro es MES, mostramos días. Si es AÑO/TODO/CUSTOM amplio, mostramos meses.
     const isMonthlyGranularity = localFilter.timeRange === 'MONTH';
 
     return { dateBounds: { start, end }, isMonthlyGranularity };
@@ -95,8 +92,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
 
   // Helpers de formateo de ejes
   const getGranularityKey = (dateStr: string) => {
-      // Si es vista mensual -> Clave es día exacto (YYYY-MM-DD)
-      // Si es vista anual -> Clave es mes (YYYY-MM)
       return isMonthlyGranularity ? dateStr : dateStr.substring(0, 7);
   };
 
@@ -138,8 +133,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     
     sortedTx.forEach(t => {
       let amt = t.amount;
-      // Las transferencias internas no afectan al patrimonio global, salvo que salgan a una cuenta externa no registrada
-      // Aquí asumimos que si tiene transferAccountId y la cuenta existe, es interno = 0 efecto neto.
       const isInternal = t.type === 'TRANSFER' && t.transferAccountId && data.accounts.find(a=>a.id===t.transferAccountId);
       if (isInternal) amt = 0;
 
@@ -147,7 +140,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
          runningBalance += amt;
       } else if (t.date <= dateBounds.end) {
          runningBalance += amt;
-         // Para el gráfico de patrimonio, usamos la misma granularidad que el filtro principal
          const key = isMonthlyGranularity ? t.date : (t.date.substring(0, 7) + '-01'); 
          timeline.set(key, runningBalance);
       }
@@ -155,7 +147,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
 
     let result: any[] = Array.from(timeline.entries()).map(([date, balance]) => ({ date, balance, projection: null })).sort((a, b) => a.date.localeCompare(b.date));
     
-    // Proyección lineal simple a 3 periodos futuros
     if (result.length > 3) {
         const n = result.length;
         let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
@@ -181,18 +172,15 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
 
   // --- MOTOR DE DATOS 2: DRILL DOWN DINÁMICO ---
   const chartData = useMemo(() => {
-      // 1. Filtrar Transacciones del periodo
       const relevantTx = data.transactions.filter(t => 
           t.date >= dateBounds.start && 
           t.date <= dateBounds.end && 
           t.type !== 'TRANSFER'
       );
 
-      // Estructuras para acumular
       const timeSeriesMap = new Map<string, { [key: string]: number }>();
       const pieMap = new Map<string, { id: string, name: string, value: number, icon: string, color?: string }>();
 
-      // Helpers de búsqueda rápida
       const getFam = (id: string) => data.families.find(f => f.id === id);
       const getCat = (id: string) => data.categories.find(c => c.id === id);
 
@@ -200,9 +188,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
       if (viewState.level === 'ROOT') {
           relevantTx.forEach(t => {
               const timeKey = getGranularityKey(t.date);
-              
-              // Determinar si es Ingreso o Gasto según la FAMILIA de la categoría
-              // Esto es crucial para respetar devoluciones (ej: +50€ en categoría Supermercado debe restar al gasto de Supermercado)
               const cat = getCat(t.categoryId);
               const fam = cat ? getFam(cat.familyId) : null;
               
@@ -214,16 +199,10 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               if (fam.type === 'INCOME') {
                   point.income += t.amount;
               } else {
-                  // Para gastos, sumamos algebraicamente (t.amount suele ser negativo).
-                  // Luego en la visualización invertiremos el signo para que la línea suba.
-                  // Si t.amount es -10, expense acumulado pasa a -10.
-                  // Si t.amount es +5 (devolución), expense acumulado pasa a -5. Correcto.
                   point.expense += t.amount; 
               }
           });
 
-          // Preparamos datos totales para los botones/tarjetas de resumen
-          // Invertimos signo de gastos para mostrar magnitud positiva
           const totalIncome = relevantTx.reduce((acc, t) => {
               const f = getFam(getCat(t.categoryId)?.familyId || '');
               return (f?.type === 'INCOME') ? acc + t.amount : acc;
@@ -240,24 +219,18 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
       // --- NIVEL 1: TIPO (Desglose por Familias) ---
       else if (viewState.level === 'TYPE' && viewState.type) {
           const targetType = viewState.type;
-          
           relevantTx.forEach(t => {
               const cat = getCat(t.categoryId);
               const fam = cat ? getFam(cat.familyId) : null;
               
-              // Solo procesamos transacciones de familias del tipo seleccionado
               if (fam && fam.type === targetType) {
                   const timeKey = getGranularityKey(t.date);
-                  
-                  // Valor para sumar: Si es gasto, invertimos signo para visualización positiva
                   const val = targetType === 'EXPENSE' ? -t.amount : t.amount;
 
-                  // Serie Temporal
                   if (!timeSeriesMap.has(timeKey)) timeSeriesMap.set(timeKey, { date: timeKey as any });
                   const point = timeSeriesMap.get(timeKey)!;
                   point[fam.name] = (point[fam.name] || 0) + val;
 
-                  // Agregado (Pie)
                   if (!pieMap.has(fam.id)) {
                       pieMap.set(fam.id, { id: fam.id, name: fam.name, value: 0, icon: fam.icon });
                   }
@@ -272,7 +245,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
 
           relevantTx.forEach(t => {
               const cat = getCat(t.categoryId);
-              // Solo categorías de la familia seleccionada
               if (cat && cat.familyId === viewState.famId) {
                   const timeKey = getGranularityKey(t.date);
                   const val = isExpenseFam ? -t.amount : t.amount;
@@ -305,31 +277,25 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               }
           });
           
-          // Para el header
           const total = Array.from(timeSeriesMap.values()).reduce((acc, p) => acc + p.value, 0);
           pieMap.set(viewState.catId, { id: viewState.catId, name: targetCat?.name || '', value: total, icon: targetCat?.icon || '' });
       }
 
-      // Procesar resultados finales
-      // 1. Ordenar serie temporal cronológicamente
       let sortedTimeSeries = Array.from(timeSeriesMap.values()).sort((a: any, b: any) => a.date.localeCompare(b.date));
       
-      // Ajuste especial para ROOT: Invertir signo de 'expense' acumulado para pintarlo positivo
       if (viewState.level === 'ROOT') {
           sortedTimeSeries = sortedTimeSeries.map(pt => ({
               ...pt,
-              expense: Math.abs(pt.expense) // Visualización positiva
+              expense: Math.abs(pt.expense) 
           }));
       }
 
-      // 2. Ordenar datos de tarta por valor descendente
       const sortedPieData = Array.from(pieMap.values()).sort((a, b) => b.value - a.value);
 
-      // 3. Determinar qué líneas pintar (Keys)
       let lineKeys: string[] = [];
       if (viewState.level === 'ROOT') lineKeys = ['income', 'expense'];
       else if (viewState.level === 'CATEGORY') lineKeys = ['value'];
-      else lineKeys = sortedPieData.map(i => i.name); // Nombres de familias o categorías
+      else lineKeys = sortedPieData.map(i => i.name);
 
       return {
           timeData: sortedTimeSeries,
@@ -341,27 +307,32 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
   }, [data.transactions, viewState, dateBounds, isMonthlyGranularity, data.categories, data.families]);
 
   // Handlers de Interacción
-  const handleChartClick = (data: any) => {
-      // Recharts a veces devuelve null si clicas fuera
-      if (!data) return; 
-      
-      const payload = data.activePayload?.[0]?.payload; 
-      // Si es clic en línea (payload tiene todas las keys), no sabemos cuál línea específica se clicó fácilmente en Recharts sin CustomActiveDot.
-      // Mejor usamos la Leyenda o los botones de arriba para navegar en ROOT.
-      // Pero si es Pie Chart, `data` es el entry directo.
-      
-      // Lógica para Pie Chart Click
-      if (data.id && viewState.level === 'TYPE') {
-          setViewState({ ...viewState, level: 'FAMILY', famId: data.id });
-      } else if (data.id && viewState.level === 'FAMILY') {
-          setViewState({ ...viewState, level: 'CATEGORY', catId: data.id });
+  const handleKPISelect = (type: 'INCOME' | 'EXPENSE') => {
+      setViewState({ level: 'TYPE', type });
+      setChartType('PIE'); // Al bajar a Nivel 1 (Familias), forzamos Gráfico Circular
+  };
+
+  const handleSliceClick = (entry: any) => {
+      if (viewState.level === 'TYPE') {
+          setViewState({ ...viewState, level: 'FAMILY', famId: entry.id });
+          setChartType('PIE'); // Al bajar a Nivel 2 (Categorías), mantenemos Circular
+      } else if (viewState.level === 'FAMILY') {
+          setViewState({ ...viewState, level: 'CATEGORY', catId: entry.id });
+          setChartType('LINE'); // Al bajar a Nivel 3 (Evolución), forzamos Línea
       }
   };
 
   const goBack = () => {
-      if (viewState.level === 'CATEGORY') setViewState({ level: 'FAMILY', type: viewState.type, famId: viewState.famId });
-      else if (viewState.level === 'FAMILY') setViewState({ level: 'TYPE', type: viewState.type });
-      else if (viewState.level === 'TYPE') setViewState({ level: 'ROOT' });
+      if (viewState.level === 'CATEGORY') {
+          setViewState({ level: 'FAMILY', type: viewState.type, famId: viewState.famId });
+          setChartType('PIE'); // Volver a Categorías -> Circular
+      } else if (viewState.level === 'FAMILY') {
+          setViewState({ level: 'TYPE', type: viewState.type });
+          setChartType('PIE'); // Volver a Familias -> Circular
+      } else if (viewState.level === 'TYPE') {
+          setViewState({ level: 'ROOT' });
+          setChartType('LINE'); // Volver a Root -> Línea
+      }
   };
 
   const renderTooltip = ({ active, payload, label }: any) => {
@@ -381,9 +352,23 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     return null;
   };
 
+  // Determinamos qué gráfico mostrar
+  // Root y Category: Preferencia por LINE, pero usuario puede cambiar.
+  // Type y Family: Preferencia por PIE, pero usuario puede cambiar.
+  // La lógica de renderizado debe respetar chartType, pero viewState.level puede imponer defaults implícitos si chartType no se forzó en la transición (lo cual hemos hecho en los handlers).
+  
+  const showLineChart = (viewState.level === 'ROOT') || (viewState.level === 'CATEGORY' && chartType !== 'BAR') || chartType === 'LINE';
+  const showBarChart = chartType === 'BAR';
+  const showPieChart = (viewState.level === 'TYPE' || viewState.level === 'FAMILY') && chartType === 'PIE';
+
+  // Override simple logic based on specific requests: 
+  // Level 0 (ROOT) -> Always Line (initially)
+  // Level 1/2 (Type/Family) -> Default Pie
+  // Level 3 (Cat) -> Default Line
+
   return (
     <div className="space-y-12 animate-in fade-in duration-500 pb-20">
-        {/* HEADER & FILTROS (Igual que antes) */}
+        {/* HEADER & FILTROS */}
         <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8">
             <div className="space-y-4 w-full xl:w-auto">
                 <div className="flex items-center justify-center md:justify-start gap-6">
@@ -420,7 +405,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="date" tickFormatter={formatKeyDisplay} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
                         <YAxis domain={['auto', 'auto']} tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={40} />
-                        <Tooltip content={renderTooltip} />
+                        <Tooltip content={<CustomTooltip />} />
                         <ReferenceLine x={savingsData.find(d => (d as any).isProjection)?.date} stroke="#cbd5e1" strokeDasharray="3 3" label={{ value: "Proyección", position: 'insideTopRight', fill: '#94a3b8', fontSize: 10, fontWeight: 'bold' }} />
                         <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" name="Patrimonio" connectNulls={false} />
                         <Area type="monotone" dataKey="projection" stroke="#94a3b8" strokeWidth={3} strokeDasharray="5 5" fillOpacity={0.5} fill="url(#colorBalance)" name="Proyección" connectNulls={false} />
@@ -436,7 +421,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
             <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8 border-b border-slate-50 pb-6">
                 <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto scrollbar-hide">
                     {/* Botón ROOT */}
-                    <button onClick={() => setViewState({ level: 'ROOT' })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'ROOT' ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:text-slate-600'}`}>
+                    <button onClick={() => { setViewState({ level: 'ROOT' }); setChartType('LINE'); }} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'ROOT' ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:text-slate-600'}`}>
                         <Home size={14}/> <span className="text-[10px] font-black uppercase tracking-widest">Resumen</span>
                     </button>
 
@@ -444,7 +429,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                     {viewState.level !== 'ROOT' && (
                         <>
                             <span className="text-slate-300"><ChevronRight size={14}/></span>
-                            <button onClick={() => setViewState({ level: 'TYPE', type: viewState.type })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'TYPE' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-400 hover:text-indigo-600'}`}>
+                            <button onClick={() => { setViewState({ level: 'TYPE', type: viewState.type }); setChartType('PIE'); }} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'TYPE' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-400 hover:text-indigo-600'}`}>
                                 {viewState.type === 'INCOME' ? <ArrowUpCircle size={14}/> : <ArrowDownCircle size={14}/>}
                                 <span className="text-[10px] font-black uppercase tracking-widest">{viewState.type === 'INCOME' ? 'Ingresos' : 'Gastos'}</span>
                             </button>
@@ -455,7 +440,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                     {(viewState.level === 'FAMILY' || viewState.level === 'CATEGORY') && viewState.famId && (
                         <>
                             <span className="text-slate-300"><ChevronRight size={14}/></span>
-                            <button onClick={() => setViewState({ level: 'FAMILY', type: viewState.type, famId: viewState.famId })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'FAMILY' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-400 hover:text-indigo-600'}`}>
+                            <button onClick={() => { setViewState({ level: 'FAMILY', type: viewState.type, famId: viewState.famId }); setChartType('PIE'); }} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'FAMILY' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-400 hover:text-indigo-600'}`}>
                                 {renderIcon(data.families.find(f=>f.id===viewState.famId)?.icon || '', "w-4 h-4")} 
                                 <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">{data.families.find(f=>f.id===viewState.famId)?.name}</span>
                             </button>
@@ -476,7 +461,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
 
                 {/* Controles de Tipo de Gráfico */}
                 <div className="flex items-center gap-4">
-                    {(viewState.level === 'TYPE' || viewState.level === 'FAMILY') && (
+                    {viewState.level !== 'ROOT' && (
                         <div className="flex bg-slate-50 border border-slate-100 rounded-xl p-1">
                             <button onClick={() => setChartType('PIE')} className={`p-2 rounded-lg transition-all ${chartType === 'PIE' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-indigo-600'}`}><PieIcon size={16}/></button>
                             <button onClick={() => setChartType('LINE')} className={`p-2 rounded-lg transition-all ${chartType === 'LINE' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-indigo-600'}`}><LineIcon size={16}/></button>
@@ -492,7 +477,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                     {chartData.pieData.map(kpi => (
                         <button 
                             key={kpi.id} 
-                            onClick={() => setViewState({ level: 'TYPE', type: kpi.id as any })}
+                            onClick={() => handleKPISelect(kpi.id as 'INCOME' | 'EXPENSE')}
                             className={`p-6 rounded-3xl border-2 transition-all flex items-center justify-between group ${kpi.id === 'INCOME' ? 'bg-emerald-50 border-emerald-100 hover:border-emerald-300' : 'bg-rose-50 border-rose-100 hover:border-rose-300'}`}
                         >
                             <div className="flex items-center gap-4">
@@ -520,8 +505,8 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                 )}
 
                 <ResponsiveContainer width="100%" height="100%">
-                    {/* CASO A: GRAFICO LINEAL (Root, Category o Selección) */}
-                    {(viewState.level === 'ROOT' || viewState.level === 'CATEGORY' || chartType === 'LINE') ? (
+                    {/* LOGIC GATE: Use chartType state but respect view levels preference if default */}
+                    {(chartType === 'LINE' || (viewState.level === 'ROOT')) ? (
                         <LineChart data={chartData.timeData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                             <XAxis dataKey="date" tickFormatter={formatKeyDisplay} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
@@ -550,7 +535,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                             })}
                         </LineChart>
                     ) : chartType === 'BAR' ? (
-                        // CASO B: GRÁFICO DE BARRAS
                         <BarChart data={chartData.timeData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                             <XAxis dataKey="date" tickFormatter={formatKeyDisplay} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
@@ -562,7 +546,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                             ))}
                         </BarChart>
                     ) : (
-                        // CASO C: GRÁFICO DE TARTA
                         <PieChart>
                             <Pie
                                 data={chartData.pieData}
@@ -570,11 +553,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                 innerRadius={80} outerRadius={120}
                                 paddingAngle={5}
                                 dataKey="value"
-                                onClick={(entry) => {
-                                    // PieChart devuelve el entry directamente en onClick
-                                    if (viewState.level === 'TYPE') setViewState({ ...viewState, level: 'FAMILY', famId: entry.id });
-                                    else if (viewState.level === 'FAMILY') setViewState({ ...viewState, level: 'CATEGORY', catId: entry.id });
-                                }}
+                                onClick={handleSliceClick}
                                 cursor="pointer"
                             >
                                 {chartData.pieData.map((entry, index) => (
@@ -603,10 +582,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                         {props.payload?.map((entry: any, index: number) => {
                                             const item = chartData.pieData[index];
                                             return (
-                                                <div key={`item-${index}`} className="flex items-center gap-1.5 cursor-pointer opacity-80 hover:opacity-100 transition-opacity" onClick={() => {
-                                                    if (viewState.level === 'TYPE') setViewState({ ...viewState, level: 'FAMILY', famId: item.id });
-                                                    else if (viewState.level === 'FAMILY') setViewState({ ...viewState, level: 'CATEGORY', catId: item.id });
-                                                }}>
+                                                <div key={`item-${index}`} className="flex items-center gap-1.5 cursor-pointer opacity-80 hover:opacity-100 transition-opacity" onClick={() => handleSliceClick(item)}>
                                                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}/>
                                                     <span className="text-[9px] font-bold text-slate-600 uppercase">{item.name} ({((item.value / chartData.totalValue) * 100).toFixed(0)}%)</span>
                                                 </div>
@@ -623,3 +599,21 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     </div>
   );
 };
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs">
+          {/* We assume label is formatted date here, logic is handled by parent but we can reuse format logic or pass it */}
+          <p className="font-black text-slate-500 mb-1">{label}</p>
+          {payload.map((p: any, idx: number) => (
+            <div key={idx} className="flex items-center gap-2 font-bold" style={{ color: p.color || p.stroke || '#6366f1' }}>
+              <span>{p.name === 'balance' ? 'Patrimonio' : p.name === 'projection' ? 'Proyección' : p.name}:</span>
+              <span>{new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(p.value)} €</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
