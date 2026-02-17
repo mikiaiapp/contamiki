@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AppState, GlobalFilter, BookMetadata } from './types';
+import { AppState, GlobalFilter, BookMetadata } from '../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, Legend, ReferenceLine, BarChart, Bar } from 'recharts';
 import { TrendingUp, PieChart as PieIcon, LineChart as LineIcon, ChevronRight, ArrowDownCircle, ArrowUpCircle, ChevronLeft, Home, BarChart3, Grip, Search, X, Scale } from 'lucide-react';
 
@@ -538,6 +538,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={(chartData as any).data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
                                     <XAxis dataKey="date" tickFormatter={formatDateLabel} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
                                     <YAxis tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={40} />
                                     <Tooltip content={<CustomTooltip />} />
