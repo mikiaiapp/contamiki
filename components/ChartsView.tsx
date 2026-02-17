@@ -30,6 +30,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
   // --- LOCAL INDEPENDENT FILTER STATE ---
   const [localFilter, setLocalFilter] = useState<GlobalFilter>(() => {
       const now = new Date();
+      // Default to last 12 months roughly if not set
       const start = new Date(now.getFullYear() - 1, now.getMonth(), 1);
       const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       const fmt = (d: Date) => d.toISOString().split('T')[0];
@@ -118,15 +119,18 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
         const n = result.length;
         let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
         result.forEach((p, i) => { sumX += i; sumY += p.balance; sumXY += i * p.balance; sumXX += i * i; });
-        const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-        const intercept = (sumY - slope * sumX) / n;
-        const lastRealPoint = result[result.length - 1];
-        lastRealPoint.projection = lastRealPoint.balance; 
-        const lastDate = new Date(lastRealPoint.date);
-        for (let i = 1; i <= 3; i++) {
-            lastDate.setMonth(lastDate.getMonth() + 1);
-            const nextVal = slope * (n + i) + intercept;
-            result.push({ date: lastDate.toISOString().split('T')[0], balance: null, projection: nextVal, isProjection: true });
+        const denominator = n * sumXX - sumX * sumX;
+        if (denominator !== 0) {
+            const slope = (n * sumXY - sumX * sumY) / denominator;
+            const intercept = (sumY - slope * sumX) / n;
+            const lastRealPoint = result[result.length - 1];
+            lastRealPoint.projection = lastRealPoint.balance; 
+            const lastDate = new Date(lastRealPoint.date);
+            for (let i = 1; i <= 3; i++) {
+                lastDate.setMonth(lastDate.getMonth() + 1);
+                const nextVal = slope * (n + i) + intercept;
+                result.push({ date: lastDate.toISOString().split('T')[0], balance: null, projection: nextVal, isProjection: true });
+            }
         }
     }
     return result;
@@ -237,11 +241,13 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     ) : null;
   };
 
-  const handleSliceClick = (data: any) => {
+  const handleSliceClick = (input: any) => {
+      // Recharts may wrap data in payload
+      const item = input.payload || input;
       if (!drillPath.famId) {
-          setDrillPath({ famId: data.id });
+          setDrillPath({ famId: item.id });
       } else if (!drillPath.catId) {
-          setDrillPath({ ...drillPath, catId: data.id });
+          setDrillPath({ ...drillPath, catId: item.id });
       }
   };
 
@@ -281,7 +287,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                 <div className="h-64 flex flex-col items-center justify-center text-slate-300 opacity-50"><TrendingUp size={48}/><p className="text-[10px] font-black uppercase mt-4">Sin datos de evolución</p></div>
             ) : (
                 <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="99%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={savingsData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                             <defs><linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -342,8 +348,8 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
             {breakdownData.items.length === 0 ? (
                 <div className="h-64 flex flex-col items-center justify-center text-slate-300 opacity-50"><PieIcon size={48}/><p className="text-[10px] font-black uppercase mt-4">Sin datos en este periodo</p></div>
             ) : (
-                <div className="flex-1 min-h-[300px] w-full animate-in fade-in duration-300">
-                    <ResponsiveContainer width="99%" height="100%">
+                <div className="flex-1 h-[400px] w-full animate-in fade-in duration-300">
+                    <ResponsiveContainer width="100%" height="100%">
                         {(chartType === 'PIE' && !drillPath.catId) ? (
                             <PieChart>
                                 <Pie
@@ -355,10 +361,10 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                     label={renderCustomLabel}
                                     labelLine={false}
                                     onClick={handleSliceClick}
-                                    cursor="pointer"
+                                    isAnimationActive={true}
                                 >
                                     {breakdownData.items.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" cursor="pointer" />
                                     ))}
                                 </Pie>
                                 <Tooltip content={<CustomTooltip />} />
