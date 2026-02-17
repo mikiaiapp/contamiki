@@ -104,7 +104,7 @@ export interface MultiBookState {
   booksData: Record<string, AppState>;
 }
 
-export type View = 'RESUMEN' | 'TRANSACTIONS' | 'SETTINGS' | 'AI_INSIGHTS';
+export type View = 'RESUMEN' | 'TRANSACTIONS' | 'CHARTS' | 'SETTINGS' | 'AI_INSIGHTS';
 export type TimeRange = 'ALL' | 'MONTH' | 'YEAR' | 'CUSTOM';
 
 export interface GlobalFilter {
