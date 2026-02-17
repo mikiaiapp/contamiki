@@ -141,7 +141,9 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               const fam = cat ? getFam(cat.familyId) : null;
               if (!fam) return;
 
-              const val = Math.abs(t.amount);
+              // IMPORTANTE: Sumamos el importe CON SIGNO para que las devoluciones resten
+              const val = t.amount; 
+              
               if (fam.type === 'INCOME') {
                   incomeMap.set(fam.id, (incomeMap.get(fam.id) || 0) + val);
               } else {
@@ -149,8 +151,16 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
               }
           });
 
+          // Al generar los datos del gráfico, tomamos el valor ABSOLUTO del total neto
           const mapToPieData = (map: Map<string, number>) => Array.from(map.entries())
-              .map(([id, value]) => ({ id, name: getFam(id)?.name || '?', value, icon: getFam(id)?.icon, type: getFam(id)?.type }))
+              .map(([id, value]) => ({ 
+                  id, 
+                  name: getFam(id)?.name || '?', 
+                  value: Math.abs(value), // Valor absoluto del saldo neto
+                  icon: getFam(id)?.icon, 
+                  type: getFam(id)?.type 
+              }))
+              .filter(item => item.value > 0.01) // Filtramos saldos 0
               .sort((a, b) => b.value - a.value);
 
           return {
@@ -167,12 +177,19 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
           relevantTx.forEach(t => {
               const cat = getCat(t.categoryId);
               if (cat && cat.familyId === viewState.itemId) {
-                  catMap.set(cat.id, (catMap.get(cat.id) || 0) + Math.abs(t.amount));
+                  // Sumar con signo para calcular neto
+                  catMap.set(cat.id, (catMap.get(cat.id) || 0) + t.amount);
               }
           });
 
           const pieData = Array.from(catMap.entries())
-              .map(([id, value]) => ({ id, name: getCat(id)?.name || '?', value, icon: getCat(id)?.icon }))
+              .map(([id, value]) => ({ 
+                  id, 
+                  name: getCat(id)?.name || '?', 
+                  value: Math.abs(value), // Valor absoluto del saldo neto
+                  icon: getCat(id)?.icon 
+              }))
+              .filter(item => item.value > 0.01)
               .sort((a, b) => b.value - a.value);
 
           return { type: 'FAMILY', data: pieData };
@@ -185,12 +202,16 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
           relevantTx.forEach(t => {
               if (t.categoryId === viewState.itemId) {
                   const key = isMonthlyGranularity ? t.date : t.date.substring(0, 7);
-                  timeMap.set(key, (timeMap.get(key) || 0) + Math.abs(t.amount));
+                  // Sumar con signo
+                  timeMap.set(key, (timeMap.get(key) || 0) + t.amount);
               }
           });
 
           const lineData = Array.from(timeMap.entries())
-              .map(([date, value]) => ({ date, value }))
+              .map(([date, value]) => ({ 
+                  date, 
+                  value: Math.abs(value) // Valor absoluto para la gráfica
+              }))
               .sort((a, b) => a.date.localeCompare(b.date));
 
           return { type: 'CATEGORY', data: lineData };
