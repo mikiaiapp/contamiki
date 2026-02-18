@@ -3,7 +3,7 @@ import { Layout } from './Layout';
 import { Dashboard } from './Dashboard';
 import { TransactionView } from './TransactionView';
 import { SettingsView } from './components/SettingsView';
-import { ChartsView } from './components/ChartsView';
+import { ChartsView } from './ChartsView';
 import { AIInsights } from './components/AIInsights';
 import { LoginView } from './LoginView';
 import { AppState, View, Transaction, GlobalFilter, MultiBookState, BookMetadata, BookColor } from './types';
@@ -30,11 +30,15 @@ const App: React.FC = () => {
   const [editingBookId, setEditingBookId] = useState<string | null>(null);
   const [tempBookName, setTempBookName] = useState('');
   const [tempBookColor, setTempBookColor] = useState<BookColor>('BLACK');
-  const [globalFilter, setGlobalFilter] = useState<GlobalFilter>({
-    timeRange: 'MONTH',
-    referenceDate: new Date(),
-    customStart: '',
-    customEnd: ''
+  const [globalFilter, setGlobalFilter] = useState<GlobalFilter>(() => {
+      // Inicializar filtro global al mes actual por defecto
+      const now = new Date();
+      return {
+          timeRange: 'MONTH',
+          referenceDate: now,
+          customStart: '',
+          customEnd: ''
+      };
   });
   const [pendingSpecificFilters, setPendingSpecificFilters] = useState<any>(null);
   const saveTimeoutRef = useRef<number | null>(null);

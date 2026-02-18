@@ -20,6 +20,13 @@ const compactCurrency = (value: number) => {
 
 const formatCurrency = (amount: number) => `${NUMBER_FORMATTER.format(amount)} €`;
 
+// Helper para color de importe en gráficos
+const getAmountColorClass = (val: number) => {
+    if (val > 0) return 'text-emerald-600';
+    if (val < 0) return 'text-rose-600';
+    return 'text-slate-500';
+};
+
 // Estado de Navegación del Gráfico
 type ViewLevel = 'ROOT' | 'FAMILY' | 'CATEGORY';
 interface ViewState {
@@ -100,12 +107,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
     if (!dateStr) return '--/--/--';
     const [year, month, day] = dateStr.split('-');
     return `${day}/${month}/${year.slice(-2)}`;
-  };
-
-  const getAmountColor = (amount: number) => {
-    if (amount > 0) return 'text-emerald-600';
-    if (amount < 0) return 'text-rose-600';
-    return 'text-slate-400';
   };
 
   const handleChartPointClick = (dataPoint: any) => {
@@ -192,6 +193,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                   id, 
                   name: getFam(id)?.name || '?', 
                   value: Math.abs(value), // Valor absoluto del saldo neto
+                  realValue: value, // Valor real con signo
                   icon: getFam(id)?.icon, 
                   type: getFam(id)?.type 
               }))
@@ -222,6 +224,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                   id, 
                   name: getCat(id)?.name || '?', 
                   value: Math.abs(value), // Valor absoluto del saldo neto
+                  realValue: value,
                   icon: getCat(id)?.icon 
               }))
               .filter(item => item.value > 0.01)
@@ -245,7 +248,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
           const lineData = Array.from(timeMap.entries())
               .map(([date, value]) => ({ 
                   date, 
-                  value: Math.abs(value) // Valor absoluto para la gráfica
+                  value: value // Valor real (puede ser negativo para gastos)
               }))
               .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -260,11 +263,13 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
         const d = payload[0].payload;
+        // Preferir realValue si existe, sino value
+        const val = d.realValue !== undefined ? d.realValue : d.value;
         return (
             <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-xl text-xs z-50">
                 <div className="font-black text-slate-700 mb-1">{label || d.name}</div>
-                <div className="flex items-center gap-2 text-indigo-600 font-bold">
-                    <span>{formatCurrency(d.value)}</span>
+                <div className={`flex items-center gap-2 font-bold ${getAmountColorClass(val)}`}>
+                    <span>{formatCurrency(val)}</span>
                 </div>
             </div>
         );
@@ -367,62 +372,98 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                 {viewState.level === 'ROOT' && (chartData as any).type === 'ROOT' && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 h-full">
                         {/* IZQUIERDA: INGRESOS */}
-                        <div className="flex flex-col items-center">
+                        <div className="flex flex-col items-center h-full">
                             <div className="flex items-center gap-2 mb-4 text-emerald-600">
                                 <ArrowUpCircle size={20}/>
                                 <span className="text-sm font-black uppercase tracking-widest">Ingresos por Familia</span>
                             </div>
-                            <div className="w-full h-[300px] relative">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={(chartData as any).incomeData}
-                                            innerRadius={60}
-                                            outerRadius={100}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                            onClick={(entry) => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'INCOME' })}
-                                            cursor="pointer"
-                                        >
-                                            {(chartData as any).incomeData.map((entry: any, index: number) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip content={<CustomTooltip />} />
-                                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 'bold'}}/>
-                                    </PieChart>
-                                </ResponsiveContainer>
-                                {(chartData as any).incomeData.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-slate-300 text-xs font-bold uppercase">Sin datos</div>}
+                            <div className="flex flex-col xl:flex-row items-center justify-center w-full h-full gap-4">
+                                <div className="w-full h-[250px] xl:flex-1 relative">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={(chartData as any).incomeData}
+                                                innerRadius={60}
+                                                outerRadius={100}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                                onClick={(entry) => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'INCOME' })}
+                                                cursor="pointer"
+                                            >
+                                                {(chartData as any).incomeData.map((entry: any, index: number) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip content={<CustomTooltip />} />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                    {(chartData as any).incomeData.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-slate-300 text-xs font-bold uppercase">Sin datos</div>}
+                                </div>
+                                <div className="w-full xl:w-64 max-h-[250px] overflow-y-auto custom-scrollbar">
+                                    <div className="flex flex-col gap-2 pr-2">
+                                        {(chartData as any).incomeData.map((entry: any, index: number) => (
+                                            <div 
+                                                key={`legend-inc-${index}`} 
+                                                onClick={() => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'INCOME' })} 
+                                                className="flex items-center justify-between gap-3 w-full p-2 rounded-xl hover:bg-slate-50 cursor-pointer group transition-all border border-transparent hover:border-slate-100"
+                                            >
+                                                <div className="flex items-center gap-3 overflow-hidden">
+                                                    <div className="w-3 h-3 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }}/>
+                                                    <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[120px] group-hover:text-emerald-600 transition-colors">{entry.name}</span>
+                                                </div>
+                                                <span className={`text-xs font-black whitespace-nowrap ${getAmountColorClass(entry.realValue)}`}>{formatCurrency(entry.realValue)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         {/* DERECHA: GASTOS */}
-                        <div className="flex flex-col items-center">
+                        <div className="flex flex-col items-center h-full">
                             <div className="flex items-center gap-2 mb-4 text-rose-500">
                                 <ArrowDownCircle size={20}/>
                                 <span className="text-sm font-black uppercase tracking-widest">Gastos por Familia</span>
                             </div>
-                            <div className="w-full h-[300px] relative">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={(chartData as any).expenseData}
-                                            innerRadius={60}
-                                            outerRadius={100}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                            onClick={(entry) => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'EXPENSE' })}
-                                            cursor="pointer"
-                                        >
-                                            {(chartData as any).expenseData.map((entry: any, index: number) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip content={<CustomTooltip />} />
-                                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 'bold'}}/>
-                                    </PieChart>
-                                </ResponsiveContainer>
-                                {(chartData as any).expenseData.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-slate-300 text-xs font-bold uppercase">Sin datos</div>}
+                            <div className="flex flex-col xl:flex-row items-center justify-center w-full h-full gap-4">
+                                <div className="w-full h-[250px] xl:flex-1 relative">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={(chartData as any).expenseData}
+                                                innerRadius={60}
+                                                outerRadius={100}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                                onClick={(entry) => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'EXPENSE' })}
+                                                cursor="pointer"
+                                            >
+                                                {(chartData as any).expenseData.map((entry: any, index: number) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip content={<CustomTooltip />} />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                    {(chartData as any).expenseData.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-slate-300 text-xs font-bold uppercase">Sin datos</div>}
+                                </div>
+                                <div className="w-full xl:w-64 max-h-[250px] overflow-y-auto custom-scrollbar">
+                                    <div className="flex flex-col gap-2 pr-2">
+                                        {(chartData as any).expenseData.map((entry: any, index: number) => (
+                                            <div 
+                                                key={`legend-exp-${index}`} 
+                                                onClick={() => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'EXPENSE' })} 
+                                                className="flex items-center justify-between gap-3 w-full p-2 rounded-xl hover:bg-slate-50 cursor-pointer group transition-all border border-transparent hover:border-slate-100"
+                                            >
+                                                <div className="flex items-center gap-3 overflow-hidden">
+                                                    <div className="w-3 h-3 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }}/>
+                                                    <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[120px] group-hover:text-rose-600 transition-colors">{entry.name}</span>
+                                                </div>
+                                                <span className={`text-xs font-black whitespace-nowrap ${getAmountColorClass(entry.realValue)}`}>{formatCurrency(entry.realValue)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -430,43 +471,57 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
 
                 {/* NIVEL 1: FAMILIA - UN DONUT (Categorías) */}
                 {viewState.level === 'FAMILY' && (chartData as any).type === 'FAMILY' && (
-                    <div className="flex flex-col items-center h-full animate-in zoom-in-95 duration-300">
-                        <div className="flex items-center gap-2 mb-6">
+                    <div className="flex flex-col h-full animate-in zoom-in-95 duration-300">
+                        <div className="flex items-center gap-2 mb-6 self-center">
                             <span className="text-slate-400 text-xs font-bold uppercase">Desglose de:</span>
                             <span className={`text-xl font-black uppercase tracking-tighter ${viewState.itemType === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>{viewState.itemName}</span>
                         </div>
-                        <div className="w-full h-[350px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={(chartData as any).data}
-                                        innerRadius={80}
-                                        outerRadius={140}
-                                        paddingAngle={2}
-                                        dataKey="value"
-                                        onClick={(entry) => setViewState({ level: 'CATEGORY', itemId: entry.id, itemName: entry.name, itemType: viewState.itemType })}
-                                        cursor="pointer"
-                                    >
-                                        {(chartData as any).data.map((entry: any, index: number) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Legend 
-                                        layout="vertical" verticalAlign="middle" align="right" 
-                                        content={(props) => (
-                                            <div className="flex flex-col gap-2 ml-4">
-                                                {props.payload?.map((entry: any, index: number) => (
-                                                    <div key={`item-${index}`} className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => setViewState({ level: 'CATEGORY', itemId: (chartData as any).data[index].id, itemName: (chartData as any).data[index].name, itemType: viewState.itemType })}>
-                                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}/>
-                                                        {entry.value}
-                                                    </div>
-                                                ))}
+                        
+                        <div className="flex flex-col lg:flex-row items-center lg:items-start justify-center w-full h-full min-h-[350px]">
+                            {/* CHART CONTAINER */}
+                            <div className="w-full h-[300px] lg:flex-1 lg:h-[400px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={(chartData as any).data}
+                                            innerRadius={80}
+                                            outerRadius={120}
+                                            paddingAngle={2}
+                                            dataKey="value"
+                                            onClick={(entry) => setViewState({ level: 'CATEGORY', itemId: entry.id, itemName: entry.name, itemType: viewState.itemType })}
+                                            cursor="pointer"
+                                        >
+                                            {(chartData as any).data.map((entry: any, index: number) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip content={<CustomTooltip />} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+
+                            {/* CUSTOM LEGEND CONTAINER */}
+                            <div className="w-full lg:w-80 mt-4 lg:mt-0 lg:ml-8 max-h-[300px] lg:max-h-[400px] overflow-y-auto custom-scrollbar">
+                                <div className="flex flex-col gap-2 pr-2">
+                                    {(chartData as any).data.map((entry: any, index: number) => (
+                                        <div 
+                                            key={`legend-item-${index}`} 
+                                            className="flex items-center justify-between gap-3 w-full p-2 rounded-xl hover:bg-slate-50 cursor-pointer group transition-all border border-transparent hover:border-slate-100" 
+                                            onClick={() => setViewState({ level: 'CATEGORY', itemId: entry.id, itemName: entry.name, itemType: viewState.itemType })}
+                                        >
+                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                <div className="w-3 h-3 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }}/>
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[120px] group-hover:text-indigo-600 transition-colors">{entry.name}</span>
+                                                </div>
                                             </div>
-                                        )}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
+                                            <span className={`text-xs font-black whitespace-nowrap ${getAmountColorClass(entry.realValue)}`}>
+                                                {formatCurrency(entry.realValue)}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -482,8 +537,9 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={(chartData as any).data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} onClick={handleChartPointClick} cursor="pointer">
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
                                     <XAxis dataKey="date" tickFormatter={formatDateLabel} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
-                                    <YAxis tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={40} />
+                                    <YAxis tickFormatter={compactCurrency} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} width={50} />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Line 
                                         type="monotone" 
@@ -523,7 +579,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                                     <span className="text-xs font-bold text-slate-700 uppercase truncate" title={t.description}>{t.description}</span>
                                     <span className="text-[9px] text-slate-400 font-medium">{formatDateDisplay(t.date)}</span>
                                 </div>
-                                <span className={`text-sm font-black whitespace-nowrap ${getAmountColor(t.amount)}`}>{formatCurrency(t.amount)}</span>
+                                <span className={`text-sm font-black whitespace-nowrap ${getAmountColorClass(t.amount)}`}>{formatCurrency(t.amount)}</span>
                             </div>
                         ))}
                     </div>
