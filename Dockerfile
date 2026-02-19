@@ -26,12 +26,11 @@ COPY . .
 RUN npm run build
 
 # Exponemos el puerto donde correrá la app
-EXPOSE 3000
+EXPOSE 4000
 
 # Definimos variables de entorno por defecto
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=4000
 
 # Comando para iniciar el servidor
-
 CMD ["npm", "start"]
