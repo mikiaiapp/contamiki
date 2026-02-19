@@ -2,9 +2,9 @@
 FROM node:18-alpine
 
 # --- SOLUCIÓN DEL ERROR ---
-# Instalamos la librería de compatibilidad libc6.
+# Instalamos la librería de compatibilidad libc6 y bash para depuración.
 # Esto es OBLIGATORIO para que 'esbuild' funcione dentro de Alpine Linux.
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat bash
 
 # Establecemos el directorio de trabajo
 WORKDIR /app

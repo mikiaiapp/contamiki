@@ -124,6 +124,13 @@ const DEFAULT_APP_STATE = {
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
+// Servir bundle.js explícitamente
+app.get('/bundle.js', (req, res) => {
+    console.log(`[SERVER] Serving bundle.js to ${req.ip}`);
+    res.setHeader('Content-Type', 'application/javascript');
+    res.sendFile(path.join(__dirname, 'bundle.js'));
+});
+
 if (process.env.NODE_ENV === 'production') {
     app.use(express.static(__dirname));
 }

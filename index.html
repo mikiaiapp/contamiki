@@ -65,6 +65,6 @@
     </script>
 
     <!-- En Docker y Producción, cargamos el bundle generado por esbuild -->
-    <script type="module" src="./bundle.js"></script>
+    <script type="module" src="./bundle.js" onerror="console.error('Error loading bundle.js'); document.getElementById('loader-status').innerHTML = '<span style=\'color:red\'>Error cargando script principal.</span>'"></script>
   </body>
 </html>
