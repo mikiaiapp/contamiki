@@ -12,6 +12,7 @@ import { isAuthenticated, logout, getToken } from './services/authService';
 import { X, Check, WifiOff, RefreshCw } from 'lucide-react';
 
 const App: React.FC = () => {
+  console.log("App: Rendering...");
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(isAuthenticated());
   const [multiState, setMultiState] = useState<MultiBookState>({
     booksMetadata: [],

@@ -10,9 +10,13 @@ import crypto from 'crypto';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 
+import { createServer as createViteServer } from 'vite';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const app = express();
-const PORT = process.env.PORT || 4000;
+
+async function startServer() {
+    const app = express();
+    const PORT = 3000;
 
 // Configs
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_master_key_conta_miki';
@@ -119,7 +123,10 @@ const DEFAULT_APP_STATE = {
 // Middleware - AUMENTADO A 500MB PARA SOPORTAR CARGAS EXTREMAS
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
-app.use(express.static(__dirname));
+
+if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(__dirname));
+}
 
 // Initialize System Files
 const initSystem = async () => {
@@ -783,20 +790,49 @@ app.post('/api/data', authenticateToken, async (req, res) => {
     }
 });
 
+app.get("/api/health", (req, res) => {
+    res.json({ status: "ok" });
+});
+
 app.get('/api/config', authenticateToken, (req, res) => {
     res.json({ apiKey: process.env.API_KEY || '' });
 });
 
-app.get('*', (req, res) => {
-    if (req.path.includes('.')) {
-        return res.status(404).send('Not found');
+    let vite;
+    // Vite middleware for development
+    if (process.env.NODE_ENV !== 'production') {
+        vite = await createViteServer({
+            server: { middlewareMode: true },
+            appType: 'custom', // Use custom to handle index.html ourselves
+        });
+        app.use(vite.middlewares);
     }
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`ContaMiki Server: http://0.0.0.0:${PORT}`);
-});
+    app.get('*', async (req, res) => {
+        try {
+            if (req.path.includes('.')) {
+                return res.status(404).send('Not found');
+            }
+            
+            let html = await fs.readFile(path.join(__dirname, 'index.html'), 'utf-8');
+            
+            if (process.env.NODE_ENV !== 'production' && vite) {
+                html = await vite.transformIndexHtml(req.url, html);
+            }
+            
+            res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+        } catch (e) {
+            console.error(e);
+            res.status(500).end(e.message);
+        }
+    });
 
-server.timeout = 300000;
-server.keepAliveTimeout = 300000;
+    const server = app.listen(PORT, '0.0.0.0', () => {
+        console.log(`ContaMiki Server: http://0.0.0.0:${PORT}`);
+    });
+
+    server.timeout = 300000;
+    server.keepAliveTimeout = 300000;
+}
+
+startServer();

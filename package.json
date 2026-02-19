@@ -1,4 +1,3 @@
-
 {
   "name": "contamiki",
   "version": "1.5.0",
@@ -6,17 +5,29 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
+    "dev": "tsx server.js",
     "start": "node server.js",
     "build": "esbuild index.tsx --bundle --outfile=bundle.js --format=esm --target=es2020 --external:react --external:react-dom --external:react-dom/client --external:@google/genai --external:react-markdown --external:lucide-react --external:recharts --external:xlsx"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "@google/genai": "^1.42.0",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
     "esbuild": "^0.20.0",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.575.0",
     "nodemailer": "^6.9.13",
+    "qrcode": "^1.5.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "recharts": "^3.7.0",
     "speakeasy": "^2.0.0",
-    "qrcode": "^1.5.3"
+    "xlsx": "^0.18.5"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.4",
+    "tsx": "^4.21.0",
+    "vite": "^7.3.1"
+  }
 }

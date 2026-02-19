@@ -5,6 +5,14 @@ import App from './App';
 
 console.log("ContaMiki: Booting client application from root...");
 
+window.addEventListener('error', (event) => {
+    console.error("ContaMiki: Global Error:", event.error);
+    const status = document.getElementById('loader-status');
+    if (status) {
+        status.innerHTML = '<span class="text-rose-500 font-bold">Error Crítico: ' + (event.error?.message || 'Error de carga') + '</span>';
+    }
+});
+
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Critical: Could not find root element to mount React.");
