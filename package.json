@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "tsx server.js",
     "start": "node server.js",
-    "build": "esbuild index.tsx --bundle --outfile=bundle.js --format=esm --target=es2020 --external:react --external:react-dom --external:react-dom/client --external:@google/genai --external:react-markdown --external:lucide-react --external:recharts --external:xlsx"
+    "build": "esbuild index.tsx --bundle --outfile=bundle.js --format=esm --target=es2020 --define:process.env.NODE_ENV=\\\"production\\\""
   },
   "dependencies": {
     "@google/genai": "^1.42.0",

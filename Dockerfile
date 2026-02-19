@@ -35,4 +35,3 @@ ENV PORT=3000
 # Comando para iniciar el servidor
 
 CMD ["npm", "start"]
-
