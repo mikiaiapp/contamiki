@@ -5,7 +5,7 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "4000:4000"
+      - "3000:3000"
     volumes:
 # Ajusta la ruta de abajo según tu NAS
       - /volume1/docker/contamiki/data:/app/data
