@@ -818,6 +818,8 @@ app.get('/api/config', authenticateToken, (req, res) => {
             
             if (process.env.NODE_ENV !== 'production' && vite) {
                 html = await vite.transformIndexHtml(req.url, html);
+                // Replace bundle.js with index.tsx for Vite dev mode
+                html = html.replace('src="./bundle.js"', 'src="/index.tsx"');
             }
             
             res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
