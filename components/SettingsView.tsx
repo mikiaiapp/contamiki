@@ -97,6 +97,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
   const [accId, setAccId] = useState<string | null>(null); const [accName, setAccName] = useState(''); const [accBalance, setAccBalance] = useState(''); const [accIcon, setAccIcon] = useState('🏦'); const [accGroupId, setAccGroupId] = useState(''); const [accActive, setAccActive] = useState(true);
   const [famId, setFamId] = useState<string | null>(null); const [famName, setFamName] = useState(''); const [famIcon, setFamIcon] = useState('📂'); const [famType, setFamType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [catId, setCatId] = useState<string | null>(null); const [catName, setCatName] = useState(''); const [catParent, setCatParent] = useState(''); const [catIcon, setCatIcon] = useState('🏷️'); const [catActive, setCatActive] = useState(true);
+  
+  // Recurrent Edit State
+  const [recId, setRecId] = useState<string | null>(null);
+  const [recDesc, setRecDesc] = useState('');
+  const [recAmount, setRecAmount] = useState('');
+  const [recFreq, setRecFreq] = useState<RecurrenceFrequency>('MONTHLY');
+  const [recInterval, setRecInterval] = useState(1);
+  const [recNextDate, setRecNextDate] = useState('');
+  const [recActive, setRecActive] = useState(true);
+
+  // Favorite Edit State
+  const [favId, setFavId] = useState<string | null>(null);
+  const [favName, setFavName] = useState('');
+  const [favDesc, setFavDesc] = useState('');
+  const [favAmount, setFavAmount] = useState('');
 
   const availableYears = useMemo(() => {
     const years = new Set(data.transactions.map(t => t.date.substring(0, 4)));
@@ -108,6 +123,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
     setAccId(null); setAccName(''); setAccBalance(''); setAccIcon('🏦'); setAccGroupId(data.accountGroups[0]?.id || ''); setAccActive(true);
     setFamId(null); setFamName(''); setFamIcon('📂'); setFamType('EXPENSE');
     setCatId(null); setCatName(''); setCatIcon('🏷️'); setCatParent(data.families[0]?.id || ''); setCatActive(true);
+    setRecId(null); setRecDesc(''); setRecAmount(''); setRecFreq('MONTHLY'); setRecInterval(1); setRecNextDate(''); setRecActive(true);
+    setFavId(null); setFavName(''); setFavDesc(''); setFavAmount('');
     setWebLogos([]);
     setFailedLogos(new Set());
     setIaSearchStatus('');
@@ -432,8 +449,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                 </div>
                             </div>
                             <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                <button onClick={() => onUpdateData({recurrents: data.recurrents?.map(x => x.id === r.id ? {...x, active: !x.active} : x)})} className="p-3 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200">
-                                    {r.active ? <Eye size={16}/> : <EyeOff size={16}/>}
+                                <button onClick={() => { setRecId(r.id); setRecDesc(r.description); setRecAmount(r.amount.toString()); setRecFreq(r.frequency); setRecInterval(r.interval); setRecNextDate(r.nextDueDate); setRecActive(r.active); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100">
+                                    <Edit2 size={16}/>
                                 </button>
                                 <button onClick={() => { if(confirm('¿Borrar recurrencia?')) onUpdateData({recurrents: data.recurrents?.filter(x => x.id !== r.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100">
                                     <Trash2 size={16}/>
@@ -443,6 +460,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                     ))}
                     {(!data.recurrents || data.recurrents.length === 0) && <p className="text-center text-slate-400 text-xs py-10">No hay movimientos recurrentes programados.</p>}
                 </div>
+                {isEditModalOpen && (
+                    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in">
+                        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20">
+                            <button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
+                            <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><CalendarClock className="text-indigo-600"/> Editar Recurrencia</h3>
+                            <div className="space-y-6">
+                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Descripción</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recDesc} onChange={e => setRecDesc(e.target.value)} /></div>
+                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe</label><input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recAmount} onChange={e => setRecAmount(e.target.value)} /></div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Frecuencia</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recFreq} onChange={e => setRecFreq(e.target.value as any)}><option value="DAYS">Días</option><option value="WEEKS">Semanas</option><option value="MONTHLY">Meses</option><option value="YEARS">Años</option></select></div>
+                                    <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Intervalo</label><input type="number" min="1" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recInterval} onChange={e => setRecInterval(parseInt(e.target.value) || 1)} /></div>
+                                </div>
+                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Próxima Ejecución</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recNextDate} onChange={e => setRecNextDate(e.target.value)} /></div>
+                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Estado</label><div className="flex bg-slate-100 p-1.5 rounded-2xl"><button onClick={() => setRecActive(true)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl ${recActive ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}>Activa</button><button onClick={() => setRecActive(false)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl ${!recActive ? 'bg-white shadow-sm text-slate-600' : 'text-slate-400'}`}>Pausada</button></div></div>
+                                <button onClick={() => { if(!recDesc || !recAmount || !recNextDate) return; onUpdateData({recurrents: data.recurrents?.map(r => r.id === recId ? {...r, description: recDesc, amount: parseFloat(recAmount), frequency: recFreq, interval: recInterval, nextDueDate: recNextDate, active: recActive} : r)}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Cambios</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )}
 
@@ -463,6 +499,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                 </div>
                             </div>
                             <div className="flex gap-2 opacity-50 group-hover:opacity-100">
+                                <button onClick={() => { setFavId(f.id); setFavName(f.name); setFavDesc(f.description); setFavAmount(f.amount.toString()); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100">
+                                    <Edit2 size={16}/>
+                                </button>
                                 <button onClick={() => { if(confirm('¿Borrar favorito?')) onUpdateData({favorites: data.favorites?.filter(x => x.id !== f.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100">
                                     <Trash2 size={16}/>
                                 </button>
@@ -471,6 +510,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                     ))}
                     {(!data.favorites || data.favorites.length === 0) && <p className="text-center text-slate-400 text-xs py-10">No hay favoritos guardados.</p>}
                 </div>
+                {isEditModalOpen && (
+                    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in">
+                        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20">
+                            <button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
+                            <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Heart className="text-amber-500"/> Editar Favorito</h3>
+                            <div className="space-y-6">
+                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre (Botón)</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favName} onChange={e => setFavName(e.target.value)} /></div>
+                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Descripción (Movimiento)</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favDesc} onChange={e => setFavDesc(e.target.value)} /></div>
+                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe</label><input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favAmount} onChange={e => setFavAmount(e.target.value)} /></div>
+                                <button onClick={() => { if(!favName || !favDesc || !favAmount) return; onUpdateData({favorites: data.favorites?.map(f => f.id === favId ? {...f, name: favName, description: favDesc, amount: parseFloat(favAmount)} : f)}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Cambios</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )}
 
