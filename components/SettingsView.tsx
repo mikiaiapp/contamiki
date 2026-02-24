@@ -377,7 +377,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
       </div>
 
       <nav className="flex md:flex-wrap bg-slate-100 p-1.5 rounded-2xl shadow-inner border border-slate-200/50 overflow-x-auto md:overflow-visible scrollbar-hide">
-        {[{id: 'ACC_GROUPS', label: 'Grupos', icon: <BoxSelect size={16}/>}, {id: 'ACCOUNTS', label: 'Cuentas', icon: <Wallet size={16}/>}, {id: 'FAMILIES', label: 'Familias', icon: <Layers size={16}/>}, {id: 'CATEGORIES', label: 'Categorías', icon: <Tag size={16}/>}, {id: 'DATA', label: 'Gestión', icon: <ShieldAlert size={16}/>}].map(t => (
+        {[{id: 'ACC_GROUPS', label: 'Grupos', icon: <BoxSelect size={16}/>}, {id: 'ACCOUNTS', label: 'Cuentas', icon: <Wallet size={16}/>}, {id: 'FAMILIES', label: 'Familias', icon: <Layers size={16}/>}, {id: 'CATEGORIES', label: 'Categorías', icon: <Tag size={16}/>}, {id: 'RECURRENTS', label: 'Recurrentes', icon: <CalendarClock size={16}/>}, {id: 'FAVORITES', label: 'Favoritos', icon: <Heart size={16}/>}, {id: 'DATA', label: 'Gestión', icon: <ShieldAlert size={16}/>}].map(t => (
             <button key={t.id} className={`flex-1 min-w-[70px] sm:min-w-[fit-content] flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 sm:px-6 py-2 sm:py-3.5 font-black text-[8px] sm:text-[10px] uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => { setActiveTab(t.id); resetForm(); }}>{t.icon} <span className="block sm:inline mt-1 sm:mt-0">{t.label}</span></button>
         ))}
       </nav>
@@ -412,6 +412,65 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                 <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nueva Categoría</button>
                 <div className="space-y-4">{data.categories.map(c => (<div key={c.id} className={`bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all ${c.active === false ? 'opacity-50 grayscale' : ''}`}><div className="flex items-center gap-4"><div className="w-12 h-12 flex items-center justify-center relative">{renderIcon(c.icon, "w-10 h-10")}{c.active === false && <div className="absolute inset-0 bg-slate-100/50 backdrop-blur-[1px] rounded-2xl flex items-center justify-center"><EyeOff size={16} className="text-slate-400"/></div>}</div><div><span className="block font-bold text-slate-700 uppercase text-xs">{c.name}</span><span className="text-[9px] font-black text-slate-400 uppercase">{data.families.find(f=>f.id===c.familyId)?.name}</span></div></div><div className="flex gap-2 opacity-50 group-hover:opacity-100"><button onClick={() => { setCatId(c.id); setCatName(c.name); setCatIcon(c.icon); setCatParent(c.familyId); setCatActive(c.active !== false); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button><button onClick={() => attemptDeleteCategory(c)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button></div></div>))}</div>
                 {isEditModalOpen && (<div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in"><div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20 max-h-[90vh] overflow-y-auto"><button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button><h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Tag className="text-indigo-600"/> {catId ? 'Editar Categoría' : 'Nueva Categoría'}</h3><div className="space-y-6"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={catName} onChange={e => setCatName(e.target.value)} /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Estado</label><div className="flex bg-slate-100 p-1.5 rounded-2xl"><button onClick={() => setCatActive(true)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl ${catActive ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}>Activa</button><button onClick={() => setCatActive(false)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl ${!accActive ? 'bg-white shadow-sm text-slate-600' : 'text-slate-400'}`}>Archivada</button></div></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Familia</label><div className="grid grid-cols-2 gap-2">{data.families.map(f => (<button key={f.id} onClick={() => setCatParent(f.id)} className={`p-4 rounded-2xl border-2 flex items-center gap-3 ${catParent === f.id ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white border-slate-100 text-slate-400'}`}>{renderIcon(f.icon, "w-10 h-10")} <span className="text-[9px] font-black uppercase">{f.name}</span></button>))}</div></div>{renderIconInput(catIcon, setCatIcon, catName)}<button onClick={() => { if(!catName || !catParent) return; if(catId) onUpdateData({categories: data.categories.map(c=>c.id===catId?{...c,name:catName,icon:catIcon,familyId:catParent, active: catActive}:c)}); else onUpdateData({categories: [...data.categories, {id:generateId(),name:catName,icon:catIcon,familyId:catParent, active: true}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar</button></div></div></div>)}
+            </div>
+        )}
+
+        {activeTab === 'RECURRENTS' && (
+            <div className="space-y-6">
+                <div className="space-y-4">
+                    {(data.recurrents || []).map(r => (
+                        <div key={r.id} className={`bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all ${!r.active ? 'opacity-50 grayscale' : ''}`}>
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-2xl">
+                                    <CalendarClock size={24}/>
+                                </div>
+                                <div>
+                                    <span className="block font-bold text-slate-700 uppercase text-xs">{r.description}</span>
+                                    <span className="text-[9px] font-black text-slate-400 uppercase">
+                                        {numberFormatter.format(r.amount)}€ • {r.frequency} ({r.interval}) • Prox: {new Date(r.nextDueDate).toLocaleDateString()}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 opacity-50 group-hover:opacity-100">
+                                <button onClick={() => onUpdateData({recurrents: data.recurrents?.map(x => x.id === r.id ? {...x, active: !x.active} : x)})} className="p-3 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200">
+                                    {r.active ? <Eye size={16}/> : <EyeOff size={16}/>}
+                                </button>
+                                <button onClick={() => { if(confirm('¿Borrar recurrencia?')) onUpdateData({recurrents: data.recurrents?.filter(x => x.id !== r.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100">
+                                    <Trash2 size={16}/>
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                    {(!data.recurrents || data.recurrents.length === 0) && <p className="text-center text-slate-400 text-xs py-10">No hay movimientos recurrentes programados.</p>}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'FAVORITES' && (
+            <div className="space-y-6">
+                <div className="space-y-4">
+                    {(data.favorites || []).map(f => (
+                        <div key={f.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 flex items-center justify-center bg-amber-50 text-amber-500 rounded-2xl">
+                                    <Heart size={24}/>
+                                </div>
+                                <div>
+                                    <span className="block font-bold text-slate-700 uppercase text-xs">{f.name}</span>
+                                    <span className="text-[9px] font-black text-slate-400 uppercase">
+                                        {f.description} • {numberFormatter.format(f.amount)}€
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 opacity-50 group-hover:opacity-100">
+                                <button onClick={() => { if(confirm('¿Borrar favorito?')) onUpdateData({favorites: data.favorites?.filter(x => x.id !== f.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100">
+                                    <Trash2 size={16}/>
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                    {(!data.favorites || data.favorites.length === 0) && <p className="text-center text-slate-400 text-xs py-10">No hay favoritos guardados.</p>}
+                </div>
             </div>
         )}
 
