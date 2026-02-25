@@ -996,8 +996,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     </div>
 
                     <div className="flex gap-4 pt-4 border-t border-slate-100">
-                        <button onClick={() => { setProposedTransactions(proposedTransactions.filter(p => !p.isDuplicate)); setImportStep(3); }} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all">Descartar Restantes</button>
-                        <button onClick={() => setImportStep(3)} className="flex-1 py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-600 shadow-xl transition-all flex items-center justify-center gap-2">Continuar <ArrowRightLeft size={16}/></button>
+                        <button onClick={() => { setProposedTransactions(proposedTransactions.filter(p => !p.isDuplicate)); setImportStep(3); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-600 shadow-xl transition-all flex items-center justify-center gap-2">Continuar (Descartar Duplicados Restantes) <ArrowRightLeft size={16}/></button>
                     </div>
                 </div>
             )}
