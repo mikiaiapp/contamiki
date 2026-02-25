@@ -468,24 +468,62 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                 </div>
                 {isEditModalOpen && (
                     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in">
-                        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20">
-                            <button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
-                            <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><CalendarClock className="text-indigo-600"/> Editar Recurrencia</h3>
-                            <div className="space-y-6">
-                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Descripción</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recDesc} onChange={e => setRecDesc(e.target.value)} /></div>
-                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe</label><input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recAmount} onChange={e => setRecAmount(e.target.value)} /></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Cuenta</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recAccountId} onChange={e => setRecAccountId(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-                                    <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recCategoryId} onChange={e => setRecCategoryId(e.target.value)}>{data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                        <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl p-6 relative border border-white/20">
+                            <button onClick={resetForm} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 transition-colors"><X size={20}/></button>
+                            <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2 mb-6"><CalendarClock className="text-indigo-600" size={24}/> Editar Recurrencia</h3>
+                            
+                            <div className="grid grid-cols-12 gap-4">
+                                {/* Row 1: Description (8 cols) + Amount (4 cols) */}
+                                <div className="col-span-12 sm:col-span-8 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Descripción</label>
+                                    <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recDesc} onChange={e => setRecDesc(e.target.value)} />
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Frecuencia</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recFreq} onChange={e => setRecFreq(e.target.value as any)}><option value="DAYS">Días</option><option value="WEEKS">Semanas</option><option value="MONTHLY">Meses</option><option value="YEARS">Años</option></select></div>
-                                    <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Intervalo</label><input type="number" min="1" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recInterval} onChange={e => setRecInterval(parseInt(e.target.value) || 1)} /></div>
+                                <div className="col-span-12 sm:col-span-4 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Importe</label>
+                                    <input type="number" step="0.01" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
                                 </div>
-                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Próxima Ejecución</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recNextDate} onChange={e => setRecNextDate(e.target.value)} /></div>
-                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha Fin (Opcional)</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={recEndDate} onChange={e => setRecEndDate(e.target.value)} /></div>
-                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Estado</label><div className="flex bg-slate-100 p-1.5 rounded-2xl"><button onClick={() => setRecActive(true)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl ${recActive ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}>Activa</button><button onClick={() => setRecActive(false)} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl ${!recActive ? 'bg-white shadow-sm text-slate-600' : 'text-slate-400'}`}>Pausada</button></div></div>
-                                <button onClick={() => { if(!recDesc || !recAmount || !recNextDate || !recAccountId || !recCategoryId) return; onUpdateData({recurrents: data.recurrents?.map(r => r.id === recId ? {...r, description: recDesc, amount: parseFloat(recAmount), frequency: recFreq, interval: recInterval, nextDueDate: recNextDate, endDate: recEndDate, active: recActive, accountId: recAccountId, categoryId: recCategoryId} : r)}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Cambios</button>
+
+                                {/* Row 2: Account (6 cols) + Category (6 cols) */}
+                                <div className="col-span-12 sm:col-span-6 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Cuenta</label>
+                                    <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recAccountId} onChange={e => setRecAccountId(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                                </div>
+                                <div className="col-span-12 sm:col-span-6 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Categoría</label>
+                                    <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recCategoryId} onChange={e => setRecCategoryId(e.target.value)}>{data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                                </div>
+
+                                {/* Row 3: Frequency (4 cols) + Interval (4 cols) + Status (4 cols) */}
+                                <div className="col-span-12 sm:col-span-4 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Frecuencia</label>
+                                    <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recFreq} onChange={e => setRecFreq(e.target.value as any)}><option value="DAYS">Días</option><option value="WEEKS">Semanas</option><option value="MONTHLY">Meses</option><option value="YEARS">Años</option></select>
+                                </div>
+                                <div className="col-span-6 sm:col-span-4 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Intervalo</label>
+                                    <input type="number" min="1" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recInterval} onChange={e => setRecInterval(parseInt(e.target.value) || 1)} />
+                                </div>
+                                <div className="col-span-6 sm:col-span-4 space-y-1">
+                                     <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Estado</label>
+                                     <div className="flex bg-slate-100 p-1 rounded-xl h-[46px]">
+                                        <button onClick={() => setRecActive(true)} className={`flex-1 text-[9px] font-black uppercase rounded-lg transition-all ${recActive ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}>ON</button>
+                                        <button onClick={() => setRecActive(false)} className={`flex-1 text-[9px] font-black uppercase rounded-lg transition-all ${!recActive ? 'bg-white shadow-sm text-slate-600' : 'text-slate-400'}`}>OFF</button>
+                                     </div>
+                                </div>
+
+                                {/* Row 4: Next Date (6 cols) + End Date (6 cols) */}
+                                <div className="col-span-12 sm:col-span-6 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Próxima</label>
+                                    <input type="date" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recNextDate} onChange={e => setRecNextDate(e.target.value)} />
+                                </div>
+                                <div className="col-span-12 sm:col-span-6 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Fin (Opcional)</label>
+                                    <input type="date" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recEndDate} onChange={e => setRecEndDate(e.target.value)} />
+                                </div>
+
+                                {/* Row 5: Save Button (Full Width) */}
+                                <div className="col-span-12 mt-2">
+                                    <button onClick={() => { if(!recDesc || !recAmount || !recNextDate || !recAccountId || !recCategoryId) return; onUpdateData({recurrents: data.recurrents?.map(r => r.id === recId ? {...r, description: recDesc, amount: parseFloat(recAmount), frequency: recFreq, interval: recInterval, nextDueDate: recNextDate, endDate: recEndDate, active: recActive, accountId: recAccountId, categoryId: recCategoryId} : r)}); resetForm(); }} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-lg transition-all active:scale-[0.98]">Guardar Cambios</button>
+                                </div>
                             </div>
                         </div>
                     </div>
