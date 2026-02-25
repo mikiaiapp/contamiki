@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category, Family, BookMetadata } from './types';
-import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown, Calendar, TrendingUp, Edit3 } from 'lucide-react';
+import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown, Calendar, TrendingUp, Edit3, Save } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts';
 
 interface DashboardProps {
@@ -33,6 +33,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   
   // Point Detail Modal State
   const [pointDetailTxs, setPointDetailTxs] = useState<{ date: string, txs: Transaction[] } | null>(null);
+
+  // Recurrence Edit Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [recurrenceModalTx, setRecurrenceModalTx] = useState<Partial<Transaction> | null>(null);
 
   const displayLogo = useMemo(() => {
     let logo = currentBook.logo;
@@ -382,6 +386,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+  const handleSaveEditedRecurrent = () => {
+    if (!recurrenceModalTx || !recurrenceModalTx.isFromRecurrence) return;
+    
+    const r = recurrents.find(item => item.id === recurrenceModalTx.isFromRecurrence);
+    if (!r) return;
+
+    // 1. Create the transaction
+    const newTx: Transaction = {
+        id: recurrenceModalTx.id || Math.random().toString(36).substring(2, 15),
+        date: recurrenceModalTx.date || new Date().toISOString().split('T')[0],
+        description: recurrenceModalTx.description || '',
+        amount: recurrenceModalTx.amount || 0,
+        accountId: recurrenceModalTx.accountId || '',
+        categoryId: recurrenceModalTx.categoryId || '',
+        type: recurrenceModalTx.type || 'EXPENSE',
+        isValidated: true,
+        isFromRecurrence: r.id,
+        transferAccountId: recurrenceModalTx.transferAccountId,
+        familyId: recurrenceModalTx.familyId
+    };
+    onAddTransaction(newTx as Transaction);
+
+    // 2. Update the recurrent movement
+    const nextDate = calculateNextDate(r.nextDueDate, r.frequency, r.interval);
+    let isActive = true;
+    if (r.endDate && nextDate > r.endDate) {
+        isActive = false;
+    }
+
+    onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, nextDueDate: nextDate, active: isActive } : item) });
+    
+    setIsModalOpen(false);
+    setRecurrenceModalTx(null);
+  };
 
   return (
     <div className="space-y-8 md:space-y-12 pb-10">
@@ -787,13 +826,61 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                 </div>
                                 <div className="grid grid-cols-4 gap-2">
                                     <button onClick={() => handleProcessRecurrent(r)} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-emerald-300 hover:bg-emerald-50 transition-all group active:scale-95"><Check className="text-slate-400 group-hover:text-emerald-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-emerald-600">Validar</span></button>
-                                    <button onClick={() => { setRecurrenceModalTx({ id: generateId(), date: r.nextDueDate, description: r.description, amount: r.amount, categoryId: r.categoryId, accountId: r.accountId, type: r.amount < 0 ? 'EXPENSE' : 'INCOME', isValidated: true }); setIsModalOpen(true); }} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-indigo-300 hover:bg-indigo-50 transition-all group active:scale-95"><Edit3 className="text-slate-400 group-hover:text-indigo-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-indigo-600">Editar</span></button>
+                                    <button onClick={() => { setRecurrenceModalTx({ id: Math.random().toString(36).substring(2, 15), date: r.nextDueDate, description: r.description, amount: r.amount, categoryId: r.categoryId, accountId: r.accountId, type: r.amount < 0 ? 'EXPENSE' : 'INCOME', isValidated: true, isFromRecurrence: r.id }); setIsModalOpen(true); }} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-indigo-300 hover:bg-indigo-50 transition-all group active:scale-95"><Edit3 className="text-slate-400 group-hover:text-indigo-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-indigo-600">Editar</span></button>
                                     <button onClick={() => { const nextDate = calculateNextDate(r.nextDueDate, r.frequency, r.interval); onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, nextDueDate: nextDate } : item) }); }} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-amber-300 hover:bg-amber-50 transition-all group active:scale-95"><Clock className="text-slate-400 group-hover:text-amber-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-amber-600">Posponer</span></button>
                                     <button onClick={() => onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, active: false } : item) })} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-rose-300 hover:bg-rose-50 transition-all group active:scale-95"><AlertCircle className="text-slate-400 group-hover:text-rose-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-rose-600">Anular</span></button>
                                 </div>
                             </div>
                         );
                     })}
+                </div>
+            </div>
+        </div>
+      )}
+
+      {isModalOpen && recurrenceModalTx && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[250] p-4 animate-in fade-in zoom-in duration-300">
+            <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-8 sm:p-12 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                <div className="flex items-center gap-4 mb-8">
+                    <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Edit3 size={28} /></div>
+                    <div><h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">Editar Movimiento</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Modificar detalles antes de validar</p></div>
+                </div>
+                
+                <div className="space-y-6">
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha</label>
+                        <input type="date" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-colors" value={recurrenceModalTx.date || ''} onChange={e => setRecurrenceModalTx({...recurrenceModalTx, date: e.target.value})} />
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Descripción</label>
+                        <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-colors" value={recurrenceModalTx.description || ''} onChange={e => setRecurrenceModalTx({...recurrenceModalTx, description: e.target.value})} />
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe</label>
+                        <input type="number" step="0.01" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-colors" value={recurrenceModalTx.amount || ''} onChange={e => setRecurrenceModalTx({...recurrenceModalTx, amount: parseFloat(e.target.value)})} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Cuenta</label>
+                            <select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-colors appearance-none" value={recurrenceModalTx.accountId || ''} onChange={e => setRecurrenceModalTx({...recurrenceModalTx, accountId: e.target.value})}>
+                                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label>
+                            <select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-colors appearance-none" value={recurrenceModalTx.categoryId || ''} onChange={e => setRecurrenceModalTx({...recurrenceModalTx, categoryId: e.target.value})}>
+                                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <button onClick={handleSaveEditedRecurrent} className="w-full py-5 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2 mt-4 transition-all active:scale-[0.98]">
+                        <Save size={18} /> Guardar y Validar
+                    </button>
                 </div>
             </div>
         </div>
