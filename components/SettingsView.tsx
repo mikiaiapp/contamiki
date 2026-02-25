@@ -115,6 +115,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
   const [favName, setFavName] = useState('');
   const [favDesc, setFavDesc] = useState('');
   const [favAmount, setFavAmount] = useState('');
+  const [favAccountId, setFavAccountId] = useState('');
+  const [favCategoryId, setFavCategoryId] = useState('');
 
   const availableYears = useMemo(() => {
     const years = new Set(data.transactions.map(t => t.date.substring(0, 4)));
@@ -127,7 +129,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
     setFamId(null); setFamName(''); setFamIcon('📂'); setFamType('EXPENSE');
     setCatId(null); setCatName(''); setCatIcon('🏷️'); setCatParent(data.families[0]?.id || ''); setCatActive(true);
     setRecId(null); setRecDesc(''); setRecAmount(''); setRecFreq('MONTHLY'); setRecInterval(1); setRecNextDate(''); setRecEndDate(''); setRecActive(true); setRecAccountId(''); setRecCategoryId('');
-    setFavId(null); setFavName(''); setFavDesc(''); setFavAmount('');
+    setFavId(null); setFavName(''); setFavDesc(''); setFavAmount(''); setFavAccountId(''); setFavCategoryId('');
     setWebLogos([]);
     setFailedLogos(new Set());
     setIaSearchStatus('');
@@ -548,7 +550,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                 </div>
                             </div>
                             <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                <button onClick={() => { setFavId(f.id); setFavName(f.name); setFavDesc(f.description); setFavAmount(f.amount.toString()); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100">
+                                <button onClick={() => { setFavId(f.id); setFavName(f.name); setFavDesc(f.description); setFavAmount(f.amount.toString()); setFavAccountId(f.accountId); setFavCategoryId(f.categoryId); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100">
                                     <Edit2 size={16}/>
                                 </button>
                                 <button onClick={() => { if(confirm('¿Borrar favorito?')) onUpdateData({favorites: data.favorites?.filter(x => x.id !== f.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100">
@@ -561,14 +563,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                 </div>
                 {isEditModalOpen && (
                     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in">
-                        <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20">
-                            <button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
-                            <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Heart className="text-amber-500"/> Editar Favorito</h3>
-                            <div className="space-y-6">
-                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre (Botón)</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favName} onChange={e => setFavName(e.target.value)} /></div>
-                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Descripción (Movimiento)</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favDesc} onChange={e => setFavDesc(e.target.value)} /></div>
-                                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe</label><input type="number" step="0.01" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={favAmount} onChange={e => setFavAmount(e.target.value)} /></div>
-                                <button onClick={() => { if(!favName || !favDesc || !favAmount) return; onUpdateData({favorites: data.favorites?.map(f => f.id === favId ? {...f, name: favName, description: favDesc, amount: parseFloat(favAmount)} : f)}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar Cambios</button>
+                        <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-6 relative border border-white/20">
+                            <button onClick={resetForm} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 transition-colors"><X size={20}/></button>
+                            <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2 mb-6"><Heart className="text-amber-500" size={24}/> Editar Favorito</h3>
+                            
+                            <div className="grid grid-cols-12 gap-4">
+                                {/* Name (8 cols) + Amount (4 cols) */}
+                                <div className="col-span-12 sm:col-span-8 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Nombre (Botón)</label>
+                                    <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={favName} onChange={e => setFavName(e.target.value)} />
+                                </div>
+                                <div className="col-span-12 sm:col-span-4 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Importe</label>
+                                    <input type="number" step="0.01" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={favAmount} onChange={e => setFavAmount(e.target.value)} />
+                                </div>
+
+                                {/* Description (Full Width) */}
+                                <div className="col-span-12 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Descripción (Movimiento)</label>
+                                    <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={favDesc} onChange={e => setFavDesc(e.target.value)} />
+                                </div>
+
+                                {/* Account (6 cols) + Category (6 cols) */}
+                                <div className="col-span-12 sm:col-span-6 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Cuenta</label>
+                                    <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={favAccountId} onChange={e => setFavAccountId(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                                </div>
+                                <div className="col-span-12 sm:col-span-6 space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Categoría</label>
+                                    <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={favCategoryId} onChange={e => setFavCategoryId(e.target.value)}>{data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                                </div>
+
+                                {/* Save Button */}
+                                <div className="col-span-12 mt-2">
+                                    <button onClick={() => { if(!favName || !favDesc || !favAmount || !favAccountId || !favCategoryId) return; onUpdateData({favorites: data.favorites?.map(f => f.id === favId ? {...f, name: favName, description: favDesc, amount: parseFloat(favAmount), accountId: favAccountId, categoryId: favCategoryId} : f)}); resetForm(); }} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-lg transition-all active:scale-[0.98]">Guardar Cambios</button>
+                                </div>
                             </div>
                         </div>
                     </div>
