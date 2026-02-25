@@ -241,6 +241,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   };
 
   const handleStartAnalysis = (rawData: string) => {
+    if (!importAccount) { alert("Selecciona una cuenta primero."); return; }
     if (!rawData.trim()) return;
 
     let rows: any[][] = [];
@@ -407,7 +408,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       const file = e.target.files?.[0];
       if (!file) return;
       const reader = new FileReader();
-      if (file.name.endsWith('.csv')) {
+      if (file.name.toLowerCase().endsWith('.csv')) {
           reader.onload = (evt) => {
               const text = evt.target?.result as string;
               handleStartAnalysis(text);
@@ -416,17 +417,18 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       } else {
           reader.onload = (evt) => {
               try {
-                  const bstr = evt.target?.result;
-                  const wb = XLSX.read(bstr, { type: 'binary' });
+                  const data = evt.target?.result;
+                  const wb = XLSX.read(data, { type: 'array' });
                   const wsname = wb.SheetNames[0];
                   const ws = wb.Sheets[wsname];
                   const csvData = XLSX.utils.sheet_to_csv(ws, { FS: ';' });
                   handleStartAnalysis(csvData);
               } catch (err) {
-                  alert("Error leyendo el archivo Excel. Asegúrate de que no esté corrupto.");
+                  console.error(err);
+                  alert("Error leyendo el archivo. Asegúrate de que es un formato válido (.xlsx, .xls, .csv).");
               }
           };
-          reader.readAsBinaryString(file);
+          reader.readAsArrayBuffer(file);
       }
       e.target.value = '';
   };
@@ -958,8 +960,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     </div>
                     <div className="relative flex items-center justify-center py-4"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div><span className="relative bg-white px-4 text-[10px] font-black uppercase text-slate-300">O sube un archivo</span></div>
                     <div className="space-y-4">
-                        <button onClick={() => importFileRef.current?.click()} className="w-full py-5 bg-white border-2 border-dashed border-indigo-200 text-indigo-500 rounded-3xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-50 transition-all flex flex-col items-center justify-center gap-2 group"><Upload size={24} className="group-hover:scale-110 transition-transform"/><span>Subir Excel (.xlsx) o CSV</span></button>
-                        <input type="file" ref={importFileRef} className="hidden" accept=".csv, .xlsx" onChange={handleImportFileUpload} />
+                        <button onClick={() => importFileRef.current?.click()} className="w-full py-5 bg-white border-2 border-dashed border-indigo-200 text-indigo-500 rounded-3xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-50 transition-all flex flex-col items-center justify-center gap-2 group"><Upload size={24} className="group-hover:scale-110 transition-transform"/><span>Subir Archivo (.xlsx, .xls, .csv)</span></button>
+                        <input type="file" ref={importFileRef} className="hidden" accept=".csv, .xlsx, .xls" onChange={handleImportFileUpload} />
                     </div>
                 </div>
             )}
