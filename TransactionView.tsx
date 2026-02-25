@@ -356,7 +356,27 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         const amount = parseFloat(amountStr);
         if (isNaN(amount)) return;
 
-        const formattedDate = dateStrRaw.includes('/') ? dateStrRaw.split('/').reverse().join('-') : dateStrRaw;
+        // Normalize date to YYYY-MM-DD
+        let formattedDate = dateStrRaw;
+        if (dateStrRaw.includes('/')) {
+            const parts = dateStrRaw.split('/');
+            // Assume DD/MM/YYYY if parts[0] > 12 or if year is last
+            if (parts[2].length === 4) {
+                 formattedDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            } else {
+                 // Fallback or other formats, try to parse
+                 const d = new Date(dateStrRaw);
+                 if (!isNaN(d.getTime())) formattedDate = d.toISOString().split('T')[0];
+            }
+        } else if (dateStrRaw.includes('-')) {
+             // Ensure YYYY-MM-DD
+             const parts = dateStrRaw.split('-');
+             if (parts[0].length === 2 && parts[2].length === 4) {
+                  // DD-MM-YYYY -> YYYY-MM-DD
+                  formattedDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+             }
+        }
+
         const description = descVal ? descVal.toString().trim() : 'Sin concepto';
 
         const isDuplicate = existingInAcc.some(t => 
