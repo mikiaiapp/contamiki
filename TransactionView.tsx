@@ -240,29 +240,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     return '';
   };
 
-  const handleStartAnalysis = (rawData: string) => {
+  const processRows = (rows: any[][]) => {
     if (!importAccount) { alert("Selecciona una cuenta primero."); return; }
-    if (!rawData.trim()) return;
-
-    let rows: any[][] = [];
-    try {
-        const wb = XLSX.read(rawData, { type: 'string', raw: true });
-        if (wb.SheetNames.length > 0) {
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-        }
-    } catch (e) {
-        console.warn("XLSX parse failed, falling back to simple split", e);
-    }
-
-    if (rows.length === 0 || (rows.length > 0 && rows[0].length === 1 && rawData.includes(';'))) {
-         rows = rawData.split('\n').filter(l => l.trim()).map(line => {
-            if (line.includes('\t')) return line.split('\t');
-            if (line.includes(';')) return line.split(';');
-            return line.split(',');
-         });
-    }
-
+    
     rows = rows.filter(r => r.length > 0 && r.some((c: any) => c && c.toString().trim()));
     if (rows.length === 0) return;
 
@@ -381,7 +361,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
         const isDuplicate = existingInAcc.some(t => 
             t.date === formattedDate && 
-            t.amount === amount
+            Math.abs(t.amount - amount) < 0.005
         );
 
         props.push({
@@ -404,6 +384,32 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     setImportStep(hasDuplicates ? 2 : 3);
   };
 
+  const handleStartAnalysis = (rawData: string) => {
+    if (!importAccount) { alert("Selecciona una cuenta primero."); return; }
+    if (!rawData.trim()) return;
+
+    let rows: any[][] = [];
+    try {
+        const wb = XLSX.read(rawData, { type: 'string', raw: true });
+        if (wb.SheetNames.length > 0) {
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        }
+    } catch (e) {
+        console.warn("XLSX parse failed, falling back to simple split", e);
+    }
+
+    if (rows.length === 0 || (rows.length > 0 && rows[0].length === 1 && rawData.includes(';'))) {
+         rows = rawData.split('\n').filter(l => l.trim()).map(line => {
+            if (line.includes('\t')) return line.split('\t');
+            if (line.includes(';')) return line.split(';');
+            return line.split(',');
+         });
+    }
+    
+    processRows(rows);
+  };
+
   const handleImportFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -421,8 +427,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                   const wb = XLSX.read(data, { type: 'array' });
                   const wsname = wb.SheetNames[0];
                   const ws = wb.Sheets[wsname];
-                  const csvData = XLSX.utils.sheet_to_csv(ws, { FS: ';' });
-                  handleStartAnalysis(csvData);
+                  const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+                  processRows(rows);
               } catch (err) {
                   console.error(err);
                   alert("Error leyendo el archivo. Asegúrate de que es un formato válido (.xlsx, .xls, .csv).");
