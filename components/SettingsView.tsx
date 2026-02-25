@@ -109,6 +109,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
   const [recActive, setRecActive] = useState(true);
   const [recAccountId, setRecAccountId] = useState('');
   const [recCategoryId, setRecCategoryId] = useState('');
+  const [recTransferAccountId, setRecTransferAccountId] = useState<string | null>(null);
+  const [recType, setRecType] = useState<TransactionType>('EXPENSE');
+  const [isRecSelectorOpen, setIsRecSelectorOpen] = useState(false);
 
   // Favorite Edit State
   const [favId, setFavId] = useState<string | null>(null);
@@ -118,17 +121,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
   const [favAccountId, setFavAccountId] = useState('');
   const [favCategoryId, setFavCategoryId] = useState('');
 
-  const availableYears = useMemo(() => {
-    const years = new Set(data.transactions.map(t => t.date.substring(0, 4)));
-    return Array.from(years).sort().reverse();
-  }, [data.transactions]);
+  const activeGroupedCategories = useMemo(() => {
+    return data.families.map(f => ({
+        family: f,
+        categories: data.categories.filter(c => c.familyId === f.id && c.active !== false).sort((a, b) => a.name.localeCompare(b.name))
+    })).filter(g => g.categories.length > 0).sort((a, b) => a.family.name.localeCompare(b.family.name));
+  }, [data.families, data.categories]);
+
+  const activeGroupedAccounts = useMemo(() => {
+    return data.accountGroups.map(g => ({
+        group: g,
+        accounts: data.accounts.filter(a => a.groupId === g.id && a.active !== false).sort((a, b) => a.name.localeCompare(b.name))
+    })).filter(g => g.accounts.length > 0).sort((a, b) => a.group.name.localeCompare(b.group.name));
+  }, [data.accountGroups, data.accounts]);
 
   const resetForm = () => {
     setGrpId(null); setGrpName(''); setGrpIcon('🗂️');
     setAccId(null); setAccName(''); setAccBalance(''); setAccIcon('🏦'); setAccGroupId(data.accountGroups[0]?.id || ''); setAccActive(true);
     setFamId(null); setFamName(''); setFamIcon('📂'); setFamType('EXPENSE');
     setCatId(null); setCatName(''); setCatIcon('🏷️'); setCatParent(data.families[0]?.id || ''); setCatActive(true);
-    setRecId(null); setRecDesc(''); setRecAmount(''); setRecFreq('MONTHLY'); setRecInterval(1); setRecNextDate(''); setRecEndDate(''); setRecActive(true); setRecAccountId(''); setRecCategoryId('');
+    setRecId(null); setRecDesc(''); setRecAmount(''); setRecFreq('MONTHLY'); setRecInterval(1); setRecNextDate(''); setRecEndDate(''); setRecActive(true); setRecAccountId(''); setRecCategoryId(''); setRecTransferAccountId(null); setRecType('EXPENSE'); setIsRecSelectorOpen(false);
     setFavId(null); setFavName(''); setFavDesc(''); setFavAmount(''); setFavAccountId(''); setFavCategoryId('');
     setWebLogos([]);
     setFailedLogos(new Set());
@@ -457,7 +469,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                 <button onClick={() => onUpdateData({recurrents: data.recurrents?.map(x => x.id === r.id ? {...x, active: !x.active} : x)})} className={`p-3 rounded-xl transition-colors ${r.active ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`} title={r.active ? "Pausar" : "Activar"}>
                                     {r.active ? <Pause size={16}/> : <Play size={16}/>}
                                 </button>
-                                <button onClick={() => { setRecId(r.id); setRecDesc(r.description); setRecAmount(r.amount.toString()); setRecFreq(r.frequency); setRecInterval(r.interval); setRecNextDate(r.nextDueDate); setRecEndDate(r.endDate || ''); setRecActive(r.active); setRecAccountId(r.accountId); setRecCategoryId(r.categoryId); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100">
+                                <button onClick={() => { setRecId(r.id); setRecDesc(r.description); setRecAmount(r.amount.toString()); setRecFreq(r.frequency); setRecInterval(r.interval); setRecNextDate(r.nextDueDate); setRecEndDate(r.endDate || ''); setRecActive(r.active); setRecAccountId(r.accountId); setRecCategoryId(r.categoryId); setRecTransferAccountId(r.transferAccountId || null); setRecType(r.type); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100">
                                     <Edit2 size={16}/>
                                 </button>
                                 <button onClick={() => { if(confirm('¿Borrar recurrencia?')) onUpdateData({recurrents: data.recurrents?.filter(x => x.id !== r.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100">
@@ -490,9 +502,60 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                     <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Cuenta</label>
                                     <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recAccountId} onChange={e => setRecAccountId(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
                                 </div>
-                                <div className="col-span-12 sm:col-span-6 space-y-1">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Categoría</label>
-                                    <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recCategoryId} onChange={e => setRecCategoryId(e.target.value)}>{data.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                                <div className="col-span-12 sm:col-span-6 space-y-1 relative">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Destino</label>
+                                    <button onClick={() => setIsRecSelectorOpen(true)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors text-left flex items-center justify-between">
+                                        <span className="truncate flex items-center gap-2">
+                                            {recType === 'TRANSFER' && recTransferAccountId ? (
+                                                <>
+                                                    {renderIcon(data.accounts.find(a => a.id === recTransferAccountId)?.icon || '🏦', "w-4 h-4")}
+                                                    <span>{data.accounts.find(a => a.id === recTransferAccountId)?.name}</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {renderIcon(data.categories.find(c => c.id === recCategoryId)?.icon || '🏷️', "w-4 h-4")}
+                                                    <span>{data.categories.find(c => c.id === recCategoryId)?.name || 'Seleccionar...'}</span>
+                                                </>
+                                            )}
+                                        </span>
+                                        <ChevronDown size={14} className="opacity-50"/>
+                                    </button>
+                                    {isRecSelectorOpen && (
+                                        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-[2px]" onClick={(e) => { e.stopPropagation(); setIsRecSelectorOpen(false); }}>
+                                            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[550px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[60vh]" onClick={e => e.stopPropagation()}>
+                                                <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50">
+                                                    <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Categorías Activas</div>
+                                                    {activeGroupedCategories.map(f => (
+                                                        <div key={f.family.id}>
+                                                            <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-9 z-0">{f.family.name}</div>
+                                                            {f.categories.map(c => (
+                                                                <button key={c.id} onClick={() => { setRecCategoryId(c.id); setRecTransferAccountId(null); setRecType(f.family.type); setIsRecSelectorOpen(false); }} className={`w-full text-left px-4 py-3 hover:bg-white hover:text-indigo-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${recCategoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>
+                                                                    {renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+                                                    <div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos Activos</div>
+                                                    {activeGroupedAccounts.map(g => {
+                                                        const availableAccs = g.accounts.filter(a => a.id !== recAccountId);
+                                                        if (availableAccs.length === 0) return null;
+                                                        return (
+                                                            <div key={g.group.id}>
+                                                                <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>
+                                                                {availableAccs.map(a => (
+                                                                    <button key={a.id} onClick={() => { setRecTransferAccountId(a.id); setRecCategoryId(''); setRecType('TRANSFER'); setIsRecSelectorOpen(false); }} className={`w-full text-left px-4 py-3 hover:bg-slate-50 hover:text-emerald-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${recTransferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>
+                                                                        ➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Row 3: Frequency (4 cols) + Interval (4 cols) + Status (4 cols) */}
@@ -525,11 +588,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                 {/* Row 5: Save Button (Full Width) */}
                                 <div className="col-span-12 mt-2">
                                     <button onClick={() => { 
-                                        if(!recDesc || !recAmount || !recNextDate || !recAccountId || !recCategoryId) {
-                                            alert("Por favor, completa todos los campos obligatorios (Descripción, Importe, Cuenta, Categoría y Fecha Inicio).");
+                                        if(!recDesc || !recAmount || !recNextDate || !recAccountId || (!recCategoryId && !recTransferAccountId)) {
+                                            alert("Por favor, completa todos los campos obligatorios (Descripción, Importe, Cuenta, Destino y Fecha Inicio).");
                                             return;
                                         }
-                                        onUpdateData({recurrents: data.recurrents?.map(r => r.id === recId ? {...r, description: recDesc, amount: parseFloat(recAmount), frequency: recFreq, interval: recInterval, nextDueDate: recNextDate, endDate: recEndDate, active: recActive, accountId: recAccountId, categoryId: recCategoryId} : r)}); 
+                                        onUpdateData({recurrents: data.recurrents?.map(r => r.id === recId ? {
+                                            ...r, 
+                                            description: recDesc, 
+                                            amount: parseFloat(recAmount), 
+                                            frequency: recFreq, 
+                                            interval: recInterval, 
+                                            nextDueDate: recNextDate, 
+                                            endDate: recEndDate, 
+                                            active: recActive, 
+                                            accountId: recAccountId, 
+                                            categoryId: recCategoryId,
+                                            transferAccountId: recTransferAccountId,
+                                            type: recType
+                                        } : r)}); 
                                         resetForm(); 
                                     }} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-lg transition-all active:scale-[0.98]">Guardar Cambios</button>
                                 </div>
