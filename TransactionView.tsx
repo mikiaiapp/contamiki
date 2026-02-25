@@ -744,7 +744,33 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const handleSaveRecurrent = () => {
       if (!recurrenceModalTx) return;
       const t = recurrenceModalTx;
-      const newRec: RecurrentMovement = { id: generateId(), description: t.description, amount: t.amount, type: t.type, accountId: t.accountId, transferAccountId: t.transferAccountId, familyId: t.familyId, categoryId: t.categoryId, frequency: recFreq, interval: parseInt(recInterval) || 1, startDate: t.date, nextDueDate: t.date, active: true };
+      
+      // Calculate the FIRST occurrence based on the frequency, not the transaction date itself
+      const d = new Date(t.date);
+      const interval = parseInt(recInterval) || 1;
+      
+      if (recFreq === 'DAYS') d.setDate(d.getDate() + interval);
+      else if (recFreq === 'WEEKS') d.setDate(d.getDate() + (interval * 7));
+      else if (recFreq === 'MONTHLY') d.setMonth(d.getMonth() + interval);
+      else if (recFreq === 'YEARS') d.setFullYear(d.getFullYear() + interval);
+      
+      const firstDueDate = d.toISOString().split('T')[0];
+
+      const newRec: RecurrentMovement = { 
+          id: generateId(), 
+          description: t.description, 
+          amount: t.amount, 
+          type: t.type, 
+          accountId: t.accountId, 
+          transferAccountId: t.transferAccountId, 
+          familyId: t.familyId, 
+          categoryId: t.categoryId, 
+          frequency: recFreq, 
+          interval: interval, 
+          startDate: firstDueDate, // Start date is the first future occurrence
+          nextDueDate: firstDueDate, 
+          active: true 
+      };
       onUpdateData({ recurrents: [...(data.recurrents || []), newRec] });
       setRecurrenceModalTx(null);
   };

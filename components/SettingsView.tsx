@@ -514,7 +514,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
 
                                 {/* Row 4: Next Date (6 cols) + End Date (6 cols) */}
                                 <div className="col-span-12 sm:col-span-6 space-y-1">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Próxima</label>
+                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Inicio Recurrencia</label>
                                     <input type="date" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recNextDate} onChange={e => setRecNextDate(e.target.value)} />
                                 </div>
                                 <div className="col-span-12 sm:col-span-6 space-y-1">
@@ -524,7 +524,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
 
                                 {/* Row 5: Save Button (Full Width) */}
                                 <div className="col-span-12 mt-2">
-                                    <button onClick={() => { if(!recDesc || !recAmount || !recNextDate || !recAccountId || !recCategoryId) return; onUpdateData({recurrents: data.recurrents?.map(r => r.id === recId ? {...r, description: recDesc, amount: parseFloat(recAmount), frequency: recFreq, interval: recInterval, nextDueDate: recNextDate, endDate: recEndDate, active: recActive, accountId: recAccountId, categoryId: recCategoryId} : r)}); resetForm(); }} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-lg transition-all active:scale-[0.98]">Guardar Cambios</button>
+                                    <button onClick={() => { 
+                                        if(!recDesc || !recAmount || !recNextDate || !recAccountId || !recCategoryId) {
+                                            alert("Por favor, completa todos los campos obligatorios (Descripción, Importe, Cuenta, Categoría y Fecha Inicio).");
+                                            return;
+                                        }
+                                        onUpdateData({recurrents: data.recurrents?.map(r => r.id === recId ? {...r, description: recDesc, amount: parseFloat(recAmount), frequency: recFreq, interval: recInterval, nextDueDate: recNextDate, endDate: recEndDate, active: recActive, accountId: recAccountId, categoryId: recCategoryId} : r)}); 
+                                        resetForm(); 
+                                    }} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-lg transition-all active:scale-[0.98]">Guardar Cambios</button>
                                 </div>
                             </div>
                         </div>
