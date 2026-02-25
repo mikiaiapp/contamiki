@@ -242,63 +242,160 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   const handleStartAnalysis = (rawData: string) => {
     if (!rawData.trim()) return;
-    const lines = rawData.split('\n').filter(l => l.trim());
-    const props: ProposedTransaction[] = [];
+
+    let rows: any[][] = [];
+    try {
+        const wb = XLSX.read(rawData, { type: 'string', raw: true });
+        if (wb.SheetNames.length > 0) {
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        }
+    } catch (e) {
+        console.warn("XLSX parse failed, falling back to simple split", e);
+    }
+
+    if (rows.length === 0 || (rows.length > 0 && rows[0].length === 1 && rawData.includes(';'))) {
+         rows = rawData.split('\n').filter(l => l.trim()).map(line => {
+            if (line.includes('\t')) return line.split('\t');
+            if (line.includes(';')) return line.split(';');
+            return line.split(',');
+         });
+    }
+
+    rows = rows.filter(r => r.length > 0 && r.some((c: any) => c && c.toString().trim()));
+    if (rows.length === 0) return;
+
+    let dateIdx = -1;
+    let amountIdx = -1;
+    let descIdx = -1;
+
+    // Force standard mapping for copy/paste format (Date;Concept;Amount) if 3 columns and no header detected
+    if (rows.length > 0 && rows[0].length === 3) {
+        const r0 = rows[0];
+        const isHeader = r0[0]?.toString().toLowerCase().includes('date') || r0[0]?.toString().toLowerCase().includes('fecha');
+        if (!isHeader) {
+             // Assume Date;Concept;Amount
+             dateIdx = 0;
+             descIdx = 1;
+             amountIdx = 2;
+        }
+    }
+
+    const isDate = (val: any) => {
+        if (!val) return false;
+        const s = val.toString().trim();
+        return s.match(/^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/) || !isNaN(Date.parse(s));
+    };
+
+    const isAmount = (val: any) => {
+        if (!val) return false;
+        const s = val.toString().trim().replace(/[^\d.,\-+]/g, '');
+        return s.length > 0 && !isNaN(parseFloat(s.replace(',','.')));
+    };
+
+    const headerRow = rows[0];
+    headerRow.forEach((cell: any, idx: number) => {
+        const s = cell ? cell.toString().toLowerCase() : '';
+        if (s.includes('date') || s.includes('fecha')) dateIdx = idx;
+        if (s.includes('amount') || s.includes('importe') || s.includes('cantidad') || s.includes('valor') || s.includes('saldo') === false && (s.includes('haber') || s.includes('debe'))) amountIdx = idx;
+        if (s.includes('concept') || s.includes('descrip') || s.includes('detalle')) descIdx = idx;
+    });
+
+    if (rows.length > 1 && (dateIdx === -1 || amountIdx === -1)) {
+        const sample = rows[1];
+        if (dateIdx === -1) dateIdx = sample.findIndex(isDate);
+        if (amountIdx === -1) {
+             for (let i = sample.length - 1; i >= 0; i--) {
+                 if (i !== dateIdx && isAmount(sample[i])) {
+                     amountIdx = i;
+                     break;
+                 }
+             }
+        }
+    }
     
+    if (dateIdx === -1) dateIdx = 0;
+    if (amountIdx === -1) amountIdx = headerRow.length - 1;
+    
+    if (descIdx === -1 && rows.length > 1) {
+        const sample = rows[1];
+        let maxLen = 0;
+        sample.forEach((cell: any, idx: number) => {
+            if (idx !== dateIdx && idx !== amountIdx) {
+                const len = cell ? cell.toString().length : 0;
+                if (len > maxLen) {
+                    maxLen = len;
+                    descIdx = idx;
+                }
+            }
+        });
+    }
+    
+    if (descIdx === -1) descIdx = 1;
+
+    const props: ProposedTransaction[] = [];
     const existingInAcc = data.transactions.filter(t => t.accountId === importAccount || t.transferAccountId === importAccount);
 
-    lines.forEach(line => {
-      const parts = line.split(/[;\t]/).map(p => p.trim());
-      const effectiveParts = parts.length >= 2 ? parts : line.split(',').map(p => p.trim());
+    rows.forEach((row, rIdx) => {
+        if (rIdx === 0 && (row[dateIdx]?.toString().toLowerCase().includes('date') || row[dateIdx]?.toString().toLowerCase().includes('fecha'))) return;
 
-      if (effectiveParts.length < 2) return;
-      
-      const dateStrRaw = effectiveParts[0];
-      const concept = effectiveParts[1];
-      
-      let amountStr = effectiveParts[effectiveParts.length - 1].trim();
-      amountStr = amountStr.replace(/[^\d.,\-+]/g, '');
+        const dateVal = row[dateIdx];
+        const amountVal = row[amountIdx];
+        const descVal = row[descIdx];
 
-      if (amountStr.includes('.') && amountStr.includes(',')) {
-          if (amountStr.lastIndexOf(',') > amountStr.lastIndexOf('.')) {
-              amountStr = amountStr.replace(/\./g, '').replace(',', '.');
-          } else {
-              amountStr = amountStr.replace(/,/g, '');
-          }
-      } else if (amountStr.includes(',')) {
-          amountStr = amountStr.replace(',', '.');
-      } else if (amountStr.includes('.')) {
-          const dotCount = (amountStr.match(/\./g) || []).length;
-          const parts = amountStr.split('.');
-          const lastPart = parts[parts.length - 1];
-          
-          if (dotCount > 1 || lastPart.length === 3) {
-              amountStr = amountStr.replace(/\./g, '');
-          }
-      }
-      
-      const amount = parseFloat(amountStr);
-      if (isNaN(amount)) return;
+        if (!dateVal && !amountVal) return;
 
-      const formattedDate = dateStrRaw.includes('/') ? dateStrRaw.split('/').reverse().join('-') : dateStrRaw;
+        let dateStrRaw = dateVal ? dateVal.toString() : new Date().toISOString().split('T')[0];
+        // Handle Excel serial dates
+        if (typeof dateVal === 'number' && dateVal > 20000) {
+            const date = new Date((dateVal - (25567 + 2)) * 86400 * 1000);
+            dateStrRaw = date.toISOString().split('T')[0];
+        }
 
-      const isDuplicate = existingInAcc.some(t => 
-          t.date === formattedDate && 
-          t.amount === amount
-      );
+        let amountStr = amountVal ? amountVal.toString().trim() : '0';
+        amountStr = amountStr.replace(/[^\d.,\-+]/g, '');
 
-      props.push({
-        id: generateId(),
-        date: formattedDate,
-        description: concept,
-        amount: amount,
-        accountId: importAccount, 
-        categoryId: findSuggestedCategory(concept),
-        type: amount < 0 ? 'EXPENSE' : 'INCOME',
-        isValidated: false,
-        isDuplicate: isDuplicate
-      });
+        if (amountStr.includes('.') && amountStr.includes(',')) {
+            if (amountStr.lastIndexOf(',') > amountStr.lastIndexOf('.')) {
+                amountStr = amountStr.replace(/\./g, '').replace(',', '.');
+            } else {
+                amountStr = amountStr.replace(/,/g, '');
+            }
+        } else if (amountStr.includes(',')) {
+            amountStr = amountStr.replace(',', '.');
+        } else if (amountStr.includes('.')) {
+            const dotCount = (amountStr.match(/\./g) || []).length;
+            const parts = amountStr.split('.');
+            const lastPart = parts[parts.length - 1];
+            if (dotCount > 1 || lastPart.length === 3) {
+                amountStr = amountStr.replace(/\./g, '');
+            }
+        }
+        
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount)) return;
+
+        const formattedDate = dateStrRaw.includes('/') ? dateStrRaw.split('/').reverse().join('-') : dateStrRaw;
+        const description = descVal ? descVal.toString().trim() : 'Sin concepto';
+
+        const isDuplicate = existingInAcc.some(t => 
+            t.date === formattedDate && 
+            t.amount === amount
+        );
+
+        props.push({
+            id: generateId(),
+            date: formattedDate,
+            description: description,
+            amount: amount,
+            accountId: importAccount, 
+            categoryId: findSuggestedCategory(description),
+            type: amount < 0 ? 'EXPENSE' : 'INCOME',
+            isValidated: false,
+            isDuplicate: isDuplicate
+        });
     });
+
     setProposedTransactions(props);
     setSelectedImportIds(new Set());
     setImportStep(3);
