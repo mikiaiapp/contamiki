@@ -1201,7 +1201,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-6 relative border border-white/20 max-h-[95vh] overflow-y-auto custom-scrollbar">
                   <button onClick={() => setRecurrenceModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 transition-colors"><X size={20}/></button>
-                  <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2 mb-6"><CalendarClock className="text-indigo-600" size={24}/> Crear Recurrencia (v2)</h3>
+                  <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2 mb-6"><CalendarClock className="text-indigo-600" size={24}/> Crear Recurrencia</h3>
                   
                   <div className="grid grid-cols-12 gap-4">
                       {/* Row 1: Description (8 cols) + Amount (4 cols) */}
