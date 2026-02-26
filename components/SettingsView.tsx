@@ -585,13 +585,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                     <input type="date" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recEndDate} onChange={e => setRecEndDate(e.target.value)} />
                                 </div>
 
-                                {/* Row 5: Save Button (Full Width) */}
-                                <div className="col-span-12 mt-2">
+                                {/* Row 5: Buttons (Full Width) */}
+                                <div className="col-span-12 mt-4 flex gap-3">
+                                    <button onClick={resetForm} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-xl font-black uppercase text-[11px] hover:bg-slate-200 transition-all">Cancelar</button>
                                     <button onClick={() => { 
-                                        if(!recDesc || !recAmount || !recNextDate || !recAccountId || (!recCategoryId && !recTransferAccountId)) {
-                                            alert("Por favor, completa todos los campos obligatorios (Descripción, Importe, Cuenta, Destino y Fecha Inicio).");
-                                            return;
-                                        }
+                                        if(!recDesc) { alert("Por favor, indica una descripción."); return; }
+                                        if(!recAmount) { alert("Por favor, indica un importe."); return; }
+                                        if(!recAccountId) { alert("Por favor, selecciona una cuenta de origen."); return; }
+                                        if(recType === 'TRANSFER' && !recTransferAccountId) { alert("Por favor, selecciona una cuenta de destino para el traspaso."); return; }
+                                        if(recType !== 'TRANSFER' && !recCategoryId) { alert("Por favor, selecciona una categoría."); return; }
+                                        if(!recNextDate) { alert("Por favor, indica la fecha de inicio de la recurrencia."); return; }
+
                                         onUpdateData({recurrents: data.recurrents?.map(r => r.id === recId ? {
                                             ...r, 
                                             description: recDesc, 
@@ -607,7 +611,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                             type: recType
                                         } : r)}); 
                                         resetForm(); 
-                                    }} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-lg transition-all active:scale-[0.98]">Guardar Cambios</button>
+                                    }} className="flex-[2] py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-lg transition-all active:scale-[0.98]">Guardar Cambios</button>
                                 </div>
                             </div>
                         </div>

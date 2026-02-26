@@ -88,9 +88,44 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   const [activeMenuTxId, setActiveMenuTxId] = useState<string | null>(null);
   
-  const [recurrenceModalTx, setRecurrenceModalTx] = useState<Transaction | null>(null);
-  const [recFreq, setRecFreq] = useState<RecurrenceFrequency>('MONTHLY');
-  const [recInterval, setRecInterval] = useState('1');
+  const [recDesc, setRecDesc] = useState('');
+  const [recAmount, setRecAmount] = useState('');
+  const [recAccountId, setRecAccountId] = useState('');
+  const [recCategoryId, setRecCategoryId] = useState('');
+  const [recTransferAccountId, setRecTransferAccountId] = useState<string | null>(null);
+  const [recType, setRecType] = useState<TransactionType>('EXPENSE');
+  const [recStartDate, setRecStartDate] = useState('');
+  const [recEndDate, setRecEndDate] = useState('');
+  const [isRecSelectorOpen, setIsRecSelectorOpen] = useState(false);
+
+
+  const calculateNextDate = (baseDate: string, freq: RecurrenceFrequency, interval: number) => {
+      if (!baseDate) return '';
+      const d = new Date(baseDate);
+      if (isNaN(d.getTime())) return '';
+      
+      if (freq === 'DAYS') d.setDate(d.getDate() + interval);
+      if (freq === 'WEEKS') d.setDate(d.getDate() + (interval * 7));
+      if (freq === 'MONTHLY') d.setMonth(d.getMonth() + interval);
+      if (freq === 'YEARS') d.setFullYear(d.getFullYear() + interval);
+      
+      return d.toISOString().split('T')[0];
+  };
+
+  const openRecurrenceModal = (t: Transaction) => {
+      setRecurrenceModalTx(t);
+      setRecDesc(t.description);
+      setRecAmount(Math.abs(t.amount).toString());
+      setRecAccountId(t.accountId);
+      setRecCategoryId(t.categoryId);
+      setRecTransferAccountId(t.transferAccountId || null);
+      setRecType(t.type);
+      setRecFreq('MONTHLY');
+      setRecInterval('1');
+      setRecEndDate('');
+
+      setRecStartDate(calculateNextDate(t.date, 'MONTHLY', 1));
+  };
   
   const [favoriteModalTx, setFavoriteModalTx] = useState<Transaction | null>(null);
   const [favName, setFavName] = useState('');
@@ -743,34 +778,45 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   const handleSaveRecurrent = () => {
       if (!recurrenceModalTx) return;
-      const t = recurrenceModalTx;
       
-      // Calculate the FIRST occurrence based on the frequency, not the transaction date itself
-      const d = new Date(t.date);
-      const interval = parseInt(recInterval) || 1;
-      
-      if (recFreq === 'DAYS') d.setDate(d.getDate() + interval);
-      else if (recFreq === 'WEEKS') d.setDate(d.getDate() + (interval * 7));
-      else if (recFreq === 'MONTHLY') d.setMonth(d.getMonth() + interval);
-      else if (recFreq === 'YEARS') d.setFullYear(d.getFullYear() + interval);
-      
-      const firstDueDate = d.toISOString().split('T')[0];
+      if(!recDesc) { alert("Por favor, indica una descripción."); return; }
+      if(!recAmount) { alert("Por favor, indica un importe."); return; }
+      if(!recAccountId) { alert("Por favor, selecciona una cuenta de origen."); return; }
+      if(recType === 'TRANSFER' && !recTransferAccountId) { alert("Por favor, selecciona una cuenta de destino para el traspaso."); return; }
+      if(recType !== 'TRANSFER' && !recCategoryId) { alert("Por favor, selecciona una categoría."); return; }
+      if(!recStartDate) { alert("Por favor, indica la fecha de inicio de la recurrencia."); return; }
 
+      const interval = parseInt(recInterval) || 1;
+      let amt = parseFloat(recAmount);
+      if (recType === 'EXPENSE' || recType === 'TRANSFER') {
+          amt = -Math.abs(amt);
+      } else {
+          amt = Math.abs(amt);
+      }
+      
       const newRec: RecurrentMovement = { 
           id: generateId(), 
-          description: t.description, 
-          amount: t.amount, 
-          type: t.type, 
-          accountId: t.accountId, 
-          transferAccountId: t.transferAccountId, 
-          familyId: t.familyId, 
-          categoryId: t.categoryId, 
+          description: recDesc, 
+          amount: amt, 
+          type: recType, 
+          accountId: recAccountId, 
+          transferAccountId: recTransferAccountId || undefined, 
+          familyId: recurrenceModalTx.familyId, 
+          categoryId: recCategoryId, 
           frequency: recFreq, 
           interval: interval, 
-          startDate: firstDueDate, // Start date is the first future occurrence
-          nextDueDate: firstDueDate, 
+          startDate: recStartDate, 
+          nextDueDate: recStartDate, 
+          endDate: recEndDate || undefined,
           active: true 
       };
+      
+      // Update familyId based on category if possible
+      if (recCategoryId) {
+          const cat = data.categories.find(c => c.id === recCategoryId);
+          if (cat) newRec.familyId = cat.familyId;
+      }
+
       onUpdateData({ recurrents: [...(data.recurrents || []), newRec] });
       setRecurrenceModalTx(null);
   };
@@ -936,7 +982,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                             <div className="absolute top-8 right-0 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 min-w-[180px] p-2 flex flex-col gap-1 animate-in fade-in zoom-in duration-200 origin-top-right" onClick={e => e.stopPropagation()}>
                                 <button onClick={() => { setActiveMenuTxId(null); openEditor(t); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Edit3 size={14} className="text-indigo-600"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Editar</span></button>
                                 <button onClick={() => handleDuplicate(t)} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Copy size={14} className="text-slate-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Duplicar</span></button>
-                                <button onClick={() => { setActiveMenuTxId(null); setRecurrenceModalTx(t); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Repeat size={14} className="text-emerald-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Hacer Recurrente</span></button>
+                                <button onClick={() => { setActiveMenuTxId(null); openRecurrenceModal(t); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Repeat size={14} className="text-emerald-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Hacer Recurrente</span></button>
                                 <button onClick={() => { setActiveMenuTxId(null); setFavoriteModalTx(t); setFavName(t.description); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Heart size={14} className="text-amber-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Guardar Favorito</span></button>
                                 <div className="h-px bg-slate-100 my-1"/>
                                 <button onClick={() => { setActiveMenuTxId(null); setDeleteConfirmId(t.id); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-rose-50 rounded-xl text-left transition-colors text-rose-500"><Trash2 size={14} /> <span className="text-[10px] font-bold uppercase">Borrar</span></button>
@@ -1149,8 +1195,108 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
       {recurrenceModalTx && (
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
-              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 text-center relative border border-white/20"><button onClick={() => setRecurrenceModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button><div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-emerald-500"><Repeat size={32}/></div><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Crear Recurrente</h3><p className="text-xs text-slate-500 mb-6">Programar: <span className="font-bold text-slate-800">{recurrenceModalTx.description}</span></p>
-                  <div className="space-y-4"><div className="space-y-2 text-left"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Repetir cada</label><div className="flex gap-2"><input type="number" min="1" className="w-20 px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none text-center" value={recInterval} onChange={e => setRecInterval(e.target.value)} /><select className="flex-1 px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none" value={recFreq} onChange={e => setRecFreq(e.target.value as any)}><option value="DAYS">Días</option><option value="WEEKS">Semanas</option><option value="MONTHLY">Meses</option><option value="YEARS">Años</option></select></div></div><button onClick={handleSaveRecurrent} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 shadow-xl">Confirmar Programación</button></div>
+              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-6 relative border border-white/20 max-h-[95vh] overflow-y-auto custom-scrollbar">
+                  <button onClick={() => setRecurrenceModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 transition-colors"><X size={20}/></button>
+                  <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2 mb-6"><CalendarClock className="text-indigo-600" size={24}/> Crear Recurrencia (v2)</h3>
+                  
+                  <div className="grid grid-cols-12 gap-4">
+                      {/* Row 1: Description (8 cols) + Amount (4 cols) */}
+                      <div className="col-span-12 sm:col-span-8 space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Descripción</label>
+                          <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" placeholder="Ej: Alquiler" value={recDesc} onChange={e => setRecDesc(e.target.value)} />
+                      </div>
+                      <div className="col-span-12 sm:col-span-4 space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Importe</label>
+                          <input type="number" step="0.01" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" placeholder="0.00" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
+                      </div>
+
+                      {/* Row 2: Account (6 cols) + Destination (6 cols) */}
+                      <div className="col-span-12 sm:col-span-6 space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Cuenta Origen</label>
+                          <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recAccountId} onChange={e => setRecAccountId(e.target.value)}>{data.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                      </div>
+                      <div className="col-span-12 sm:col-span-6 space-y-1 relative">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Destino</label>
+                          <button onClick={() => setIsRecSelectorOpen(true)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors text-left flex items-center justify-between">
+                              <span className="truncate flex items-center gap-2">
+                                  {recType === 'TRANSFER' && recTransferAccountId ? (
+                                      <>
+                                          {renderIcon(data.accounts.find(a => a.id === recTransferAccountId)?.icon || '🏦', "w-4 h-4")}
+                                          <span>{data.accounts.find(a => a.id === recTransferAccountId)?.name}</span>
+                                      </>
+                                  ) : (
+                                      <>
+                                          {renderIcon(data.categories.find(c => c.id === recCategoryId)?.icon || '🏷️', "w-4 h-4")}
+                                          <span>{data.categories.find(c => c.id === recCategoryId)?.name || 'Seleccionar...'}</span>
+                                      </>
+                                  )}
+                              </span>
+                              <ChevronDown size={14} className="opacity-50"/>
+                          </button>
+                          {isRecSelectorOpen && (
+                              <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-[2px]" onClick={(e) => { e.stopPropagation(); setIsRecSelectorOpen(false); }}>
+                                  <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[550px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[60vh]" onClick={e => e.stopPropagation()}>
+                                      <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50">
+                                          <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Categorías Activas</div>
+                                          {activeGroupedCategories.map(f => (
+                                              <div key={f.family.id}>
+                                                  <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-9 z-0">{f.family.name}</div>
+                                                  {f.categories.map(c => (
+                                                      <button key={c.id} onClick={() => { setRecCategoryId(c.id); setRecTransferAccountId(null); setRecType(f.family.type); setIsRecSelectorOpen(false); }} className={`w-full text-left px-4 py-3 hover:bg-white hover:text-indigo-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${recCategoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>
+                                                          {renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span>
+                                                      </button>
+                                                  ))}
+                                              </div>
+                                          ))}
+                                      </div>
+                                      <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+                                          <div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos Activos</div>
+                                          {activeGroupedAccounts.map(g => {
+                                              const availableAccs = g.accounts.filter(a => a.id !== recAccountId);
+                                              if (availableAccs.length === 0) return null;
+                                              return (
+                                                  <div key={g.group.id}>
+                                                      <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>
+                                                      {availableAccs.map(a => (
+                                                          <button key={a.id} onClick={() => { setRecTransferAccountId(a.id); setRecCategoryId(''); setRecType('TRANSFER'); setIsRecSelectorOpen(false); }} className={`w-full text-left px-4 py-3 hover:bg-slate-50 hover:text-emerald-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${recTransferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>
+                                                              ➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span>
+                                                          </button>
+                                                      ))}
+                                                  </div>
+                                              );
+                                          })}
+                                      </div>
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+
+                      {/* Row 3: Frequency (4 cols) + Interval (4 cols) + Start Date (4 cols) */}
+                      <div className="col-span-12 sm:col-span-4 space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Frecuencia</label>
+                          <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recFreq} onChange={e => { const newFreq = e.target.value as RecurrenceFrequency; setRecFreq(newFreq); if (recurrenceModalTx) setRecStartDate(calculateNextDate(recurrenceModalTx.date, newFreq, parseInt(recInterval) || 1)); }}><option value="DAYS">Días</option><option value="WEEKS">Semanas</option><option value="MONTHLY">Meses</option><option value="YEARS">Años</option></select>
+                      </div>
+                      <div className="col-span-12 sm:col-span-4 space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Intervalo</label>
+                          <input type="number" min="1" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recInterval} onChange={e => { const newInterval = e.target.value; setRecInterval(newInterval); if (recurrenceModalTx) setRecStartDate(calculateNextDate(recurrenceModalTx.date, recFreq, parseInt(newInterval) || 1)); }} />
+                      </div>
+                      <div className="col-span-12 sm:col-span-4 space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Inicio Recurrencia</label>
+                          <input type="date" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recStartDate} onChange={e => setRecStartDate(e.target.value)} />
+                      </div>
+
+                      {/* Row 4: End Date (12 cols) */}
+                      <div className="col-span-12 space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Fecha Fin (Opcional)</label>
+                          <input type="date" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recEndDate} onChange={e => setRecEndDate(e.target.value)} />
+                      </div>
+
+                      {/* Row 5: Buttons (Full Width) */}
+                      <div className="col-span-12 mt-4 flex gap-3">
+                          <button onClick={() => setRecurrenceModalTx(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-xl font-black uppercase text-[11px] hover:bg-slate-200 transition-all">Cancelar</button>
+                          <button onClick={handleSaveRecurrent} className="flex-[2] py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-lg transition-all active:scale-[0.98]">Confirmar Recurrencia</button>
+                      </div>
+                  </div>
               </div>
           </div>
       )}
