@@ -99,23 +99,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const [isRecSelectorOpen, setIsRecSelectorOpen] = useState(false);
 
 
-  const calculateNextDate = (baseDate: string, freq: RecurrenceFrequency, interval: number) => {
-      if (!baseDate) return '';
-      const d = new Date(baseDate);
-      if (isNaN(d.getTime())) return '';
-      
-      if (freq === 'DAYS') d.setDate(d.getDate() + interval);
-      if (freq === 'WEEKS') d.setDate(d.getDate() + (interval * 7));
-      if (freq === 'MONTHLY') d.setMonth(d.getMonth() + interval);
-      if (freq === 'YEARS') d.setFullYear(d.getFullYear() + interval);
-      
-      return d.toISOString().split('T')[0];
-  };
-
   const openRecurrenceModal = (t: Transaction) => {
       setRecurrenceModalTx(t);
       setRecDesc(t.description);
-      setRecAmount(Math.abs(t.amount).toString());
+      setRecAmount(t.amount.toString());
       setRecAccountId(t.accountId);
       setRecCategoryId(t.categoryId);
       setRecTransferAccountId(t.transferAccountId || null);
@@ -124,7 +111,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       setRecInterval('1');
       setRecEndDate('');
 
-      setRecStartDate(calculateNextDate(t.date, 'MONTHLY', 1));
+      // Calculate initial start date
+      const d = new Date(t.date);
+      d.setMonth(d.getMonth() + 1); // Default to next month
+      setRecStartDate(d.toISOString().split('T')[0]);
   };
   
   const [favoriteModalTx, setFavoriteModalTx] = useState<Transaction | null>(null);
@@ -779,29 +769,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const handleSaveRecurrent = () => {
       if (!recurrenceModalTx) return;
       
-      if(!recDesc) { alert("Por favor, indica una descripción."); return; }
-      if(!recAmount) { alert("Por favor, indica un importe."); return; }
-      if(!recAccountId) { alert("Por favor, selecciona una cuenta de origen."); return; }
-      if(recType === 'TRANSFER' && !recTransferAccountId) { alert("Por favor, selecciona una cuenta de destino para el traspaso."); return; }
-      if(recType !== 'TRANSFER' && !recCategoryId) { alert("Por favor, selecciona una categoría."); return; }
-      if(!recStartDate) { alert("Por favor, indica la fecha de inicio de la recurrencia."); return; }
-
       const interval = parseInt(recInterval) || 1;
-      let amt = parseFloat(recAmount);
-      if (recType === 'EXPENSE' || recType === 'TRANSFER') {
-          amt = -Math.abs(amt);
-      } else {
-          amt = Math.abs(amt);
-      }
       
       const newRec: RecurrentMovement = { 
           id: generateId(), 
           description: recDesc, 
-          amount: amt, 
+          amount: parseFloat(recAmount), 
           type: recType, 
           accountId: recAccountId, 
           transferAccountId: recTransferAccountId || undefined, 
-          familyId: recurrenceModalTx.familyId, 
+          familyId: recurrenceModalTx.familyId, // Keep original family or infer? Better to infer from category if changed, but for now keep simple or update if category changed.
           categoryId: recCategoryId, 
           frequency: recFreq, 
           interval: interval, 
@@ -1197,7 +1174,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-6 relative border border-white/20 max-h-[95vh] overflow-y-auto custom-scrollbar">
                   <button onClick={() => setRecurrenceModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 transition-colors"><X size={20}/></button>
-                  <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2 mb-6"><CalendarClock className="text-indigo-600" size={24}/> Crear Recurrencia (v2)</h3>
+                  <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2 mb-6"><CalendarClock className="text-indigo-600" size={24}/> Crear Recurrencia</h3>
                   
                   <div className="grid grid-cols-12 gap-4">
                       {/* Row 1: Description (8 cols) + Amount (4 cols) */}
@@ -1274,11 +1251,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                       {/* Row 3: Frequency (4 cols) + Interval (4 cols) + Start Date (4 cols) */}
                       <div className="col-span-12 sm:col-span-4 space-y-1">
                           <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Frecuencia</label>
-                          <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recFreq} onChange={e => { const newFreq = e.target.value as RecurrenceFrequency; setRecFreq(newFreq); if (recurrenceModalTx) setRecStartDate(calculateNextDate(recurrenceModalTx.date, newFreq, parseInt(recInterval) || 1)); }}><option value="DAYS">Días</option><option value="WEEKS">Semanas</option><option value="MONTHLY">Meses</option><option value="YEARS">Años</option></select>
+                          <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recFreq} onChange={e => setRecFreq(e.target.value as RecurrenceFrequency)}><option value="DAYS">Días</option><option value="WEEKS">Semanas</option><option value="MONTHLY">Meses</option><option value="YEARS">Años</option></select>
                       </div>
                       <div className="col-span-12 sm:col-span-4 space-y-1">
                           <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Intervalo</label>
-                          <input type="number" min="1" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recInterval} onChange={e => { const newInterval = e.target.value; setRecInterval(newInterval); if (recurrenceModalTx) setRecStartDate(calculateNextDate(recurrenceModalTx.date, recFreq, parseInt(newInterval) || 1)); }} />
+                          <input type="number" min="1" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recInterval} onChange={e => setRecInterval(e.target.value)} />
                       </div>
                       <div className="col-span-12 sm:col-span-4 space-y-1">
                           <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Inicio Recurrencia</label>
@@ -1291,10 +1268,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                           <input type="date" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors" value={recEndDate} onChange={e => setRecEndDate(e.target.value)} />
                       </div>
 
-                      {/* Row 5: Buttons (Full Width) */}
-                      <div className="col-span-12 mt-4 flex gap-3">
-                          <button onClick={() => setRecurrenceModalTx(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-xl font-black uppercase text-[11px] hover:bg-slate-200 transition-all">Cancelar</button>
-                          <button onClick={handleSaveRecurrent} className="flex-[2] py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-lg transition-all active:scale-[0.98]">Confirmar Recurrencia</button>
+                      {/* Row 5: Save Button (Full Width) */}
+                      <div className="col-span-12 mt-2">
+                          <button onClick={handleSaveRecurrent} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-lg transition-all active:scale-[0.98]">Confirmar Recurrencia</button>
                       </div>
                   </div>
               </div>
