@@ -150,6 +150,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
     setIsEditModalOpen(false);
   };
 
+  const handleCloseRecurrence = () => {
+    setRecId(null);
+    setRecDesc('');
+    setRecAmount('');
+    setRecFreq('MONTHLY');
+    setRecInterval(1);
+    setRecNextDate('');
+    setRecEndDate('');
+    setRecActive(true);
+    setRecAccountId('');
+    setRecCategoryId('');
+    setRecTransferAccountId(null);
+    setRecType('EXPENSE');
+    setIsRecSelectorOpen(false);
+    setIsEditModalOpen(false);
+  };
+
+  const handleCloseFavorite = () => {
+    setFavId(null);
+    setFavName('');
+    setFavDesc('');
+    setFavAmount('');
+    setFavAccountId('');
+    setFavCategoryId('');
+    setIsEditModalOpen(false);
+  };
+
   const openEditor = () => setIsEditModalOpen(true);
   
   const renderIcon = (iconStr: string, className = "w-10 h-10") => {
@@ -483,7 +510,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                 {isEditModalOpen && (
                     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in">
                         <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl p-6 relative border border-white/20">
-                            <button onClick={resetForm} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 transition-colors"><X size={20}/></button>
+                            <button onClick={handleCloseRecurrence} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 transition-colors"><X size={20}/></button>
                             <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2 mb-6"><CalendarClock className="text-indigo-600" size={24}/> Editar Recurrencia (v2)</h3>
                             
                             <div className="grid grid-cols-12 gap-4">
@@ -587,7 +614,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
 
                                 {/* Row 5: Buttons (Full Width) */}
                                 <div className="col-span-12 mt-4 flex gap-3">
-                                    <button onClick={resetForm} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-xl font-black uppercase text-[11px] hover:bg-slate-200 transition-all">Cancelar</button>
+                                    <button onClick={handleCloseRecurrence} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-xl font-black uppercase text-[11px] hover:bg-slate-200 transition-all">Cancelar</button>
                                     <button onClick={() => { 
                                         if(!recDesc) { alert("Por favor, indica una descripción."); return; }
                                         if(!recAmount) { alert("Por favor, indica un importe."); return; }
@@ -610,7 +637,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                             transferAccountId: recTransferAccountId,
                                             type: recType
                                         } : r)}); 
-                                        resetForm(); 
+                                        handleCloseRecurrence(); 
                                     }} className="flex-[2] py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-lg transition-all active:scale-[0.98]">Guardar Cambios</button>
                                 </div>
                             </div>
@@ -651,7 +678,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                 {isEditModalOpen && (
                     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in">
                         <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-6 relative border border-white/20">
-                            <button onClick={resetForm} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 transition-colors"><X size={20}/></button>
+                            <button onClick={handleCloseFavorite} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 transition-colors"><X size={20}/></button>
                             <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2 mb-6"><Heart className="text-amber-500" size={24}/> Editar Favorito (v2)</h3>
                             
                             <div className="grid grid-cols-12 gap-4">
@@ -683,7 +710,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
 
                                 {/* Buttons */}
                                 <div className="col-span-12 mt-4 flex gap-3">
-                                    <button onClick={resetForm} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-xl font-black uppercase text-[11px] hover:bg-slate-200 transition-all">Cancelar</button>
+                                    <button onClick={handleCloseFavorite} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-xl font-black uppercase text-[11px] hover:bg-slate-200 transition-all">Cancelar</button>
                                     <button onClick={() => { 
                                         if(!favName) { alert("Indica un nombre para el botón."); return; }
                                         if(!favDesc) { alert("Indica una descripción para el movimiento."); return; }
@@ -692,7 +719,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                         if(!favCategoryId) { alert("Selecciona una categoría."); return; }
                                         
                                         onUpdateData({favorites: data.favorites?.map(f => f.id === favId ? {...f, name: favName, description: favDesc, amount: parseFloat(favAmount), accountId: favAccountId, categoryId: favCategoryId} : f)}); 
-                                        resetForm(); 
+                                        handleCloseFavorite(); 
                                     }} className="flex-[2] py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-lg transition-all active:scale-[0.98]">Guardar Cambios</button>
                                 </div>
                             </div>
