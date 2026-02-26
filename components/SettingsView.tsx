@@ -135,6 +135,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
     })).filter(g => g.accounts.length > 0).sort((a, b) => a.group.name.localeCompare(b.group.name));
   }, [data.accountGroups, data.accounts]);
 
+  const availableYears = useMemo(() => {
+      const years = new Set(data.transactions.map(t => t.date.substring(0, 4)));
+      return Array.from(years).sort().reverse();
+  }, [data.transactions]);
+
   const resetForm = () => {
     setGrpId(null); setGrpName(''); setGrpIcon('🗂️');
     setAccId(null); setAccName(''); setAccBalance(''); setAccIcon('🏦'); setAccGroupId(data.accountGroups[0]?.id || ''); setAccActive(true);
