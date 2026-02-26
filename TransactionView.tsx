@@ -97,6 +97,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const [recStartDate, setRecStartDate] = useState('');
   const [recEndDate, setRecEndDate] = useState('');
   const [isRecSelectorOpen, setIsRecSelectorOpen] = useState(false);
+  
+  const [recurrenceModalTx, setRecurrenceModalTx] = useState<Transaction | null>(null);
+  const [recFreq, setRecFreq] = useState<RecurrenceFrequency>('MONTHLY');
+  const [recInterval, setRecInterval] = useState('1');
 
 
   const calculateNextDate = (baseDate: string, freq: RecurrenceFrequency, interval: number) => {
