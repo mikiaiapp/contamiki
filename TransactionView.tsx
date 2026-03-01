@@ -757,22 +757,53 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     });
   }, [filteredList, sortField, sortDirection]);
 
+  const activeFilterId = useMemo(() => {
+    const hasEntry = colFilterEntry !== 'ALL';
+    const hasExit = colFilterExit !== 'ALL';
+    if (hasEntry && !hasExit) return colFilterEntry;
+    if (!hasEntry && hasExit) return colFilterExit;
+    if (hasEntry && hasExit && colFilterEntry === colFilterExit) return colFilterEntry;
+    return null;
+  }, [colFilterEntry, colFilterExit]);
+
   const runningBalances = useMemo(() => {
-    const allTxs = [...data.transactions].sort((a, b) => {
-      const dateComp = a.date.localeCompare(b.date);
-      if (dateComp !== 0) return dateComp;
-      return a.id.localeCompare(b.id);
-    });
     const balances = new Map<string, number>();
-    let current = 0;
-    allTxs.forEach(t => {
-      if (t.type !== 'TRANSFER') {
+    if (!activeFilterId) return balances;
+
+    const isAccount = indices.acc.has(activeFilterId);
+    const isCategory = indices.cat.has(activeFilterId);
+
+    if (isAccount) {
+      const acc = indices.acc.get(activeFilterId)!;
+      let current = acc.initialBalance;
+      const allTxs = [...data.transactions].sort((a, b) => {
+        const dateComp = a.date.localeCompare(b.date);
+        if (dateComp !== 0) return dateComp;
+        return a.id.localeCompare(b.id);
+      });
+      allTxs.forEach(t => {
+        if (t.accountId === activeFilterId) {
+          if (t.type === 'TRANSFER') current -= t.amount;
+          else current += t.amount;
+        } else if (t.transferAccountId === activeFilterId) {
+          current += t.amount;
+        }
+        balances.set(t.id, current);
+      });
+    } else if (isCategory) {
+      let current = 0;
+      const chronological = [...sortedTransactions].sort((a, b) => {
+        const dateComp = a.date.localeCompare(b.date);
+        if (dateComp !== 0) return dateComp;
+        return a.id.localeCompare(b.id);
+      });
+      chronological.forEach(t => {
         current += t.amount;
-      }
-      balances.set(t.id, current);
-    });
+        balances.set(t.id, current);
+      });
+    }
     return balances;
-  }, [data.transactions]);
+  }, [activeFilterId, data.transactions, sortedTransactions, indices]);
 
   const totalItems = sortedTransactions.length;
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(totalItems / itemsPerPage);
@@ -1031,8 +1062,18 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); setImportAccount(data.accounts[0]?.id || ''); setImportStep(1); setIsImportModalOpen(true); }} className="w-12 h-12 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl shadow-sm hover:bg-indigo-100 flex items-center justify-center transition-all active:scale-95" title="Importador Inteligente"><Bot size={20} /></button>
                 <div className="flex gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                    <button onClick={(e) => { e.stopPropagation(); handleExportExcel(); }} className="w-10 h-10 bg-white text-emerald-600 rounded-lg shadow-sm hover:bg-emerald-50 flex items-center justify-center transition-all active:scale-95" title="Exportar Excel"><FileSpreadsheet size={18} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); handleExportPDF(); }} className="w-10 h-10 bg-white text-rose-600 rounded-lg shadow-sm hover:bg-rose-50 flex items-center justify-center transition-all active:scale-95" title="Exportar PDF"><FileText size={18} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); handleExportExcel(); }} className="w-10 h-10 bg-white text-emerald-600 rounded-lg shadow-sm hover:bg-emerald-50 flex items-center justify-center transition-all active:scale-95" title="Exportar Excel">
+                        <div className="relative">
+                            <FileSpreadsheet size={18} />
+                            <span className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[6px] font-black px-0.5 rounded">XLS</span>
+                        </div>
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); handleExportPDF(); }} className="w-10 h-10 bg-white text-rose-600 rounded-lg shadow-sm hover:bg-rose-50 flex items-center justify-center transition-all active:scale-95" title="Exportar PDF">
+                        <div className="relative">
+                            <FileText size={18} />
+                            <span className="absolute -bottom-1 -right-1 bg-rose-600 text-white text-[6px] font-black px-0.5 rounded">PDF</span>
+                        </div>
+                    </button>
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); openEditor(); }} className="w-12 h-12 bg-slate-950 text-white rounded-xl shadow-lg hover:bg-slate-800 flex items-center justify-center transition-all active:scale-95" title="Nuevo Movimiento"><Plus size={20} /></button>
             </div>
@@ -1079,7 +1120,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
               )}
             </div>
           </div>
-          <div className="flex flex-col items-end justify-center"><span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest">Saldo</span></div>
+          <div className="flex flex-col items-end justify-center">
+            {activeFilterId && <span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest">Saldo</span>}
+          </div>
            <div className="flex justify-center"><button onClick={clearAllFilters} className="text-slate-300 hover:text-rose-500 transition-colors p-1"><Eraser size={14}/></button></div>
       </div>
 
@@ -1113,7 +1156,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     <div className="flex justify-center">{t.attachment ? ( <button onClick={(e) => { e.stopPropagation(); setPreviewAttachment(t.attachment || null); }} className="p-1 hover:bg-indigo-50 rounded-full text-indigo-500 transition-colors"><Paperclip size={12} className="md:size-4"/></button> ) : <div className="w-1 md:w-2" />}</div>
                     <div className="min-w-0 text-[8px] md:text-sm">{creditNode}</div>
                     <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(displayAmt, t.type)}`}>{formatCurrency(displayAmt)}</div>
-                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${balance >= 0 ? 'text-slate-400' : 'text-rose-400'}`}>{formatCurrency(balance)}</div>
+                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${activeFilterId ? (balance >= 0 ? 'text-slate-400' : 'text-rose-400') : 'opacity-0'}`}>{activeFilterId ? formatCurrency(balance) : ''}</div>
                     <div className="flex justify-center relative"><button onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(activeMenuTxId === t.id ? null : t.id); }} className="p-1.5 md:p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><MoreVertical size={16} /></button>
                         {activeMenuTxId === t.id && (
                             <div className="absolute top-8 right-0 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 min-w-[180px] p-2 flex flex-col gap-1 animate-in fade-in zoom-in duration-200 origin-top-right" onClick={e => e.stopPropagation()}>
