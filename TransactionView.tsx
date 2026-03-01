@@ -489,7 +489,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                   const wsname = wb.SheetNames[0];
                   const ws = wb.Sheets[wsname];
                   const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-                  processRows(rows);
+                  processRows(rows as any[][]);
               } catch (err) {
                   console.error(err);
                   alert("Error leyendo el archivo. Asegúrate de que es un formato válido (.xlsx, .xls, .csv).");
@@ -523,18 +523,22 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     
     if (validTransactions.length === 0) { setIsImportModalOpen(false); return; }
 
-    const newTxs: Transaction[] = validTransactions.map(p => ({
-      id: generateId(),
-      date: p.date,
-      amount: p.amount,
-      description: p.description,
-      accountId: p.accountId, 
-      type: p.type,
-      categoryId: p.categoryId,
-      familyId: indices.cat.get(p.categoryId)?.familyId || '',
-      transferAccountId: p.type === 'TRANSFER' ? p.transferAccountId : undefined,
-      attachment: p.attachment
-    }));
+    const newTxs: Transaction[] = validTransactions.map(p => {
+      let amt = Math.abs(p.amount);
+      if (p.type === 'EXPENSE') amt = -amt;
+      return {
+        id: generateId(),
+        date: p.date,
+        amount: amt,
+        description: p.description,
+        accountId: p.accountId, 
+        type: p.type,
+        categoryId: p.categoryId,
+        familyId: indices.cat.get(p.categoryId)?.familyId || '',
+        transferAccountId: p.type === 'TRANSFER' ? p.transferAccountId : undefined,
+        attachment: p.attachment
+      };
+    });
 
     onUpdateData({ transactions: [...newTxs, ...data.transactions] });
     if (pendingTransactions.length > 0) {
@@ -762,7 +766,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     const balances = new Map<string, number>();
     let current = 0;
     allTxs.forEach(t => {
-      current += t.amount;
+      if (t.type !== 'TRANSFER') {
+        current += t.amount;
+      }
       balances.set(t.id, current);
     });
     return balances;
@@ -850,7 +856,29 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       setFavoriteModalTx(null); setFavName('');
   };
 
-  const handleSave = () => { if (!fAmount || !fDesc || !fAcc || (fType !== 'TRANSFER' && !fCat)) return; let amt = Math.abs(parseFloat(fAmount)); if (fType === 'EXPENSE' || fType === 'TRANSFER') amt = -amt; const cat = indices.cat.get(fCat); const tx: Transaction = { id: editingTx ? editingTx.id : generateId(), date: fDate, amount: amt, description: fDesc, accountId: fAcc, type: fType, categoryId: fCat, familyId: cat?.familyId || '', attachment: fAttachment, transferAccountId: fType === 'TRANSFER' ? fTransferDest : undefined }; if (editingTx) onUpdateTransaction(tx); else onAddTransaction(tx); setIsModalOpen(false); resetForm(); };
+  const handleSave = () => { 
+      if (!fAmount || !fDesc || !fAcc || (fType !== 'TRANSFER' && !fCat)) return; 
+      let amt = Math.abs(parseFloat(fAmount)); 
+      if (fType === 'EXPENSE') amt = -amt; 
+      // For INCOME and TRANSFER, amt remains positive
+      const cat = indices.cat.get(fCat); 
+      const tx: Transaction = { 
+          id: editingTx ? editingTx.id : generateId(), 
+          date: fDate, 
+          amount: amt, 
+          description: fDesc, 
+          accountId: fAcc, 
+          type: fType, 
+          categoryId: fCat, 
+          familyId: cat?.familyId || '', 
+          attachment: fAttachment, 
+          transferAccountId: fType === 'TRANSFER' ? fTransferDest : undefined 
+      }; 
+      if (editingTx) onUpdateTransaction(tx); 
+      else onAddTransaction(tx); 
+      setIsModalOpen(false); 
+      resetForm(); 
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -863,8 +891,21 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const formatDateDisplay = (dateStr: string) => { if (!dateStr) return '--/--/--'; const [y, m, d] = dateStr.split('-'); return `${d}/${m}/${y.slice(-2)}`; };
   const formatCurrency = (amount: number) => `${numberFormatter.format(amount)} €`;
   const getAmountColor = (amount: number, type?: TransactionType) => {
-      if (type === 'TRANSFER') return 'text-slate-900';
-      return amount > 0 ? 'text-emerald-600' : amount < 0 ? 'text-rose-600' : 'text-slate-400';
+      if (type === 'TRANSFER') {
+          const accountFilter = colFilterEntry !== 'ALL' ? colFilterEntry : (colFilterExit !== 'ALL' ? colFilterExit : null);
+          if (!accountFilter) return 'text-slate-900 font-bold';
+      }
+      return amount > 0 ? 'text-emerald-600 font-bold' : amount < 0 ? 'text-rose-600 font-bold' : 'text-slate-400';
+  };
+
+  const getDisplayAmount = (t: Transaction) => {
+      if (t.type !== 'TRANSFER') return t.amount;
+      const accountFilter = colFilterEntry !== 'ALL' ? colFilterEntry : (colFilterExit !== 'ALL' ? colFilterExit : null);
+      if (accountFilter) {
+          if (t.accountId === accountFilter) return -Math.abs(t.amount);
+          if (t.transferAccountId === accountFilter) return Math.abs(t.amount);
+      }
+      return Math.abs(t.amount);
   };
   const renderIcon = (iconStr: string, className = "w-4 h-4") => { if (iconStr?.startsWith('http') || iconStr?.startsWith('data:image')) return <img src={iconStr} className={`${className} object-contain rounded-lg`} referrerPolicy="no-referrer" />; return <span className="text-xs">{iconStr || '📂'}</span>; }
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -1061,6 +1102,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
             creditNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
           }
           const balance = runningBalances.get(t.id) || 0;
+          const displayAmt = getDisplayAmount(t);
           return (
             <div key={t.id} className={`group bg-white p-2 md:p-4 md:px-6 rounded-2xl border ${isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-100'} hover:shadow-lg transition-all relative`}>
                 <div className={gridClasses}>
@@ -1070,7 +1112,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     <div className="min-w-0 text-[8px] md:text-sm font-bold text-slate-800 uppercase truncate leading-tight cursor-pointer hover:text-indigo-600" onClick={(e) => {e.stopPropagation(); setColFilterDesc(t.description);}}>{t.description}</div>
                     <div className="flex justify-center">{t.attachment ? ( <button onClick={(e) => { e.stopPropagation(); setPreviewAttachment(t.attachment || null); }} className="p-1 hover:bg-indigo-50 rounded-full text-indigo-500 transition-colors"><Paperclip size={12} className="md:size-4"/></button> ) : <div className="w-1 md:w-2" />}</div>
                     <div className="min-w-0 text-[8px] md:text-sm">{creditNode}</div>
-                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
+                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(displayAmt, t.type)}`}>{formatCurrency(displayAmt)}</div>
                     <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${balance >= 0 ? 'text-slate-400' : 'text-rose-400'}`}>{formatCurrency(balance)}</div>
                     <div className="flex justify-center relative"><button onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(activeMenuTxId === t.id ? null : t.id); }} className="p-1.5 md:p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><MoreVertical size={16} /></button>
                         {activeMenuTxId === t.id && (

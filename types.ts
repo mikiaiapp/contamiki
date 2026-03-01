@@ -46,6 +46,7 @@ export interface Transaction {
   brandIcon?: string;
   attachment?: string;
   isFromRecurrence?: string; 
+  isValidated?: boolean;
 }
 
 export interface RecurrentMovement {

@@ -535,7 +535,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => 
                         </div>
                         <div className="w-full h-[350px]">
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={(chartData as any).data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} onClick={handleChartPointClick} cursor="pointer">
+                                <LineChart data={(chartData as any).data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} onClick={handleChartPointClick}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                     <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
                                     <XAxis dataKey="date" tickFormatter={formatDateLabel} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#94a3b8' }} tickLine={false} axisLine={false} dy={10} minTickGap={30} />
