@@ -1,7 +1,9 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, RecurrentMovement, RecurrenceFrequency, Category, Account, BookMetadata } from './types';
-import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check, AlertTriangle, FileDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface TransactionViewProps {
   data: AppState;
@@ -873,6 +875,55 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       return Array.from(selectedImportIds).some(id => proposedTransactions.find(p => p.id === id)?.isDuplicate);
   }, [selectedImportIds, proposedTransactions]);
 
+  const handleExportExcel = () => {
+      const exportData = sortedTransactions.map(t => ({
+          Fecha: formatDateDisplay(t.date),
+          Concepto: t.description,
+          Cuenta: indices.acc.get(t.accountId)?.name || 'N/A',
+          Categoría: indices.cat.get(t.categoryId)?.name || (t.type === 'TRANSFER' ? 'Traspaso' : 'N/A'),
+          Importe: t.amount,
+          Tipo: t.type === 'EXPENSE' ? 'Gasto' : t.type === 'INCOME' ? 'Ingreso' : 'Traspaso'
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+      XLSX.writeFile(wb, `movimientos_${currentBook.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const handleExportPDF = () => {
+      const doc = new jsPDF();
+      
+      // Add title
+      doc.setFontSize(18);
+      doc.text(`Diario de Movimientos - ${currentBook.name}`, 14, 22);
+      doc.setFontSize(11);
+      doc.setTextColor(100);
+      doc.text(`Generado el ${new Date().toLocaleString()}`, 14, 30);
+      
+      const tableData = sortedTransactions.map(t => [
+          formatDateDisplay(t.date),
+          t.description,
+          indices.acc.get(t.accountId)?.name || 'N/A',
+          indices.cat.get(t.categoryId)?.name || (t.type === 'TRANSFER' ? 'Traspaso' : 'N/A'),
+          formatCurrency(t.amount)
+      ]);
+
+      autoTable(doc, {
+          startY: 35,
+          head: [['Fecha', 'Concepto', 'Cuenta', 'Categoría', 'Importe']],
+          body: tableData,
+          theme: 'grid',
+          headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' }, // Slate-900
+          styles: { fontSize: 8 },
+          columnStyles: {
+              4: { halign: 'right' }
+          }
+      });
+
+      doc.save(`movimientos_${currentBook.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   return (
     <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500" onClick={() => { setActiveMenuTxId(null); setOpenSelectorId(null); }}>
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
@@ -923,6 +974,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     )}
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); setImportAccount(data.accounts[0]?.id || ''); setImportStep(1); setIsImportModalOpen(true); }} className="w-12 h-12 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl shadow-sm hover:bg-indigo-100 flex items-center justify-center transition-all active:scale-95" title="Importador Inteligente"><Bot size={20} /></button>
+                <div className="flex gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button onClick={(e) => { e.stopPropagation(); handleExportExcel(); }} className="w-10 h-10 bg-white text-emerald-600 rounded-lg shadow-sm hover:bg-emerald-50 flex items-center justify-center transition-all active:scale-95" title="Exportar Excel"><FileSpreadsheet size={18} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); handleExportPDF(); }} className="w-10 h-10 bg-white text-rose-600 rounded-lg shadow-sm hover:bg-rose-50 flex items-center justify-center transition-all active:scale-95" title="Exportar PDF"><FileText size={18} /></button>
+                </div>
                 <button onClick={(e) => { e.stopPropagation(); openEditor(); }} className="w-12 h-12 bg-slate-950 text-white rounded-xl shadow-lg hover:bg-slate-800 flex items-center justify-center transition-all active:scale-95" title="Nuevo Movimiento"><Plus size={20} /></button>
             </div>
           </div>
@@ -949,7 +1004,25 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           <div className="flex flex-col"><span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Concepto</span><input type="text" className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 px-1 md:px-2 outline-none" placeholder="..." value={colFilterDesc} onChange={e => setColFilterDesc(e.target.value)} /></div>
           <div className="flex flex-col"><span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Clip</span><select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none" value={colFilterClip} onChange={e => setColFilterClip(e.target.value as any)}><option value="ALL">.</option><option value="YES">SI</option><option value="NO">NO</option></select></div>
           <div className="flex flex-col"><span className="hidden md:block text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Filtro B</span><select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 outline-none truncate" value={colFilterExit} onChange={e => setColFilterExit(e.target.value)}><option value="ALL">Todo</option>{activeDropdownOptions.exitGroups.map(group => (<optgroup key={group.label} label={group.label}>{group.options.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}</optgroup>))}</select></div>
-          <div className="flex flex-col"><button onClick={() => { if(sortField==='AMOUNT') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('AMOUNT'); }} className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-end gap-0.5">Imp <SortIcon field="AMOUNT"/></button><select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none text-right" value={colFilterAmountOp} onChange={e => setColFilterAmountOp(e.target.value as any)}><option value="ALL">...</option><option value="GT">{">"}</option><option value="LT">{"<"}</option></select></div>
+          <div className="flex flex-col"><button onClick={() => { if(sortField==='AMOUNT') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('AMOUNT'); }} className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-end gap-0.5">Imp <SortIcon field="AMOUNT"/></button>
+            <div className="flex gap-0.5">
+              <select className="bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-black uppercase py-0.5 md:py-1 outline-none text-right flex-1" value={colFilterAmountOp} onChange={e => setColFilterAmountOp(e.target.value as any)}>
+                <option value="ALL">...</option>
+                <option value="GT">{">"}</option>
+                <option value="LT">{"<"}</option>
+                <option value="EQ">{"="}</option>
+              </select>
+              {colFilterAmountOp !== 'ALL' && (
+                <input 
+                  type="number" 
+                  className="w-8 md:w-12 bg-white border border-slate-200 rounded-lg text-[8px] md:text-[11px] font-bold py-0.5 md:py-1 px-1 outline-none text-right" 
+                  placeholder="0" 
+                  value={colFilterAmountVal1} 
+                  onChange={e => setColFilterAmountVal1(e.target.value)} 
+                />
+              )}
+            </div>
+          </div>
            <div className="flex justify-center"><button onClick={clearAllFilters} className="text-slate-300 hover:text-rose-500 transition-colors p-1"><Eraser size={14}/></button></div>
       </div>
 
@@ -1033,7 +1106,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
       {isImportModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500" onClick={() => setIsImportModalOpen(false)}>
-          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-white/20" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-white/20" onClick={e => e.stopPropagation()}>
             <button onClick={() => setIsImportModalOpen(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
             <div className="flex items-center gap-4 mb-8">
                 <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Bot size={28} /></div>
@@ -1128,10 +1201,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                                 <div className="col-span-2 text-[10px] font-bold text-slate-400 whitespace-nowrap">
                                                     {formatDateDisplay(t.date)}
                                                 </div>
-                                                <input type="text" className="col-span-4 text-xs font-bold text-slate-800 bg-slate-50/50 hover:bg-white border-b border-slate-200 focus:border-indigo-500 rounded px-2 py-1 outline-none truncate transition-all placeholder-slate-300" value={t.description} title={t.description} onChange={(e) => { const newArr = [...proposedTransactions]; newArr[idxInMaster].description = e.target.value; const newCat = findSuggestedCategory(e.target.value); if (newCat) { newArr[idxInMaster].categoryId = newCat; newArr[idxInMaster].transferAccountId = undefined; } setProposedTransactions(newArr); }} />
-                                                <div className={`col-span-7 text-xs font-black text-right whitespace-nowrap ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
-                                                <div className="col-span-3 relative">
-                                                    <button onClick={(e) => { e.stopPropagation(); setOpenSelectorId(openSelectorId === t.id ? null : t.id); }} className={`w-full border rounded-lg text-[9px] font-bold py-1.5 px-2 outline-none transition-colors flex items-center justify-between gap-2 ${isAssigned ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-300'}`}>
+                                                <input type="text" className="col-span-6 text-xs font-bold text-slate-800 bg-slate-50/50 hover:bg-white border-b border-slate-200 focus:border-indigo-500 rounded px-2 py-1 outline-none transition-all placeholder-slate-300" value={t.description} title={t.description} onChange={(e) => { const newArr = [...proposedTransactions]; newArr[idxInMaster].description = e.target.value; const newCat = findSuggestedCategory(e.target.value); if (newCat) { newArr[idxInMaster].categoryId = newCat; newArr[idxInMaster].transferAccountId = undefined; } setProposedTransactions(newArr); }} />
+                                                <div className={`col-span-3 text-xs font-black text-right whitespace-nowrap ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
+                                                <div className="col-span-5 relative">
+                                                    <button onClick={(e) => { e.stopPropagation(); setOpenSelectorId(openSelectorId === t.id ? null : t.id); }} className={`w-full border rounded-lg text-[11px] font-bold py-1.5 px-2 outline-none transition-colors flex items-center justify-between gap-2 ${isAssigned ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-300'}`}>
                                                         <span className="truncate">{t.type === 'TRANSFER' && t.transferAccountId ? `➡ ${indices.acc.get(t.transferAccountId)?.name || 'Cuenta...'}` : (indices.cat.get(t.categoryId)?.name || 'Sin Asignar')}</span><ChevronDown size={12} className="opacity-50"/>
                                                     </button>
                                                     {openSelectorId === t.id && (

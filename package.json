@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "tsx server.js",
     "start": "node server.js",
-    "build": "esbuild index.tsx --bundle --outfile=bundle.js --format=esm --target=es2020 --define:process.env.NODE_ENV=\\\"production\\\""
+    "build": "esbuild index.tsx --bundle --outfile=bundle.js --format=esm --target=es2020 --define:process.env.NODE_ENV=\\\"production\\\"",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^1.42.0",
@@ -15,6 +16,8 @@
     "esbuild": "^0.20.0",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
+    "jspdf": "^4.2.0",
+    "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.575.0",
     "nodemailer": "^6.9.13",
     "qrcode": "^1.5.3",
@@ -28,6 +31,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.4",
     "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
     "vite": "^7.3.1"
   }
 }
