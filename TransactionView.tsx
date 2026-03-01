@@ -753,6 +753,21 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     });
   }, [filteredList, sortField, sortDirection]);
 
+  const runningBalances = useMemo(() => {
+    const allTxs = [...data.transactions].sort((a, b) => {
+      const dateComp = a.date.localeCompare(b.date);
+      if (dateComp !== 0) return dateComp;
+      return a.id.localeCompare(b.id);
+    });
+    const balances = new Map<string, number>();
+    let current = 0;
+    allTxs.forEach(t => {
+      current += t.amount;
+      balances.set(t.id, current);
+    });
+    return balances;
+  }, [data.transactions]);
+
   const totalItems = sortedTransactions.length;
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(totalItems / itemsPerPage);
   const paginatedTransactions = useMemo(() => {
@@ -866,7 +881,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-  const gridClasses = "grid grid-cols-[25px_52px_1fr_1.2fr_12px_1fr_50px_20px] md:grid-cols-[30px_90px_1fr_1.5fr_40px_1fr_80px_40px] gap-1 md:gap-4 items-center";
+  const gridClasses = "grid grid-cols-[25px_52px_1fr_1.2fr_12px_1fr_50px_50px_20px] md:grid-cols-[30px_90px_1fr_1.5fr_40px_1fr_80px_80px_40px] gap-1 md:gap-4 items-center";
 
   const duplicateProps = useMemo(() => proposedTransactions.filter(p => p.isDuplicate), [proposedTransactions]);
   const normalProps = useMemo(() => proposedTransactions.filter(p => !p.isDuplicate), [proposedTransactions]);
@@ -1023,6 +1038,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
               )}
             </div>
           </div>
+          <div className="flex flex-col items-end justify-center"><span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest">Saldo</span></div>
            <div className="flex justify-center"><button onClick={clearAllFilters} className="text-slate-300 hover:text-rose-500 transition-colors p-1"><Eraser size={14}/></button></div>
       </div>
 
@@ -1044,6 +1060,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
             debitNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name}</span></div>;
             creditNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
           }
+          const balance = runningBalances.get(t.id) || 0;
           return (
             <div key={t.id} className={`group bg-white p-2 md:p-4 md:px-6 rounded-2xl border ${isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-100'} hover:shadow-lg transition-all relative`}>
                 <div className={gridClasses}>
@@ -1054,7 +1071,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     <div className="flex justify-center">{t.attachment ? ( <button onClick={(e) => { e.stopPropagation(); setPreviewAttachment(t.attachment || null); }} className="p-1 hover:bg-indigo-50 rounded-full text-indigo-500 transition-colors"><Paperclip size={12} className="md:size-4"/></button> ) : <div className="w-1 md:w-2" />}</div>
                     <div className="min-w-0 text-[8px] md:text-sm">{creditNode}</div>
                     <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
-                     <div className="flex justify-center relative"><button onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(activeMenuTxId === t.id ? null : t.id); }} className="p-1.5 md:p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><MoreVertical size={16} /></button>
+                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${balance >= 0 ? 'text-slate-400' : 'text-rose-400'}`}>{formatCurrency(balance)}</div>
+                    <div className="flex justify-center relative"><button onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(activeMenuTxId === t.id ? null : t.id); }} className="p-1.5 md:p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><MoreVertical size={16} /></button>
                         {activeMenuTxId === t.id && (
                             <div className="absolute top-8 right-0 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 min-w-[180px] p-2 flex flex-col gap-1 animate-in fade-in zoom-in duration-200 origin-top-right" onClick={e => e.stopPropagation()}>
                                 <button onClick={() => { setActiveMenuTxId(null); openEditor(t); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Edit3 size={14} className="text-indigo-600"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Editar</span></button>
