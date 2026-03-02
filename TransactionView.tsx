@@ -753,7 +753,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       else if (sortField === 'CATEGORY' || sortField === 'ACCOUNT') { vA = a.description; vB = b.description; }
       if (vA < vB) return sortDirection === 'ASC' ? -1 : 1;
       if (vA > vB) return sortDirection === 'ASC' ? 1 : -1;
-      return 0;
+      // Secondary sort by ID to ensure stable order matching running balance calculation
+      return sortDirection === 'ASC' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
     });
   }, [filteredList, sortField, sortDirection]);
 
