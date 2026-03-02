@@ -964,14 +964,20 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   }, [selectedImportIds, proposedTransactions]);
 
   const handleExportExcel = () => {
-      const exportData = sortedTransactions.map(t => ({
-          Fecha: formatDateDisplay(t.date),
-          Concepto: t.description,
-          Cuenta: indices.acc.get(t.accountId)?.name || 'N/A',
-          Categoría: indices.cat.get(t.categoryId)?.name || (t.type === 'TRANSFER' ? 'Traspaso' : 'N/A'),
-          Importe: t.amount,
-          Tipo: t.type === 'EXPENSE' ? 'Gasto' : t.type === 'INCOME' ? 'Ingreso' : 'Traspaso'
-      }));
+      const exportData = sortedTransactions.map(t => {
+          const row: any = {
+              Fecha: formatDateDisplay(t.date),
+              Concepto: t.description,
+              Cuenta: indices.acc.get(t.accountId)?.name || 'N/A',
+              Categoría: indices.cat.get(t.categoryId)?.name || (t.type === 'TRANSFER' ? 'Traspaso' : 'N/A'),
+              Importe: t.amount,
+              Tipo: t.type === 'EXPENSE' ? 'Gasto' : t.type === 'INCOME' ? 'Ingreso' : 'Traspaso'
+          };
+          if (activeFilterId) {
+              row.Saldo = runningBalances.get(t.id) || 0;
+          }
+          return row;
+      });
 
       const ws = XLSX.utils.json_to_sheet(exportData);
       const wb = XLSX.utils.book_new();
@@ -989,23 +995,33 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       doc.setTextColor(100);
       doc.text(`Generado el ${new Date().toLocaleString()}`, 14, 30);
       
-      const tableData = sortedTransactions.map(t => [
-          formatDateDisplay(t.date),
-          t.description,
-          indices.acc.get(t.accountId)?.name || 'N/A',
-          indices.cat.get(t.categoryId)?.name || (t.type === 'TRANSFER' ? 'Traspaso' : 'N/A'),
-          formatCurrency(t.amount)
-      ]);
+      const headers = ['Fecha', 'Concepto', 'Cuenta', 'Categoría', 'Importe'];
+      if (activeFilterId) headers.push('Saldo');
+
+      const tableData = sortedTransactions.map(t => {
+          const row = [
+              formatDateDisplay(t.date),
+              t.description,
+              indices.acc.get(t.accountId)?.name || 'N/A',
+              indices.cat.get(t.categoryId)?.name || (t.type === 'TRANSFER' ? 'Traspaso' : 'N/A'),
+              formatCurrency(t.amount)
+          ];
+          if (activeFilterId) {
+              row.push(formatCurrency(runningBalances.get(t.id) || 0));
+          }
+          return row;
+      });
 
       autoTable(doc, {
           startY: 35,
-          head: [['Fecha', 'Concepto', 'Cuenta', 'Categoría', 'Importe']],
+          head: [headers],
           body: tableData,
           theme: 'grid',
           headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' }, // Slate-900
           styles: { fontSize: 8 },
           columnStyles: {
-              4: { halign: 'right' }
+              4: { halign: 'right' },
+              5: activeFilterId ? { halign: 'right' } : undefined
           }
       });
 
