@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category, Family, BookMetadata } from './types';
-import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown, Calendar, TrendingUp, Edit3, Save } from 'lucide-react';
+import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown, Calendar, TrendingUp, Edit3, Save, Heart, Bot, Plus } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts';
 
 interface DashboardProps {
@@ -23,6 +23,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   const { transactions, accounts, families, categories, accountGroups, recurrents = [] } = data;
   const [showBalanceDetail, setShowBalanceDetail] = useState(false);
   const [showRecurrentsModal, setShowRecurrentsModal] = useState(false);
+  const [showFavoritesList, setShowFavoritesList] = useState(false);
   
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedCategoryAction, setSelectedCategoryAction] = useState<Category | null>(null);
@@ -37,6 +38,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   // Recurrence Edit Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [recurrenceModalTx, setRecurrenceModalTx] = useState<Partial<Transaction> | null>(null);
+
+  const handleUseFavorite = (fav: any) => {
+      setShowFavoritesList(false);
+      onNavigateToTransactions({ action: 'NEW', favorite: fav });
+  };
 
   const displayLogo = useMemo(() => {
     let logo = currentBook.logo;
@@ -522,6 +528,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                             <button onClick={() => onUpdateFilter({...filter, timeRange: 'CUSTOM'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Pers.</button>
                         )}
                     </div>
+                </div>
+
+                <div className="flex gap-2">
+                    <div className="relative">
+                        <button onClick={(e) => { e.stopPropagation(); setShowFavoritesList(!showFavoritesList); }} className="w-12 h-12 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl shadow-sm hover:bg-amber-100 flex items-center justify-center transition-all active:scale-95" title="Favoritos"><Heart size={20} fill={showFavoritesList ? "currentColor" : "none"} /></button>
+                        {showFavoritesList && (
+                            <>
+                                <div className="fixed inset-0 z-10 bg-slate-900/20 backdrop-blur-[1px] md:bg-transparent md:backdrop-blur-none" onClick={() => setShowFavoritesList(false)}></div>
+                                <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:absolute md:top-full md:right-0 md:left-auto md:translate-x-0 md:translate-y-0 md:mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 w-[85vw] max-w-xs md:w-64 p-2 z-20 animate-in fade-in zoom-in duration-200 origin-center md:origin-top-right">
+                                    <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center md:text-left">Plantillas Rápidas</div>
+                                    <div className="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
+                                        {data.favorites && data.favorites.length > 0 ? (
+                                            data.favorites.map(fav => (
+                                                <button key={fav.id} onClick={() => handleUseFavorite(fav)} className="w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-xl hover:bg-amber-50 text-left transition-colors group">
+                                                    <div className="bg-amber-100 text-amber-600 p-1.5 rounded-lg group-hover:bg-amber-200 transition-colors">
+                                                        {fav.icon?.startsWith('http') || fav.icon?.startsWith('data:image') ? <img src={fav.icon} className="w-4 h-4 object-contain rounded-sm" referrerPolicy="no-referrer" /> : <span className="text-xs">{fav.icon || '⭐'}</span>}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0"><div className="text-xs font-bold text-slate-700 truncate">{fav.name}</div><div className="text-[9px] text-slate-400 font-medium truncate">{fav.description}</div></div>
+                                                </button>
+                                            ))
+                                        ) : ( <div className="p-4 text-center text-slate-400 text-xs">No hay favoritos.</div> )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                    <button onClick={() => onNavigateToTransactions({ action: 'IMPORT' })} className="w-12 h-12 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl shadow-sm hover:bg-indigo-100 flex items-center justify-center transition-all active:scale-95" title="Importador Inteligente"><Bot size={20} /></button>
+                    <button onClick={() => onNavigateToTransactions({ action: 'NEW' })} className="w-12 h-12 bg-slate-950 text-white rounded-xl shadow-lg hover:bg-slate-800 flex items-center justify-center transition-all active:scale-95" title="Nuevo Movimiento"><Plus size={20} /></button>
                 </div>
             </div>
         </div>

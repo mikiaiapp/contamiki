@@ -234,12 +234,23 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   useEffect(() => {
     if (initialSpecificFilters) {
-      if (initialSpecificFilters.action === 'NEW' && initialSpecificFilters.categoryId) {
+      if (initialSpecificFilters.action === 'NEW') {
          resetForm();
-         const cat = indices.cat.get(initialSpecificFilters.categoryId);
-         const fam = cat ? indices.fam.get(cat.familyId) : null;
-         setFCat(initialSpecificFilters.categoryId);
-         if (fam) setFType(fam.type === 'INCOME' ? 'INCOME' : 'EXPENSE');
+         if (initialSpecificFilters.favorite) {
+             const fav = initialSpecificFilters.favorite;
+             setFType(fav.type);
+             setFAmount(fav.amount ? fav.amount.toString() : '');
+             setFDesc(fav.description);
+             setFDate(new Date().toISOString().split('T')[0]);
+             setFAcc(fav.accountId);
+             setFCat(fav.categoryId);
+             setFTransferDest(fav.transferAccountId || '');
+         } else if (initialSpecificFilters.categoryId) {
+             const cat = indices.cat.get(initialSpecificFilters.categoryId);
+             const fam = cat ? indices.fam.get(cat.familyId) : null;
+             setFCat(initialSpecificFilters.categoryId);
+             if (fam) setFType(fam.type === 'INCOME' ? 'INCOME' : 'EXPENSE');
+         }
          setIsModalOpen(true);
       } else if (initialSpecificFilters.action === 'IMPORT') {
          setImportAccount(data.accounts[0]?.id || '');
@@ -1178,8 +1189,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     <div className="min-w-0 text-[8px] md:text-sm font-bold text-slate-800 uppercase truncate leading-tight cursor-pointer hover:text-indigo-600" onClick={(e) => {e.stopPropagation(); setColFilterDesc(t.description);}}>{t.description}</div>
                     <div className="flex justify-center">{t.attachment ? ( <button onClick={(e) => { e.stopPropagation(); setPreviewAttachment(t.attachment || null); }} className="p-1 hover:bg-indigo-50 rounded-full text-indigo-500 transition-colors"><Paperclip size={12} className="md:size-4"/></button> ) : <div className="w-1 md:w-2" />}</div>
                     <div className="min-w-0 text-[8px] md:text-sm">{creditNode}</div>
-                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${getAmountColor(displayAmt, t.type)}`}>{formatCurrency(displayAmt)}</div>
-                    <div className={`text-right text-[9px] md:text-base font-black font-mono tracking-tighter truncate ${activeFilterId ? (balance >= 0 ? 'text-slate-400' : 'text-rose-400') : 'opacity-0'}`}>{activeFilterId ? formatCurrency(balance) : ''}</div>
+                    <div className={`text-right text-[8px] md:text-sm font-black font-mono tracking-tighter truncate ${getAmountColor(displayAmt, t.type)}`}>{formatCurrency(displayAmt)}</div>
+                    <div className={`text-right text-[8px] md:text-sm font-black font-mono tracking-tighter truncate ${activeFilterId ? (balance >= 0 ? 'text-slate-400' : 'text-rose-400') : 'opacity-0'}`}>{activeFilterId ? formatCurrency(balance) : ''}</div>
                     <div className="flex justify-center relative"><button onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(activeMenuTxId === t.id ? null : t.id); }} className="p-1.5 md:p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><MoreVertical size={16} /></button>
                         {activeMenuTxId === t.id && (
                             <div className="absolute top-8 right-0 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 min-w-[180px] p-2 flex flex-col gap-1 animate-in fade-in zoom-in duration-200 origin-top-right" onClick={e => e.stopPropagation()}>
