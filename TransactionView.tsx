@@ -16,6 +16,7 @@ interface TransactionViewProps {
   initialSpecificFilters?: any;
   clearSpecificFilters?: () => void;
   currentBook: BookMetadata;
+  onFinished?: () => void;
 }
 
 type SortField = 'DATE' | 'DESCRIPTION' | 'AMOUNT' | 'ACCOUNT' | 'CATEGORY' | 'ATTACHMENT';
@@ -72,7 +73,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   onUpdateFilter, 
   initialSpecificFilters, 
   clearSpecificFilters,
-  currentBook
+  currentBook,
+  onFinished
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
@@ -910,6 +912,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       else onAddTransaction(tx); 
       setIsModalOpen(false); 
       resetForm(); 
+      if (initialSpecificFilters?.action === 'NEW' && onFinished) {
+          clearSpecificFilters?.();
+          onFinished();
+      }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

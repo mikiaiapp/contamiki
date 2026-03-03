@@ -184,6 +184,57 @@ const App: React.FC = () => {
       setIsBookModalOpen(false);
   };
 
+  const handleAddTransaction = (t: Transaction) => {
+      setMultiState(prev => {
+          const bookId = prev.currentBookId;
+          const currentData = prev.booksData[bookId] || defaultAppState;
+          return { 
+              ...prev, 
+              booksData: { 
+                  ...prev.booksData, 
+                  [bookId]: { 
+                      ...currentData, 
+                      transactions: [t, ...currentData.transactions] 
+                  } 
+              } 
+          };
+      });
+  };
+
+  const handleUpdateTransaction = (t: Transaction) => {
+      setMultiState(prev => {
+          const bookId = prev.currentBookId;
+          const currentData = prev.booksData[bookId] || defaultAppState;
+          return { 
+              ...prev, 
+              booksData: { 
+                  ...prev.booksData, 
+                  [bookId]: { 
+                      ...currentData, 
+                      transactions: currentData.transactions.map(tx => tx.id === t.id ? t : tx) 
+                  } 
+              } 
+          };
+      });
+  };
+
+  const handleDeleteTransaction = (id: string) => {
+      setMultiState(prev => {
+          const bookId = prev.currentBookId;
+          const currentData = prev.booksData[bookId] || defaultAppState;
+          return { 
+              ...prev, 
+              booksData: { 
+                  ...prev.booksData, 
+                  [bookId]: { 
+                      ...currentData, 
+                      transactions: currentData.transactions.filter(tx => tx.id !== id) 
+                  } 
+              } 
+          };
+      });
+  };
+
   if (!isLoggedIn) return <LoginView onLoginSuccess={() => setIsLoggedIn(true)} />;
   if (loadError) return (<div className="fixed inset-0 flex flex-col items-center justify-center bg-slate-950 text-white z-[999] p-6 text-center"><div className="bg-rose-500/10 p-6 rounded-full mb-6 animate-pulse"><WifiOff size={48} className="text-rose-500" /></div><h2 className="text-2xl font-black uppercase tracking-tight mb-2">Error de Conexión</h2><p className="text-slate-400 text-sm max-w-md mb-8">No se han podido cargar los datos.<br/><br/><span className="text-xs font-mono bg-slate-900 p-1 rounded text-rose-400">{loadError}</span></p><button onClick={() => window.location.reload()} className="bg-white text-slate-900 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3"><RefreshCw size={16} /> Reintentar</button></div>);
   if (!dataLoaded) return <div className="fixed inset-0 flex flex-col items-center justify-center bg-slate-950 text-white z-[999]"><div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6"></div><p className="text-xs font-black uppercase tracking-widest">ContaMiki...</p></div>;
@@ -196,8 +247,8 @@ const App: React.FC = () => {
         onEditBook={() => { setEditingBookId(currentBookMeta.id); setTempBookName(currentBookMeta.name); setTempBookColor(currentBookMeta.color); setIsBookModalOpen(true); }}
         syncStatus={syncStatus} syncError={syncErrorMsg} onManualSave={() => performSave(multiState)}
     >
-      {currentView === 'RESUMEN' && <Dashboard data={currentAppData} onAddTransaction={(t) => updateCurrentBookData({ transactions: [t, ...currentAppData.transactions] })} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }} currentBook={currentBookMeta} />}
-      {currentView === 'TRANSACTIONS' && <TransactionView data={currentAppData} onAddTransaction={(t) => updateCurrentBookData({ transactions: [t, ...currentAppData.transactions] })} onDeleteTransaction={(id) => updateCurrentBookData({ transactions: currentAppData.transactions.filter(tx => tx.id !== id) })} onUpdateTransaction={(t) => updateCurrentBookData({ transactions: currentAppData.transactions.map(tx => tx.id === t.id ? t : tx) })} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} initialSpecificFilters={pendingSpecificFilters} clearSpecificFilters={() => setPendingSpecificFilters(null)} currentBook={currentBookMeta} />}
+      {currentView === 'RESUMEN' && <Dashboard data={currentAppData} onAddTransaction={handleAddTransaction} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }} currentBook={currentBookMeta} />}
+      {currentView === 'TRANSACTIONS' && <TransactionView data={currentAppData} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={handleUpdateTransaction} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} initialSpecificFilters={pendingSpecificFilters} clearSpecificFilters={() => setPendingSpecificFilters(null)} currentBook={currentBookMeta} onFinished={() => setCurrentView('RESUMEN')} />}
       {currentView === 'CHARTS' && <ChartsView data={currentAppData} filter={globalFilter} onUpdateFilter={setGlobalFilter} currentBook={currentBookMeta} />}
       {currentView === 'SETTINGS' && <SettingsView data={currentAppData} books={multiState.booksMetadata} currentBookId={multiState.currentBookId} multiState={multiState} onUpdateData={updateCurrentBookData} onReplaceFullState={handleReplaceFullState} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }} onDeleteBook={handleDeleteBook} />}
       {currentView === 'AI_INSIGHTS' && <AIInsights data={currentAppData} />}
