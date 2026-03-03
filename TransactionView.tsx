@@ -982,12 +982,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   const handleExportExcel = () => {
       const exportData = sortedTransactions.map(t => {
+          const displayAmount = getDisplayAmount(t);
           const row: any = {
               Fecha: formatDateDisplay(t.date),
               Concepto: t.description,
               Cuenta: indices.acc.get(t.accountId)?.name || 'N/A',
               Categoría: indices.cat.get(t.categoryId)?.name || (t.type === 'TRANSFER' ? 'Traspaso' : 'N/A'),
-              Importe: t.amount,
+              Importe: displayAmount,
               Tipo: t.type === 'EXPENSE' ? 'Gasto' : t.type === 'INCOME' ? 'Ingreso' : 'Traspaso'
           };
           if (activeFilterId) {
@@ -1016,12 +1017,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       if (activeFilterId) headers.push('Saldo');
 
       const tableData = sortedTransactions.map(t => {
+          const displayAmount = getDisplayAmount(t);
           const row = [
               formatDateDisplay(t.date),
               t.description,
               indices.acc.get(t.accountId)?.name || 'N/A',
               indices.cat.get(t.categoryId)?.name || (t.type === 'TRANSFER' ? 'Traspaso' : 'N/A'),
-              formatCurrency(t.amount)
+              formatCurrency(displayAmount)
           ];
           if (activeFilterId) {
               row.push(formatCurrency(runningBalances.get(t.id) || 0));
