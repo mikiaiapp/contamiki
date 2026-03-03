@@ -463,53 +463,65 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     if (!importAccount) { alert("Selecciona una cuenta primero."); return; }
     if (!rawData.trim()) return;
 
-    let rows: any[][] = [];
-    try {
-        const wb = XLSX.read(rawData, { type: 'string', raw: true });
-        if (wb.SheetNames.length > 0) {
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-        }
-    } catch (e) {
-        console.warn("XLSX parse failed, falling back to simple split", e);
-    }
+    const lines = rawData.split('\n').filter(l => l.trim());
+    const parsedRows: any[][] = [];
 
-    if (rows.length === 0 || (rows.length > 0 && rows[0].length === 1 && rawData.includes(';'))) {
-         rows = rawData.split('\n').filter(l => l.trim()).map(line => {
-            if (line.includes('\t')) return line.split('\t');
-            if (line.includes(';')) return line.split(';');
-            return line.split(',');
-         });
-    }
+    // Regex for Date (DD/MM/YYYY or DD-MM-YYYY) at the start
+    const dateRegex = /^(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/;
     
-    // Enforce "First=Date, Last=Amount, Middle=Desc" rule requested by user
-    const refinedRows = rows.map(row => {
-        // Filter out empty cells to focus on data
-        const parts = row.filter((c: any) => c !== undefined && c !== null && c.toString().trim() !== '');
-        
-        if (parts.length >= 2) {
-            const first = parts[0];
-            const last = parts[parts.length - 1];
-            const firstStr = first.toString();
-            const lastStr = last.toString();
-            
-            // Check Date (DD/MM/YYYY, YYYY-MM-DD, or Excel serial number)
-            const isDate = /^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(firstStr) || !isNaN(Date.parse(firstStr)) || (typeof first === 'number' && first > 20000);
-            
-            // Check Amount (Allow numbers, currency symbols, etc)
-            const cleanLast = lastStr.replace(/[^\d.,\-+]/g, '');
-            const isNum = cleanLast.length > 0 && !isNaN(parseFloat(cleanLast.replace(',','.')));
+    // Regex for Amount (European format: xx.xxx,xx or similar) at the end
+    // Matches: -1.200,00 | 1.200,00 | 1200,00 | -50 | 50,5
+    const amountRegex = /([\+\-]?\s*(?:(?:\d{1,3}(?:\.\d{3})+)|(?:\d+))(?:,\d{1,2})?)$/;
 
-            if (isDate && isNum) {
-                // Merge middle parts into description
-                const desc = parts.length > 2 ? parts.slice(1, parts.length - 1).join(' ') : 'Sin concepto';
-                return [first, desc, last];
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        
+        const dateMatch = trimmed.match(dateRegex);
+        const amountMatch = trimmed.match(amountRegex);
+
+        if (dateMatch && amountMatch) {
+            const dateStr = dateMatch[1];
+            const amountStr = amountMatch[1];
+            
+            // Ensure valid range
+            if (dateStr.length + amountStr.length < trimmed.length) {
+                let description = trimmed.substring(dateStr.length, trimmed.length - amountStr.length).trim();
+                
+                // Remove common separators from the description boundaries
+                description = description.replace(/^[\s;\t\|\-]+|[\s;\t\|\-]+$/g, '');
+                
+                if (!description) description = "Sin concepto";
+                
+                parsedRows.push([dateStr, description, amountStr]);
+                return;
             }
         }
-        return row;
+        
+        // Fallback: Try simple split if strict regex fails
+        if (trimmed.includes('\t')) {
+            const parts = trimmed.split('\t');
+            if (parts.length >= 3) parsedRows.push(parts);
+        } else if (trimmed.includes(';')) {
+            const parts = trimmed.split(';');
+            if (parts.length >= 3) parsedRows.push(parts);
+        }
     });
-    
-    processRows(refinedRows);
+
+    if (parsedRows.length > 0) {
+        processRows(parsedRows);
+    } else {
+        // Last resort: Try XLSX parsing for pasted Excel data that might not match the strict text rules
+        try {
+            const wb = XLSX.read(rawData, { type: 'string', raw: true });
+            if (wb.SheetNames.length > 0) {
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+                if (rows.length > 0) processRows(rows);
+            }
+        } catch (e) {
+            console.warn("Analysis failed", e);
+        }
+    }
   };
 
   const handleImportFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
