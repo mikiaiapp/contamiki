@@ -148,6 +148,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     const incomeFlow = new Map<string, { total: number, cats: Map<string, number> }>();
     const expenseFlow = new Map<string, { total: number, cats: Map<string, number> }>();
 
+    // Pre-populate with all active families and categories
+    families.forEach(f => {
+        const target = f.type === 'INCOME' ? incomeFlow : expenseFlow;
+        if (!target.has(f.id)) {
+            target.set(f.id, { total: 0, cats: new Map() });
+        }
+    });
+
+    categories.forEach(c => {
+        if (c.active === false) return;
+        const fam = indices.fam.get(c.familyId);
+        if (fam) {
+             const target = fam.type === 'INCOME' ? incomeFlow : expenseFlow;
+             const famEntry = target.get(fam.id);
+             if (famEntry && !famEntry.cats.has(c.id)) {
+                 famEntry.cats.set(c.id, 0);
+             }
+        }
+    });
+
     const start = dateBounds.startStr;
     const end = dateBounds.endStr;
     const isAllTime = filter.timeRange === 'ALL';
@@ -241,7 +261,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                 ...acc,
                 balance: dashboardData.stats.accTotals.get(acc.id) || 0
             }))
-            .filter(acc => Math.abs(acc.balance) >= 0.01) // Ocultar cuentas con saldo 0
+            .filter(acc => acc.active !== false)
             .sort((a, b) => b.balance - a.balance); // Ordenar cuentas de mayor a menor saldo
         
         const groupTotal = groupAccounts.reduce((sum, acc) => sum + acc.balance, 0);
@@ -252,7 +272,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
             accounts: groupAccounts
         };
     })
-    .filter(g => Math.abs(g.total) >= 0.01) // Ocultar agrupaciones con saldo total 0
+    .filter(g => g.accounts.length > 0)
     .sort((a, b) => b.total - a.total); // Ordenar agrupaciones de mayor a menor saldo total
   }, [accountGroups, accounts, dashboardData.stats.accTotals]);
 
