@@ -482,7 +482,34 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
          });
     }
     
-    processRows(rows);
+    // Enforce "First=Date, Last=Amount, Middle=Desc" rule requested by user
+    const refinedRows = rows.map(row => {
+        // Filter out empty cells to focus on data
+        const parts = row.filter((c: any) => c !== undefined && c !== null && c.toString().trim() !== '');
+        
+        if (parts.length >= 2) {
+            const first = parts[0];
+            const last = parts[parts.length - 1];
+            const firstStr = first.toString();
+            const lastStr = last.toString();
+            
+            // Check Date (DD/MM/YYYY, YYYY-MM-DD, or Excel serial number)
+            const isDate = /^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(firstStr) || !isNaN(Date.parse(firstStr)) || (typeof first === 'number' && first > 20000);
+            
+            // Check Amount (Allow numbers, currency symbols, etc)
+            const cleanLast = lastStr.replace(/[^\d.,\-+]/g, '');
+            const isNum = cleanLast.length > 0 && !isNaN(parseFloat(cleanLast.replace(',','.')));
+
+            if (isDate && isNum) {
+                // Merge middle parts into description
+                const desc = parts.length > 2 ? parts.slice(1, parts.length - 1).join(' ') : 'Sin concepto';
+                return [first, desc, last];
+            }
+        }
+        return row;
+    });
+    
+    processRows(refinedRows);
   };
 
   const handleImportFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
