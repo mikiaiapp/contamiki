@@ -1011,7 +1011,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-  const gridClasses = "grid grid-cols-[22px_45px_1fr_1.2fr_12px_1fr_55px_0px_20px] sm:grid-cols-[25px_70px_1fr_1.5fr_20px_1fr_70px_60px_25px] md:grid-cols-[25px_80px_1fr_1.8fr_25px_1fr_80px_80px_30px] gap-2 sm:gap-3 md:gap-4 items-center";
+  const gridClasses = "grid grid-cols-[22px_45px_1fr_1.2fr_12px_1fr_55px_0px_20px] sm:grid-cols-[25px_65px_1fr_1.4fr_20px_1fr_65px_60px_25px] md:grid-cols-[25px_75px_1fr_1.4fr_25px_1fr_75px_75px_30px] gap-1.5 sm:gap-2 md:gap-2 items-center";
 
   const duplicateProps = useMemo(() => proposedTransactions.filter(p => p.isDuplicate), [proposedTransactions]);
   const normalProps = useMemo(() => proposedTransactions.filter(p => !p.isDuplicate), [proposedTransactions]);
@@ -1209,16 +1209,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           let typeColorClass = 'text-slate-900'; if (t.type === 'EXPENSE') typeColorClass = 'text-rose-600'; else if (t.type === 'INCOME') typeColorClass = 'text-emerald-600';
           if (t.type === 'TRANSFER') {
             debitId = t.transferAccountId || ''; creditId = t.accountId;
-            debitNode = <div className={`flex items-center gap-1 font-bold md:truncate leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(dstAcc?.icon || '🏦')} <span className="md:truncate">{dstAcc?.name}</span></div>;
-            creditNode = <div className={`flex items-center gap-1 font-bold md:truncate leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="md:truncate">{srcAcc?.name}</span></div>;
+            debitNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(dstAcc?.icon || '🏦')} <span className="line-clamp-2">{dstAcc?.name}</span></div>;
+            creditNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></div>;
           } else if (t.type === 'INCOME') {
             debitId = t.accountId; creditId = t.categoryId;
-            debitNode = <div className={`flex items-center gap-1 font-bold md:truncate leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="md:truncate">{srcAcc?.name}</span></div>;
-            creditNode = <div className={`flex items-center gap-1 font-bold md:truncate leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="md:truncate">{cat?.name || 'S/C'}</span></div>;
+            debitNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></div>;
+            creditNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name || 'S/C'}</span></div>;
           } else {
             debitId = t.categoryId; creditId = t.accountId;
-            debitNode = <div className={`flex items-center gap-1 font-bold md:truncate leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="md:truncate">{cat?.name}</span></div>;
-            creditNode = <div className={`flex items-center gap-1 font-bold md:truncate leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="md:truncate">{srcAcc?.name}</span></div>;
+            debitNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name}</span></div>;
+            creditNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></div>;
           }
           const balance = runningBalances.get(t.id) || 0;
           const displayAmt = getDisplayAmount(t);
@@ -1226,13 +1226,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
             <div key={t.id} className={`group bg-white p-2 md:p-4 md:px-6 rounded-2xl border ${isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-100'} hover:shadow-lg transition-all relative`}>
                 <div className={gridClasses}>
                     <div className="flex justify-center"><button onClick={(e) => { e.stopPropagation(); toggleSelection(t.id); }} className={`text-slate-400 ${isSelected ? 'text-indigo-600' : 'hover:text-indigo-600'}`}>{isSelected ? <CheckSquare size={16} /> : <Square size={16} />}</button></div>
-                    <div className="text-left text-[8px] sm:text-[10px] md:text-[11px] lg:text-xs font-black text-slate-400 uppercase tracking-tighter leading-none truncate">{formatDateDisplay(t.date)}</div>
-                    <div className="min-w-0 text-[8px] sm:text-[10px] md:text-[11px] lg:text-xs pr-2 sm:pr-0">{debitNode}</div>
-                    <div className="min-w-0 text-[8px] sm:text-[10px] md:text-[11px] lg:text-xs font-bold text-slate-800 uppercase truncate leading-tight cursor-pointer hover:text-indigo-600 pl-1 sm:pl-0" onClick={(e) => {e.stopPropagation(); setColFilterDesc(t.description);}}>{t.description}</div>
+                    <div className="text-left text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-black text-slate-400 uppercase tracking-tighter leading-none truncate">{formatDateDisplay(t.date)}</div>
+                    <div className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] pr-1 sm:pr-0 leading-tight">{debitNode}</div>
+                    <div className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-bold text-slate-800 uppercase line-clamp-2 leading-tight cursor-pointer hover:text-indigo-600 pl-0.5 sm:pl-0" onClick={(e) => {e.stopPropagation(); setColFilterDesc(t.description);}} title={t.description}>{t.description}</div>
                     <div className="flex justify-center">{t.attachment ? ( <button onClick={(e) => { e.stopPropagation(); setPreviewAttachment(t.attachment || null); }} className="p-1 hover:bg-indigo-50 rounded-full text-indigo-500 transition-colors"><Paperclip size={12} className="md:size-4"/></button> ) : <div className="w-1 md:w-2" />}</div>
-                    <div className="min-w-0 text-[8px] sm:text-[10px] md:text-[11px] lg:text-xs pr-2 sm:pr-0">{creditNode}</div>
-                    <div className={`text-right text-[8px] sm:text-[10px] md:text-[11px] lg:text-xs font-black font-mono tracking-tighter truncate ${getAmountColor(displayAmt, t.type)} pl-1 sm:pl-0`}>{formatCurrency(displayAmt)}</div>
-                    <div className={`hidden sm:block text-right text-[8px] sm:text-[10px] md:text-[11px] lg:text-xs font-black font-mono tracking-tighter truncate ${activeFilterId ? (balance >= 0 ? 'text-slate-400' : 'text-rose-400') : 'opacity-0'}`}>{activeFilterId ? formatCurrency(balance) : ''}</div>
+                    <div className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] pr-1 sm:pr-0 leading-tight">{creditNode}</div>
+                    <div className={`text-right text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-black font-mono tracking-tighter truncate ${getAmountColor(displayAmt, t.type)} pl-0.5 sm:pl-0`}>{formatCurrency(displayAmt)}</div>
+                    <div className={`hidden sm:block text-right text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-black font-mono tracking-tighter truncate ${activeFilterId ? (balance >= 0 ? 'text-slate-400' : 'text-rose-400') : 'opacity-0'}`}>{activeFilterId ? formatCurrency(balance) : ''}</div>
                     <div className="flex justify-center relative"><button onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(activeMenuTxId === t.id ? null : t.id); }} className="p-1.5 md:p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><MoreVertical size={16} /></button>
                         {activeMenuTxId === t.id && (
                             <div className="absolute top-8 right-0 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 min-w-[180px] p-2 flex flex-col gap-1 animate-in fade-in zoom-in duration-200 origin-top-right" onClick={e => e.stopPropagation()}>
