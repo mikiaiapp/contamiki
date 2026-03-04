@@ -1209,16 +1209,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           let typeColorClass = 'text-slate-900'; if (t.type === 'EXPENSE') typeColorClass = 'text-rose-600'; else if (t.type === 'INCOME') typeColorClass = 'text-emerald-600';
           if (t.type === 'TRANSFER') {
             debitId = t.transferAccountId || ''; creditId = t.accountId;
-            debitNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(dstAcc?.icon || '🏦')} <span className="truncate">{dstAcc?.name}</span></div>;
-            creditNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
+            debitNode = <div className={`flex items-center gap-1 font-bold md:truncate leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(dstAcc?.icon || '🏦')} <span className="md:truncate">{dstAcc?.name}</span></div>;
+            creditNode = <div className={`flex items-center gap-1 font-bold md:truncate leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="md:truncate">{srcAcc?.name}</span></div>;
           } else if (t.type === 'INCOME') {
             debitId = t.accountId; creditId = t.categoryId;
-            debitNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
-            creditNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name || 'S/C'}</span></div>;
+            debitNode = <div className={`flex items-center gap-1 font-bold md:truncate leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="md:truncate">{srcAcc?.name}</span></div>;
+            creditNode = <div className={`flex items-center gap-1 font-bold md:truncate leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="md:truncate">{cat?.name || 'S/C'}</span></div>;
           } else {
             debitId = t.categoryId; creditId = t.accountId;
-            debitNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="truncate">{cat?.name}</span></div>;
-            creditNode = <div className={`flex items-center gap-1 font-bold truncate leading-none cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="truncate">{srcAcc?.name}</span></div>;
+            debitNode = <div className={`flex items-center gap-1 font-bold md:truncate leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="md:truncate">{cat?.name}</span></div>;
+            creditNode = <div className={`flex items-center gap-1 font-bold md:truncate leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="md:truncate">{srcAcc?.name}</span></div>;
           }
           const balance = runningBalances.get(t.id) || 0;
           const displayAmt = getDisplayAmount(t);
