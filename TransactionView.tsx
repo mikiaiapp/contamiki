@@ -1077,10 +1077,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           body: tableData,
           theme: 'grid',
           headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' }, // Slate-900
-          styles: { fontSize: 8 },
+          styles: { fontSize: 8, cellPadding: 1.5 },
           columnStyles: {
-              4: { halign: 'right' },
-              5: activeFilterId ? { halign: 'right' } : undefined
+              0: { cellWidth: 22 },
+              4: { halign: 'right', minCellWidth: 25 },
+              5: activeFilterId ? { halign: 'right', minCellWidth: 25 } : undefined
           }
       });
 
