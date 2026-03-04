@@ -1011,7 +1011,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-  const gridClasses = "grid grid-cols-[25px_52px_1fr_1.2fr_12px_1fr_55px_50px_20px] sm:grid-cols-[28px_70px_1fr_1.5fr_20px_1fr_70px_70px_30px] md:grid-cols-[30px_90px_1fr_1.5fr_40px_1fr_80px_80px_40px] gap-1 sm:gap-3 md:gap-4 items-center";
+  const gridClasses = "grid grid-cols-[25px_52px_1fr_1.2fr_12px_1fr_55px_50px_20px] sm:grid-cols-[28px_80px_1fr_1.5fr_20px_1fr_80px_70px_30px] md:grid-cols-[30px_90px_1fr_1.5fr_40px_1fr_80px_80px_40px] gap-1 sm:gap-4 md:gap-4 items-center";
 
   const duplicateProps = useMemo(() => proposedTransactions.filter(p => p.isDuplicate), [proposedTransactions]);
   const normalProps = useMemo(() => proposedTransactions.filter(p => !p.isDuplicate), [proposedTransactions]);
@@ -1227,11 +1227,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                 <div className={gridClasses}>
                     <div className="flex justify-center"><button onClick={(e) => { e.stopPropagation(); toggleSelection(t.id); }} className={`text-slate-400 ${isSelected ? 'text-indigo-600' : 'hover:text-indigo-600'}`}>{isSelected ? <CheckSquare size={16} /> : <Square size={16} />}</button></div>
                     <div className="text-left text-[8px] md:text-sm font-black text-slate-400 uppercase tracking-tighter leading-none truncate">{formatDateDisplay(t.date)}</div>
-                    <div className="min-w-0 text-[8px] md:text-sm pr-1.5 sm:pr-0">{debitNode}</div>
-                    <div className="min-w-0 text-[8px] md:text-sm font-bold text-slate-800 uppercase truncate leading-tight cursor-pointer hover:text-indigo-600" onClick={(e) => {e.stopPropagation(); setColFilterDesc(t.description);}}>{t.description}</div>
+                    <div className="min-w-0 text-[8px] md:text-sm pr-2 sm:pr-0">{debitNode}</div>
+                    <div className="min-w-0 text-[8px] md:text-sm font-bold text-slate-800 uppercase truncate leading-tight cursor-pointer hover:text-indigo-600 pl-1 sm:pl-0" onClick={(e) => {e.stopPropagation(); setColFilterDesc(t.description);}}>{t.description}</div>
                     <div className="flex justify-center">{t.attachment ? ( <button onClick={(e) => { e.stopPropagation(); setPreviewAttachment(t.attachment || null); }} className="p-1 hover:bg-indigo-50 rounded-full text-indigo-500 transition-colors"><Paperclip size={12} className="md:size-4"/></button> ) : <div className="w-1 md:w-2" />}</div>
-                    <div className="min-w-0 text-[8px] md:text-sm pr-1.5 sm:pr-0">{creditNode}</div>
-                    <div className={`text-right text-[8px] md:text-sm font-black font-mono tracking-tighter truncate ${getAmountColor(displayAmt, t.type)}`}>{formatCurrency(displayAmt)}</div>
+                    <div className="min-w-0 text-[8px] md:text-sm pr-2 sm:pr-0">{creditNode}</div>
+                    <div className={`text-right text-[8px] md:text-sm font-black font-mono tracking-tighter truncate ${getAmountColor(displayAmt, t.type)} pl-1 sm:pl-0`}>{formatCurrency(displayAmt)}</div>
                     <div className={`text-right text-[8px] md:text-sm font-black font-mono tracking-tighter truncate ${activeFilterId ? (balance >= 0 ? 'text-slate-400' : 'text-rose-400') : 'opacity-0'}`}>{activeFilterId ? formatCurrency(balance) : ''}</div>
                     <div className="flex justify-center relative"><button onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(activeMenuTxId === t.id ? null : t.id); }} className="p-1.5 md:p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><MoreVertical size={16} /></button>
                         {activeMenuTxId === t.id && (
