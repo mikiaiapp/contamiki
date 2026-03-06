@@ -11,7 +11,6 @@ services:
       - /volume1/docker/contamiki/data:/app/data
     secrets:
       - JWT_SECRET
-      - contamiki_JWT_SECRET
       - APP_URL
       - SMTP_HOST
       - SMTP_PORT
@@ -20,8 +19,6 @@ services:
       - SMTP_PASS
 secrets:
   JWT_SECRET:
-    environment: JWT_SECRET
-  contamiki_JWT_SECRET:
     environment: JWT_SECRET
   APP_URL:
     environment: APP_URL
