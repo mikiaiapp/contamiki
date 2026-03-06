@@ -15,48 +15,52 @@ import { createServer as createViteServer } from 'vite';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function startServer() {
-    const app = express();
-    const PORT = 3000;
+    try {
+        console.log("Initializing server...");
+        const app = express();
+        const PORT = 3000;
 
-    // Helper to read secrets from environment or file
-    const getSecret = async (key) => {
-        if (process.env[key]) return process.env[key];
-        try {
-            const secretPath = `/run/secrets/${key}`;
-            await fs.access(secretPath);
-            const secretValue = await fs.readFile(secretPath, 'utf-8');
-            return secretValue.trim();
-        } catch (e) {
-            return undefined;
-        }
-    };
+        // Helper to read secrets from environment or file
+        const getSecret = async (key) => {
+            // console.log(`Reading secret: ${key}`);
+            if (process.env[key]) return process.env[key];
+            try {
+                const secretPath = `/run/secrets/${key}`;
+                await fs.access(secretPath);
+                const secretValue = await fs.readFile(secretPath, 'utf-8');
+                return secretValue.trim();
+            } catch (e) {
+                return undefined;
+            }
+        };
 
-    const JWT_SECRET = await getSecret('JWT_SECRET') || 'super_secret_master_key_conta_miki';
-    const APP_URL = await getSecret('APP_URL') || `http://localhost:${PORT}`;
-    
-    // EMAIL CONFIGURATION
-    const smtpHost = await getSecret('SMTP_HOST');
-    const smtpPort = await getSecret('SMTP_PORT');
-    const smtpSecure = await getSecret('SMTP_SECURE');
-    const smtpUser = await getSecret('SMTP_USER');
-    const smtpPass = await getSecret('SMTP_PASS');
+        const JWT_SECRET = await getSecret('JWT_SECRET') || 'super_secret_master_key_conta_miki';
+        const APP_URL = await getSecret('APP_URL') || `http://localhost:${PORT}`;
+        
+        // EMAIL CONFIGURATION
+        const smtpHost = await getSecret('SMTP_HOST');
+        const smtpPort = await getSecret('SMTP_PORT');
+        const smtpSecure = await getSecret('SMTP_SECURE');
+        const smtpUser = await getSecret('SMTP_USER');
+        const smtpPass = await getSecret('SMTP_PASS');
 
-    const SMTP_CONFIG = {
-        host: smtpHost,
-        port: smtpPort || 587,
-        secure: smtpSecure === 'true',
-        auth: {
-            user: smtpUser,
-            pass: smtpPass,
-        },
-    };
+        const SMTP_CONFIG = {
+            host: smtpHost,
+            port: smtpPort || 587,
+            secure: smtpSecure === 'true',
+            auth: {
+                user: smtpUser,
+                pass: smtpPass,
+            },
+        };
 
-    // Transporter (o Mock si no hay config)
-    const hasSmtp = smtpHost && smtpHost.trim() !== '';
+        // Transporter (o Mock si no hay config)
+        const hasSmtp = !!(smtpHost && smtpHost.trim());
+        console.log(`[SMTP SETUP] Host: ${smtpHost || 'NONE'}, Active: ${hasSmtp}`);
 
-const mailer = hasSmtp 
-    ? nodemailer.createTransport(SMTP_CONFIG)
-    : null;
+        const mailer = hasSmtp 
+            ? nodemailer.createTransport(SMTP_CONFIG)
+            : null;
 
 // VERIFICACIÓN DE CONEXIÓN SMTP AL INICIO
 if (mailer) {
@@ -1191,6 +1195,10 @@ app.get('/api/config', authenticateToken, (req, res) => {
 
     server.timeout = 300000;
     server.keepAliveTimeout = 300000;
+    } catch (e) {
+        console.error("FATAL ERROR starting server:", e);
+        process.exit(1);
+    }
 }
 
 startServer();
