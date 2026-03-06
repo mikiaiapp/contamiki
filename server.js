@@ -18,24 +18,41 @@ async function startServer() {
     const app = express();
     const PORT = 3000;
 
-// Configs
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_master_key_conta_miki';
-const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
+    // Helper to read secrets from environment or file
+    const getSecret = async (key) => {
+        if (process.env[key]) return process.env[key];
+        try {
+            const secretPath = `/run/secrets/${key}`;
+            await fs.access(secretPath);
+            const secretValue = await fs.readFile(secretPath, 'utf-8');
+            return secretValue.trim();
+        } catch (e) {
+            return undefined;
+        }
+    };
 
-// EMAIL CONFIGURATION
-const SMTP_CONFIG = {
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT || 587,
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
-};
+    const JWT_SECRET = await getSecret('JWT_SECRET') || 'super_secret_master_key_conta_miki';
+    const APP_URL = await getSecret('APP_URL') || `http://localhost:${PORT}`;
+    
+    // EMAIL CONFIGURATION
+    const smtpHost = await getSecret('SMTP_HOST');
+    const smtpPort = await getSecret('SMTP_PORT');
+    const smtpSecure = await getSecret('SMTP_SECURE');
+    const smtpUser = await getSecret('SMTP_USER');
+    const smtpPass = await getSecret('SMTP_PASS');
 
-// Transporter (o Mock si no hay config)
-// Quitamos espacios en blanco accidentales de las variables si los hubiera
-const hasSmtp = process.env.SMTP_HOST && process.env.SMTP_HOST.trim() !== '';
+    const SMTP_CONFIG = {
+        host: smtpHost,
+        port: smtpPort || 587,
+        secure: smtpSecure === 'true',
+        auth: {
+            user: smtpUser,
+            pass: smtpPass,
+        },
+    };
+
+    // Transporter (o Mock si no hay config)
+    const hasSmtp = smtpHost && smtpHost.trim() !== '';
 
 const mailer = hasSmtp 
     ? nodemailer.createTransport(SMTP_CONFIG)
@@ -60,7 +77,7 @@ if (mailer) {
 const sendEmail = async (to, subject, text, html) => {
     if (mailer) {
         try {
-            await mailer.sendMail({ from: `"ContaMiki Security" <${process.env.SMTP_USER || 'noreply@contamiki.local'}>`, to, subject, text, html });
+            await mailer.sendMail({ from: `"ContaMiki Security" <${smtpUser || 'noreply@contamiki.local'}>`, to, subject, text, html });
             console.log(`[EMAIL SENT] To: ${to} | Subject: ${subject}`);
             return true;
         } catch (error) {
