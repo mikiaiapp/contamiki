@@ -194,30 +194,8 @@ const getUserDir = (username) => {
     return path.join(USERS_DIR, getSafeUsername(username));
 };
 
-// Lee y reconstruye el estado completo desde la estructura de carpetas
-const readFullUserState = async (username) => {
-    const userDir = getUserDir(username);
-    const legacyFile = path.join(DATA_DIR, `data_${getSafeUsername(username)}.json`);
-
-    // 1. MIGRACIÓN: Si no existe carpeta pero sí archivo legacy
-    try {
-        await fs.access(userDir);
-    } catch {
-        try {
-            await fs.access(legacyFile);
-            console.log(`MIGRATION: Converting legacy file for ${username} to folder structure...`);
-            const legacyContent = await fs.readFile(legacyFile, 'utf-8');
-            const legacyData = JSON.parse(legacyContent);
-            await saveFullUserState(username, legacyData); // Esto creará la estructura
-            await fs.rename(legacyFile, `${legacyFile}.bak_migration`); // Backup y ocultar
-            return legacyData;
-        } catch (e) {
-            // Usuario nuevo (si no tiene libros compartidos)
-            // Continuamos para ver si tiene libros compartidos
-        }
-    }
-
-    // 2. LECTURA ESTRUCTURADA
+// Función auxiliar para leer estado estructurado de un directorio dado
+const readStructuredState = async (targetDir) => {
     let fullState = {
         booksMetadata: [],
         currentBookId: '',
@@ -225,7 +203,7 @@ const readFullUserState = async (username) => {
     };
 
     try {
-        const metadataFile = path.join(userDir, 'metadata.json');
+        const metadataFile = path.join(targetDir, 'metadata.json');
         const metaContent = await fs.readFile(metadataFile, 'utf-8');
         const rootState = JSON.parse(metaContent); // { booksMetadata, currentBookId }
         
@@ -235,7 +213,7 @@ const readFullUserState = async (username) => {
         // Iterar libros PROPIOS y reconstruir
         for (const book of fullState.booksMetadata) {
             const bookId = book.id;
-            const bookDir = path.join(userDir, bookId);
+            const bookDir = path.join(targetDir, bookId);
             
             try {
                 // Leer configuración base (cuentas, categorias, etc)
@@ -248,13 +226,14 @@ const readFullUserState = async (username) => {
                 
                 for (const file of files) {
                     if (file.startsWith('transactions_') && file.endsWith('.json')) {
-                        const txContent = await fs.readFile(path.join(bookDir, file), 'utf-8');
-                        const txs = JSON.parse(txContent);
-                        allTransactions = allTransactions.concat(txs);
+                        const content = await fs.readFile(path.join(bookDir, file), 'utf-8');
+                        const yearTx = JSON.parse(content);
+                        if (Array.isArray(yearTx)) {
+                            allTransactions = [...allTransactions, ...yearTx];
+                        }
                     }
                 }
 
-                // Unir todo
                 fullState.booksData[bookId] = {
                     ...configData,
                     transactions: allTransactions
@@ -267,10 +246,65 @@ const readFullUserState = async (username) => {
                 };
             }
         }
-
     } catch (err) {
-        if (err.code !== 'ENOENT') throw err;
+        if (err.code !== 'ENOENT') console.error(`Error reading metadata in ${targetDir}:`, err);
     }
+    return fullState;
+};
+
+// Lee y reconstruye el estado completo desde la estructura de carpetas
+const readFullUserState = async (username) => {
+    const safeUsername = getSafeUsername(username); // e.g. mailmafernandez_gmail_com
+    const strippedUsername = username.replace(/[^a-zA-Z0-9]/g, ''); // e.g. mailmafernandezgmailcom
+    
+    const userDir = getUserDir(username); // DATA_DIR/users/safe_username
+    const strippedUserDir = path.join(USERS_DIR, strippedUsername); // DATA_DIR/users/stripped_username
+    
+    const legacyFile = path.join(DATA_DIR, `data_${safeUsername}.json`);
+    const fallbackUserDir = path.join(DATA_DIR, safeUsername);
+
+    console.log(`[READ STATE] Checking for user ${username}...`);
+    console.log(`[READ STATE] 1. Standard Dir: ${userDir}`);
+    console.log(`[READ STATE] 2. Stripped Dir: ${strippedUserDir}`);
+    console.log(`[READ STATE] 3. Legacy File: ${legacyFile}`);
+
+    let targetDir = userDir;
+
+    // 1. DETERMINAR DIRECTORIO DE DATOS
+    try {
+        await fs.access(userDir);
+    } catch {
+        // Si no existe el estándar, probamos el "stripped" (sin guiones bajos)
+        try {
+            await fs.access(strippedUserDir);
+            console.log(`[READ STATE] Found user dir in stripped location: ${strippedUserDir}. Using it.`);
+            targetDir = strippedUserDir;
+        } catch {
+            // Si no, probamos en la raíz (fallback)
+            try {
+                await fs.access(fallbackUserDir);
+                console.log(`[READ STATE] Found user dir in fallback location: ${fallbackUserDir}. Using it.`);
+                targetDir = fallbackUserDir;
+            } catch (e) {
+                // No existe fallback, probamos legacy
+                 try {
+                    await fs.access(legacyFile);
+                    console.log(`MIGRATION: Converting legacy file for ${username} to folder structure...`);
+                    const legacyContent = await fs.readFile(legacyFile, 'utf-8');
+                    const legacyData = JSON.parse(legacyContent);
+                    await saveFullUserState(username, legacyData); // Esto creará la estructura en el lugar correcto (estándar)
+                    await fs.rename(legacyFile, `${legacyFile}.bak_migration`); // Backup y ocultar
+                    return legacyData;
+                } catch (e) {
+                    // Usuario nuevo (si no tiene libros compartidos)
+                    console.log(`[READ STATE] No data found for ${username}. Returning empty state.`);
+                }
+            }
+        }
+    }
+
+    // 2. LECTURA ESTRUCTURADA
+    const fullState = await readStructuredState(targetDir);
 
     // 3. CARGAR LIBROS COMPARTIDOS
     try {
@@ -1061,6 +1095,37 @@ app.post('/api/data', authenticateToken, async (req, res) => {
         console.error(`ERROR SAVING DATA for ${req.user.username}:`, err);
         // Devolver detalles del error si es posible
         res.status(500).json({ error: err.message || "Error save" }); 
+    }
+});
+
+app.get('/api/debug/paths', async (req, res) => {
+    try {
+        const dataDir = DATA_DIR;
+        const usersFile = GLOBAL_USERS_FILE;
+        
+        let files = [];
+        try {
+            files = await fs.readdir(dataDir);
+        } catch (e) {
+            files = [`Error reading dir: ${e.message}`];
+        }
+
+        let rootFiles = [];
+        try {
+            rootFiles = await fs.readdir(__dirname);
+        } catch (e) {
+            rootFiles = [`Error reading root: ${e.message}`];
+        }
+
+        res.json({
+            DATA_DIR: dataDir,
+            GLOBAL_USERS_FILE: usersFile,
+            dataDirContents: files,
+            rootDirContents: rootFiles,
+            env: process.env.DATA_DIR || 'Not set'
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

@@ -1,0 +1,17 @@
+[
+  {
+    "username": "admin",
+    "password": "$2a$10$FQFiFMTGSMF1czbn1tKUteklzP.9EdKWi.Dq0kgfSh.IEHWGEWRnq",
+    "created": "2026-01-29T16:32:30.231Z"
+  },
+  {
+    "username": "mailmafernandez@gmail.com",
+    "password": "$2a$10$PHnOdrD3EdK5YPlCxX/hquCzojixxKNSSgNDz3y/7I2T/S2.CQRYK",
+    "created": "2026-01-29T16:37:52.660Z",
+    "resetToken": "59ae427a0fd7ac239520bab4eb4871583d15382c48fbb1d62c222eec592e41cd",
+    "resetExpires": 1771576553991,
+    "tempTwoFactorSecret": null,
+    "twoFactorSecret": "IZPHU52FPVKHKL32FZJHI5CGJRTEQVZ7LZBTU5BMEZ3X2WRGIZVQ",
+    "twoFactorEnabled": true
+  }
+]
