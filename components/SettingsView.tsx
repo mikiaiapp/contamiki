@@ -1,7 +1,8 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { AppState, Account, Family, Category, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, BookMetadata, BookColor, MultiBookState } from '../types';
-import { Trash2, Edit2, Wallet, BoxSelect, Check, X, ChevronDown, AlertTriangle, Loader2, Search, Layers, Tag, CalendarClock, Heart, Palette, DatabaseZap, ShieldAlert, Image as ImageIcon, Sparkles, Eye, EyeOff, Plus, Upload, Eraser, Bot, XCircle, Download, FileJson, CheckCircle2, History, Fingerprint, Play, Pause } from 'lucide-react';
+import { Trash2, Edit2, Wallet, BoxSelect, Check, X, ChevronDown, AlertTriangle, Loader2, Search, Layers, Tag, CalendarClock, Heart, Palette, DatabaseZap, ShieldAlert, Image as ImageIcon, Sparkles, Eye, EyeOff, Plus, Upload, Eraser, Bot, XCircle, Download, FileJson, CheckCircle2, History, Fingerprint, Play, Pause, Users, Mail } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
+import { inviteUser, getUsername } from '../services/authService';
 
 interface SettingsViewProps {
   data: AppState;
@@ -54,6 +55,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
   const [activeTab, setActiveTab] = useState('ACC_GROUPS');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
+  // Invite State
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteStatus, setInviteStatus] = useState('');
+  
   // Delete State
   const [yearToDelete, setYearToDelete] = useState<string>('');
   const [verificationModal, setVerificationModal] = useState<{ type: 'YEAR' | 'ALL_TX' | 'BOOK', payload?: any } | null>(null);
@@ -67,6 +72,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
   
   // Custom Logo State (Local UI state, data is in books)
   const currentBook = books.find(b => b.id === currentBookId);
+  const isRestricted = currentBook?.isShared === true;
   const bookLogoRef = useRef<HTMLInputElement>(null);
 
   const displayLogo = useMemo(() => {
@@ -443,7 +449,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
       </div>
 
       <nav className="flex md:flex-wrap bg-slate-100 p-1.5 rounded-2xl shadow-inner border border-slate-200/50 overflow-x-auto md:overflow-visible scrollbar-hide">
-        {[{id: 'ACC_GROUPS', label: 'Grupos', icon: <BoxSelect size={16}/>}, {id: 'ACCOUNTS', label: 'Cuentas', icon: <Wallet size={16}/>}, {id: 'FAMILIES', label: 'Familias', icon: <Layers size={16}/>}, {id: 'CATEGORIES', label: 'Categorías', icon: <Tag size={16}/>}, {id: 'RECURRENTS', label: 'Recurrentes', icon: <CalendarClock size={16}/>}, {id: 'FAVORITES', label: 'Favoritos', icon: <Heart size={16}/>}, {id: 'DATA', label: 'Gestión', icon: <ShieldAlert size={16}/>}].map(t => (
+        {[
+            {id: 'ACC_GROUPS', label: 'Grupos', icon: <BoxSelect size={16}/>}, 
+            {id: 'ACCOUNTS', label: 'Cuentas', icon: <Wallet size={16}/>}, 
+            {id: 'FAMILIES', label: 'Familias', icon: <Layers size={16}/>}, 
+            {id: 'CATEGORIES', label: 'Categorías', icon: <Tag size={16}/>}, 
+            {id: 'RECURRENTS', label: 'Recurrentes', icon: <CalendarClock size={16}/>}, 
+            {id: 'FAVORITES', label: 'Favoritos', icon: <Heart size={16}/>}, 
+            {id: 'DATA', label: 'Gestión', icon: <ShieldAlert size={16}/>},
+            ...(!isRestricted ? [{id: 'USERS', label: 'Usuarios', icon: <Users size={16}/>}] : [])
+        ].map(t => (
             <button key={t.id} className={`flex-1 min-w-[70px] sm:min-w-[fit-content] flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 sm:px-6 py-2 sm:py-3.5 font-black text-[8px] sm:text-[10px] uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => { setActiveTab(t.id); resetForm(); }}>{t.icon} <span className="block sm:inline mt-1 sm:mt-0">{t.label}</span></button>
         ))}
       </nav>
@@ -735,7 +750,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
         )}
 
         {activeTab === 'DATA' && (
-            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
+            <div className={`space-y-12 animate-in fade-in slide-in-from-bottom-4 ${isRestricted ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex items-center gap-4">
                         <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Download size={24}/></div>
@@ -837,6 +852,50 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                             <div className="px-4 py-3 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-bold border border-indigo-100 flex items-center gap-2">
                                 <CheckCircle2 size={14}/> Sincronización Cloud
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'USERS' && !isRestricted && (
+            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
+                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                    <div className="flex items-center gap-4">
+                        <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Users size={24}/></div>
+                        <div><h3 className="text-xl font-black text-slate-900 uppercase">Usuarios y Permisos</h3><p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Gestionar acceso a esta contabilidad</p></div>
+                    </div>
+                    
+                    <div className="space-y-6">
+                        <div className="space-y-2">
+                             <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Invitar Usuario (Email)</label>
+                             <div className="flex gap-2">
+                                 <input type="email" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500" placeholder="usuario@ejemplo.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+                                 <button onClick={async () => {
+                                     if(!inviteEmail) return;
+                                     setInviteStatus('SENDING');
+                                     try {
+                                         await inviteUser(inviteEmail, currentBookId);
+                                         setInviteStatus('SENT');
+                                         setInviteEmail('');
+                                         setTimeout(() => setInviteStatus(''), 3000);
+                                     } catch(e: any) {
+                                         alert(e.message);
+                                         setInviteStatus('ERROR');
+                                     }
+                                 }} className="px-8 py-5 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
+                                     {inviteStatus === 'SENDING' ? <Loader2 className="animate-spin" size={18}/> : <Mail size={18}/>} 
+                                     {inviteStatus === 'SENDING' ? 'Enviando...' : 'Invitar'}
+                                 </button>
+                             </div>
+                             {inviteStatus === 'SENT' && <p className="text-emerald-600 text-xs font-bold flex items-center gap-1 mt-2"><CheckCircle2 size={14}/> Invitación enviada correctamente</p>}
+                        </div>
+                        
+                        <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 space-y-2">
+                            <div className="flex items-center gap-2 text-indigo-700 font-black uppercase text-xs"><ShieldAlert size={14}/> Permisos de Invitados</div>
+                            <p className="text-xs font-medium text-indigo-900/70 leading-relaxed">
+                                Los usuarios invitados podrán ver y gestionar movimientos, pero tendrán acceso de solo lectura a la configuración (Ajustes). No podrán invitar a otros usuarios ni eliminar la contabilidad.
+                            </p>
                         </div>
                     </div>
                 </div>

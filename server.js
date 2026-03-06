@@ -155,11 +155,35 @@ const initSystem = async () => {
 
 initSystem();
 
-// --- NUEVA LÓGICA DE GESTIÓN DE ARCHIVOS FRAGMENTADOS ---
+const SHARED_ACCESS_FILE = path.join(DATA_DIR, 'shared_access.json');
+const INVITATIONS_FILE = path.join(DATA_DIR, 'invitations.json');
 
-const getSafeUsername = (username) => username.replace(/[^a-zA-Z0-9_-]/g, '');
+// --- Shared Access Helpers ---
+const readSharedAccess = async () => {
+    try {
+        const content = await fs.readFile(SHARED_ACCESS_FILE, 'utf-8');
+        return JSON.parse(content);
+    } catch {
+        return [];
+    }
+};
 
-const getUserDir = (username) => path.join(USERS_DIR, getSafeUsername(username));
+const saveSharedAccess = async (access) => {
+    await fs.writeFile(SHARED_ACCESS_FILE, JSON.stringify(access, null, 2));
+};
+
+const readInvitations = async () => {
+    try {
+        const content = await fs.readFile(INVITATIONS_FILE, 'utf-8');
+        return JSON.parse(content);
+    } catch {
+        return [];
+    }
+};
+
+const saveInvitations = async (invitations) => {
+    await fs.writeFile(INVITATIONS_FILE, JSON.stringify(invitations, null, 2));
+};
 
 // Lee y reconstruye el estado completo desde la estructura de carpetas
 const readFullUserState = async (username) => {
@@ -179,24 +203,28 @@ const readFullUserState = async (username) => {
             await fs.rename(legacyFile, `${legacyFile}.bak_migration`); // Backup y ocultar
             return legacyData;
         } catch (e) {
-            // Usuario nuevo
-            return {};
+            // Usuario nuevo (si no tiene libros compartidos)
+            // Continuamos para ver si tiene libros compartidos
         }
     }
 
     // 2. LECTURA ESTRUCTURADA
+    let fullState = {
+        booksMetadata: [],
+        currentBookId: '',
+        booksData: {}
+    };
+
     try {
         const metadataFile = path.join(userDir, 'metadata.json');
         const metaContent = await fs.readFile(metadataFile, 'utf-8');
         const rootState = JSON.parse(metaContent); // { booksMetadata, currentBookId }
+        
+        fullState.booksMetadata = rootState.booksMetadata || [];
+        fullState.currentBookId = rootState.currentBookId || '';
 
-        const fullState = {
-            ...rootState,
-            booksData: {}
-        };
-
-        // Iterar libros y reconstruir
-        for (const book of rootState.booksMetadata) {
+        // Iterar libros PROPIOS y reconstruir
+        for (const book of fullState.booksMetadata) {
             const bookId = book.id;
             const bookDir = path.join(userDir, bookId);
             
@@ -231,12 +259,62 @@ const readFullUserState = async (username) => {
             }
         }
 
-        return fullState;
-
     } catch (err) {
-        if (err.code === 'ENOENT') return {};
-        throw err;
+        if (err.code !== 'ENOENT') throw err;
     }
+
+    // 3. CARGAR LIBROS COMPARTIDOS
+    try {
+        const sharedAccess = await readSharedAccess();
+        const mySharedBooks = sharedAccess.filter(access => access.userId === username);
+
+        for (const access of mySharedBooks) {
+            const ownerDir = getUserDir(access.ownerUsername);
+            const bookDir = path.join(ownerDir, access.bookId);
+
+            try {
+                // Leer metadata del dueño para obtener nombre y detalles
+                const ownerMetaFile = path.join(ownerDir, 'metadata.json');
+                const ownerMeta = JSON.parse(await fs.readFile(ownerMetaFile, 'utf-8'));
+                const bookMeta = ownerMeta.booksMetadata.find(b => b.id === access.bookId);
+
+                if (bookMeta) {
+                    // Añadir a metadata con flag isShared
+                    fullState.booksMetadata.push({
+                        ...bookMeta,
+                        owner: access.ownerUsername,
+                        isShared: true
+                    });
+
+                    // Leer datos del libro
+                    const configFile = path.join(bookDir, 'config.json');
+                    const configData = JSON.parse(await fs.readFile(configFile, 'utf-8'));
+                    
+                    const files = await fs.readdir(bookDir);
+                    let allTransactions = [];
+                    
+                    for (const file of files) {
+                        if (file.startsWith('transactions_') && file.endsWith('.json')) {
+                            const txContent = await fs.readFile(path.join(bookDir, file), 'utf-8');
+                            const txs = JSON.parse(txContent);
+                            allTransactions = allTransactions.concat(txs);
+                        }
+                    }
+
+                    fullState.booksData[access.bookId] = {
+                        ...configData,
+                        transactions: allTransactions
+                    };
+                }
+            } catch (err) {
+                console.warn(`Warning: Could not read shared book ${access.bookId} from ${access.ownerUsername}`, err);
+            }
+        }
+    } catch (err) {
+        console.error("Error loading shared books:", err);
+    }
+
+    return fullState;
 };
 
 // Guarda el estado fragmentándolo en archivos
@@ -244,70 +322,88 @@ const saveFullUserState = async (username, fullState) => {
     const userDir = getUserDir(username);
     await fs.mkdir(userDir, { recursive: true });
 
-    // 0. EXTRACCIÓN DE LOGOS (Base64 -> Archivo)
-    // Si recibimos un logo en Base64, lo guardamos en disco y actualizamos el JSON para apuntar a la API.
+    // Separar libros propios de compartidos
+    const ownBooksMeta = [];
+    const sharedBooksMeta = [];
+
     if (fullState.booksMetadata && Array.isArray(fullState.booksMetadata)) {
         for (const book of fullState.booksMetadata) {
-            if (book.logo && book.logo.startsWith('data:image')) {
-                const bookDir = path.join(userDir, book.id);
-                await fs.mkdir(bookDir, { recursive: true });
-                
-                const matches = book.logo.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/);
-                if (matches) {
-                    const buffer = Buffer.from(matches[2], 'base64');
-                    // Guardamos siempre como logo.png para simplificar
-                    await fs.writeFile(path.join(bookDir, 'logo.png'), buffer);
-                    
-                    // Actualizamos la metadata para que apunte a la API
-                    // Se usa un timestamp para evitar caché del navegador
-                    book.logo = `/api/book/${book.id}/logo?v=${Date.now()}`;
-
-                    // --- SISTEMA DE LOGO GLOBAL ---
-                    // Copiamos el último logo subido como logo del sistema público
-                    // Esto permite verlo en el Login sin autenticación
-                    try {
-                        await fs.writeFile(SYSTEM_LOGO_FILE, buffer);
-                        console.log(`[SYSTEM] Logo actualizado globalmente desde usuario ${username}`);
-                    } catch (sysErr) {
-                        console.error("[SYSTEM] Error updating system logo", sysErr);
-                    }
-                }
-            } else if (book.logo === undefined || book.logo === null) {
-                // Si se eliminó el logo, intentamos borrar el archivo
-                const bookDir = path.join(userDir, book.id);
-                try {
-                    await fs.unlink(path.join(bookDir, 'logo.png'));
-                } catch (e) {}
+            if (book.isShared) {
+                sharedBooksMeta.push(book);
+            } else {
+                ownBooksMeta.push(book);
             }
         }
     }
 
-    // 1. Guardar Metadatos Raíz (siempre se envían completos)
+    // 0. EXTRACCIÓN DE LOGOS (Base64 -> Archivo) - SOLO PROPIOS
+    for (const book of ownBooksMeta) {
+        if (book.logo && book.logo.startsWith('data:image')) {
+            const bookDir = path.join(userDir, book.id);
+            await fs.mkdir(bookDir, { recursive: true });
+            
+            const matches = book.logo.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/);
+            if (matches) {
+                const buffer = Buffer.from(matches[2], 'base64');
+                await fs.writeFile(path.join(bookDir, 'logo.png'), buffer);
+                book.logo = `/api/book/${book.id}/logo?v=${Date.now()}`;
+
+                // Sistema de logo global (solo si es propio)
+                try {
+                    await fs.writeFile(SYSTEM_LOGO_FILE, buffer);
+                } catch (sysErr) {}
+            }
+        } else if (book.logo === undefined || book.logo === null) {
+            const bookDir = path.join(userDir, book.id);
+            try { await fs.unlink(path.join(bookDir, 'logo.png')); } catch (e) {}
+        }
+    }
+
+    // 1. Guardar Metadatos Raíz (SOLO PROPIOS)
+    // Los compartidos no se guardan en metadata.json del usuario, se reconstruyen al leer
     const rootState = {
-        booksMetadata: fullState.booksMetadata || [],
+        booksMetadata: ownBooksMeta,
         currentBookId: fullState.currentBookId || ''
     };
     await fs.writeFile(path.join(userDir, 'metadata.json'), JSON.stringify(rootState, null, 2));
 
-    // 2. Guardar Libros Individualmente (Itera solo sobre los que vienen en el payload)
+    // 2. Guardar Libros Individualmente
     if (fullState.booksData) {
+        const sharedAccess = await readSharedAccess();
+
         for (const [bookId, bookData] of Object.entries(fullState.booksData)) {
-            const bookDir = path.join(userDir, bookId);
-            await fs.mkdir(bookDir, { recursive: true });
+            // Verificar si es compartido
+            const sharedInfo = sharedBooksMeta.find(b => b.id === bookId);
+            
+            let targetDir;
+            if (sharedInfo) {
+                // Verificar permiso de escritura
+                const hasAccess = sharedAccess.find(a => a.userId === username && a.bookId === bookId && a.ownerUsername === sharedInfo.owner);
+                if (!hasAccess) {
+                    console.warn(`Security: User ${username} tried to write to book ${bookId} without permission.`);
+                    continue; 
+                }
+                targetDir = path.join(getUserDir(sharedInfo.owner), bookId);
+            } else {
+                // Es propio
+                targetDir = path.join(userDir, bookId);
+            }
+
+            await fs.mkdir(targetDir, { recursive: true });
 
             // Separar transacciones de configuración
             const { transactions, ...configData } = bookData;
 
             // Guardar Configuración (Overwrite atomic)
-            const configFile = path.join(bookDir, 'config.json');
+            const configFile = path.join(targetDir, 'config.json');
             await fs.writeFile(`${configFile}.tmp`, JSON.stringify(configData, null, 2));
             await fs.rename(`${configFile}.tmp`, configFile);
 
             // Identificar archivos existentes para limpieza posterior
             let existingFiles = [];
             try {
-                existingFiles = (await fs.readdir(bookDir)).filter(f => f.startsWith('transactions_') && f.endsWith('.json'));
-            } catch (e) { /* ignore if dir didn't exist */ }
+                existingFiles = (await fs.readdir(targetDir)).filter(f => f.startsWith('transactions_') && f.endsWith('.json'));
+            } catch (e) { /* ignore */ }
             const writtenFiles = new Set();
 
             // Agrupar transacciones por AÑO
@@ -323,7 +419,7 @@ const saveFullUserState = async (username, fullState) => {
             // Guardar archivos de transacciones por año
             for (const [year, txs] of Object.entries(txByYear)) {
                 const filename = `transactions_${year}.json`;
-                const yearFile = path.join(bookDir, filename);
+                const yearFile = path.join(targetDir, filename);
                 await fs.writeFile(`${yearFile}.tmp`, JSON.stringify(txs, null, 2));
                 await fs.rename(`${yearFile}.tmp`, yearFile);
                 writtenFiles.add(filename);
@@ -332,7 +428,7 @@ const saveFullUserState = async (username, fullState) => {
             // LIMPIEZA DE AÑOS BORRADOS:
             for (const file of existingFiles) {
                 if (!writtenFiles.has(file)) {
-                    await fs.unlink(path.join(bookDir, file)).catch(e => console.warn(`Could not delete obsolete file ${file}`, e));
+                    await fs.unlink(path.join(targetDir, file)).catch(e => console.warn(`Could not delete obsolete file ${file}`, e));
                 }
             }
         }
@@ -776,6 +872,165 @@ app.get('/api/system/logo', async (req, res) => {
     } catch {
         // Si no hay logo custom, 404 (el cliente usará default)
         res.status(404).send('No custom system logo');
+    }
+});
+
+// --- INVITATION ROUTES ---
+
+app.post('/api/invite', authenticateToken, async (req, res) => {
+    const { email, bookId } = req.body;
+    if (!email || !bookId) return res.status(400).json({ error: "Email y Libro requeridos" });
+
+    try {
+        const fullState = await readFullUserState(req.user.username);
+        const book = fullState.booksMetadata.find(b => b.id === bookId);
+
+        if (!book) return res.status(404).json({ error: "Libro no encontrado" });
+        
+        // Solo el propietario puede invitar
+        // Si es un libro compartido (isShared=true), no se puede invitar
+        if (book.isShared) {
+            return res.status(403).json({ error: "No puedes invitar usuarios a un libro compartido contigo." });
+        }
+
+        const token = crypto.randomBytes(32).toString('hex');
+        const invitations = await readInvitations();
+        
+        // Verificar si ya existe invitación pendiente
+        const existing = invitations.find(i => i.toEmail === email && i.bookId === bookId && i.status === 'PENDING');
+        if (existing) {
+            // Reenviar
+            existing.token = token; // Renovar token
+            existing.timestamp = Date.now();
+        } else {
+            invitations.push({
+                id: crypto.randomUUID(),
+                fromUser: req.user.username,
+                toEmail: email,
+                bookId: bookId,
+                bookName: book.name,
+                token: token,
+                status: 'PENDING',
+                timestamp: Date.now()
+            });
+        }
+        
+        await saveInvitations(invitations);
+
+        const link = `${APP_URL}?action=invite&token=${token}`;
+        await sendEmail(
+            email,
+            `Invitación a colaborar en "${book.name}" - ContaMiki`,
+            `Has sido invitado por ${req.user.username} a colaborar en la contabilidad "${book.name}". Acepta la invitación aquí: ${link}`,
+            `<p>Hola,</p><p><strong>${req.user.username}</strong> te ha invitado a colaborar en el libro de contabilidad <strong>"${book.name}"</strong>.</p><p><a href="${link}" style="background:#4F46E5;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;">Aceptar Invitación</a></p><p>Si no tienes cuenta, podrás crear una al aceptar.</p>`
+        );
+
+        res.json({ success: true, message: "Invitación enviada" });
+
+    } catch (err) {
+        console.error("Invite Error:", err);
+        res.status(500).json({ error: "Error al enviar invitación" });
+    }
+});
+
+app.post('/api/accept-invite', async (req, res) => {
+    const { token, password, username } = req.body; // username/password solo si es registro nuevo
+    
+    try {
+        const invitations = await readInvitations();
+        const invite = invitations.find(i => i.token === token && i.status === 'PENDING');
+        
+        if (!invite) return res.status(404).json({ error: "Invitación no válida o expirada" });
+
+        const users = await readUsers();
+        let user = users.find(u => u.username === invite.toEmail);
+        let isNewUser = false;
+
+        // Si el usuario no existe, DEBE venir password para crearlo
+        if (!user) {
+            if (!password) {
+                return res.json({ requireRegister: true, email: invite.toEmail });
+            }
+            
+            // Crear usuario
+            const hashedPassword = await bcrypt.hash(password, 10);
+            user = {
+                username: invite.toEmail,
+                password: hashedPassword,
+                isVerified: true, // Auto-verificado por invitación
+                verificationToken: null
+            };
+            users.push(user);
+            await saveUsers(users);
+            
+            // Inicializar directorio
+            const userDir = getUserDir(user.username);
+            await fs.mkdir(userDir, { recursive: true });
+            
+            // Crear libro por defecto propio también
+            const defaultBookId = 'default_book_1';
+            const bookDir = path.join(userDir, defaultBookId);
+            await fs.mkdir(bookDir, { recursive: true });
+            await fs.writeFile(path.join(bookDir, 'config.json'), JSON.stringify(DEFAULT_APP_STATE, null, 2));
+            
+            const meta = {
+                booksMetadata: [{ id: defaultBookId, name: 'Mi Contabilidad', color: 'BLACK', currency: 'EUR' }],
+                currentBookId: defaultBookId
+            };
+            await fs.writeFile(path.join(userDir, 'metadata.json'), JSON.stringify(meta, null, 2));
+            
+            isNewUser = true;
+        }
+
+        // Crear acceso compartido
+        const sharedAccess = await readSharedAccess();
+        
+        // Evitar duplicados
+        const accessExists = sharedAccess.find(a => a.userId === user.username && a.bookId === invite.bookId && a.ownerUsername === invite.fromUser);
+        
+        if (!accessExists) {
+            sharedAccess.push({
+                id: crypto.randomUUID(),
+                userId: user.username,
+                ownerUsername: invite.fromUser,
+                bookId: invite.bookId,
+                role: 'EDITOR', // Por defecto editor completo (menos settings)
+                timestamp: Date.now()
+            });
+            await saveSharedAccess(sharedAccess);
+        }
+
+        // Marcar invitación como aceptada
+        invite.status = 'ACCEPTED';
+        await saveInvitations(invitations);
+
+        // Si es usuario nuevo, devolver token de login directo
+        if (isNewUser) {
+            const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '30d' });
+            return res.json({ success: true, token, username: user.username, isNewUser: true });
+        }
+
+        res.json({ success: true, message: "Invitación aceptada. Inicia sesión para ver el libro." });
+
+    } catch (err) {
+        console.error("Accept Invite Error:", err);
+        res.status(500).json({ error: "Error al procesar invitación" });
+    }
+});
+
+app.post('/api/test-email', authenticateToken, async (req, res) => {
+    try {
+        const success = await sendEmail(
+            req.user.username,
+            "Prueba de Email - ContaMiki",
+            "Este es un correo de prueba para verificar la configuración SMTP.",
+            "<h1>Correo de Prueba</h1><p>El sistema de correo funciona correctamente.</p>"
+        );
+        
+        if (success) res.json({ success: true });
+        else res.status(500).json({ error: "Fallo al enviar el correo (revisa logs del servidor)" });
+    } catch (err) {
+        res.status(500).json({ error: "Error interno" });
     }
 });
 

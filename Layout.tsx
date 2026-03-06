@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle, ShieldCheck, QrCode, PieChart } from 'lucide-react';
+import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle, ShieldCheck, QrCode, PieChart, Mail } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
-import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus } from './services/authService';
+import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus, testEmail } from './services/authService';
 
 interface LayoutProps {
   currentView: View;
@@ -192,6 +192,15 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       }
   };
 
+  const handleTestEmail = async () => {
+      try {
+          await testEmail();
+          alert("Email de prueba enviado. Revisa tu bandeja de entrada.");
+      } catch (e: any) {
+          alert("Error enviando email: " + e.message);
+      }
+  };
+
   const renderNavItem = (item: { id: View; label: string; icon: React.ReactNode; badge?: number }, isMobile = false) => (
     <button
       key={item.id}
@@ -230,7 +239,10 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                  />
             </div>
             <div className="text-left">
-                <span className="hidden sm:block text-[10px] uppercase tracking-widest text-white/60">Contabilidad</span>
+                <span className="hidden sm:flex items-center gap-1 text-[10px] uppercase tracking-widest text-white/60">
+                    {currentBook.isShared ? <Users size={10} /> : <ShieldCheck size={10} />}
+                    Contabilidad
+                </span>
                 <span className="block text-xs sm:text-sm font-black text-white leading-none tracking-tight max-w-[140px] sm:max-w-none truncate">{currentBook.name}</span>
             </div>
             <ChevronDown size={16} className={`text-white/60 transition-transform ${isBookMenuOpen ? 'rotate-180' : ''}`} />
@@ -250,7 +262,10 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                             >
                                 <div className="flex items-center gap-3">
                                     <div className={`w-3 h-3 rounded-full ${THEME_COLORS[book.color].replace('bg-', 'bg-')}`}></div>
-                                    <span className="text-xs font-bold">{book.name}</span>
+                                    <span className="text-xs font-bold flex items-center gap-2">
+                                        {book.isShared ? <Users size={12} className="text-slate-400"/> : <ShieldCheck size={12} className="text-emerald-500"/>}
+                                        {book.name}
+                                    </span>
                                 </div>
                                 {book.id === currentBook.id && <Check size={14} />}
                             </button>
@@ -356,6 +371,9 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                             </button>
                             <button onClick={() => { setIsUserMenuOpen(false); setIsChangePassModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 transition-all text-slate-600">
                                 <Key size={16} className="text-amber-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cambiar Clave</span>
+                            </button>
+                            <button onClick={() => { setIsUserMenuOpen(false); handleTestEmail(); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 transition-all text-slate-600">
+                                <Mail size={16} className="text-blue-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Probar Email</span>
                             </button>
                             <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 transition-all text-slate-600">
                                 <LogOut size={16} className="text-indigo-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cerrar Sesión</span>

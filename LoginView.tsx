@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification } from './services/authService';
-import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles, Check, XCircle, CheckCircle2, Mail, ArrowLeft, KeyRound, Send, ShieldCheck } from 'lucide-react';
+import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification, acceptInvite, setup2FA, verifySetup2FA } from './services/authService';
+import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles, Check, XCircle, CheckCircle2, Mail, ArrowLeft, KeyRound, Send, ShieldCheck, QrCode } from 'lucide-react';
 
 interface LoginViewProps {
     onLoginSuccess: () => void;
 }
 
-type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT' | 'RESET_PASSWORD' | 'TWO_FACTOR';
+type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT' | 'RESET_PASSWORD' | 'TWO_FACTOR' | 'REGISTER_INVITE' | 'SETUP_2FA_MANDATORY';
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const [mode, setMode] = useState<AuthMode>('LOGIN');
@@ -17,6 +17,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     // 2FA State
     const [twoFactorCode, setTwoFactorCode] = useState('');
     const [tempToken, setTempToken] = useState<string | null>(null);
+    const [qrCode, setQrCode] = useState<string | null>(null);
+    const [secret, setSecret] = useState<string | null>(null);
+
+    // Invite State
+    const [inviteToken, setInviteToken] = useState<string | null>(null);
 
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
@@ -24,7 +29,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const [resetToken, setResetToken] = useState<string | null>(null);
     const [showResend, setShowResend] = useState(false);
 
-    // Detección de parámetros URL (Verificación / Reset)
+    // Detección de parámetros URL (Verificación / Reset / Invite)
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const action = params.get('action');
@@ -37,12 +42,39 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 .catch(err => setError("Error verificando cuenta: " + err.message))
                 .finally(() => {
                     setLoading(false);
-                    // Limpiar URL
                     window.history.replaceState({}, document.title, "/");
                 });
         } else if (action === 'reset' && token) {
             setMode('RESET_PASSWORD');
             setResetToken(token);
+        } else if (action === 'invite' && token) {
+            setInviteToken(token);
+            setLoading(true);
+            // Intentar aceptar directamente (si el usuario ya existe)
+            acceptInvite(token)
+                .then(res => {
+                    if (res.requireRegister) {
+                        setMode('REGISTER_INVITE');
+                        setEmail(res.email);
+                        setSuccessMsg("Para aceptar la invitación, crea una contraseña.");
+                    } else {
+                        setSuccessMsg(res.message || "Invitación aceptada.");
+                        // Si nos devuelve token, es que ya estamos logueados (usuario existente)
+                        if (res.token) {
+                            setTimeout(onLoginSuccess, 1500);
+                        } else {
+                            setMode('LOGIN');
+                        }
+                    }
+                })
+                .catch(err => {
+                    setError("Error invitación: " + err.message);
+                    setMode('LOGIN');
+                })
+                .finally(() => {
+                    setLoading(false);
+                    window.history.replaceState({}, document.title, "/");
+                });
         }
     }, []);
 
@@ -71,15 +103,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         setShowResend(false);
         
         // 1. Manejo especial para 2FA
-        if (mode === 'TWO_FACTOR') {
+        if (mode === 'TWO_FACTOR' || mode === 'SETUP_2FA_MANDATORY') {
             if (!twoFactorCode || twoFactorCode.length < 6) {
                 setError("Introduce el código de 6 dígitos");
                 return;
             }
             setLoading(true);
             try {
-                await login2FA(tempToken!, twoFactorCode);
-                onLoginSuccess();
+                if (mode === 'TWO_FACTOR') {
+                    await login2FA(tempToken!, twoFactorCode);
+                    onLoginSuccess();
+                } else {
+                    // SETUP 2FA
+                    await verifySetup2FA(twoFactorCode);
+                    setSuccessMsg("2FA Activado. ¡Bienvenido!");
+                    setTimeout(onLoginSuccess, 1000);
+                }
             } catch (err: any) {
                 setError(err.message);
                 setTwoFactorCode(''); // Limpiar para reintentar
@@ -90,12 +129,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         }
 
         // 2. Validación estándar
-        if (mode !== 'RESET_PASSWORD' && !validateEmail(email)) {
+        if (mode !== 'RESET_PASSWORD' && mode !== 'REGISTER_INVITE' && !validateEmail(email)) {
             setError("Por favor introduce un email válido.");
             return;
         }
 
-        if ((mode === 'REGISTER' || mode === 'RESET_PASSWORD')) {
+        if ((mode === 'REGISTER' || mode === 'RESET_PASSWORD' || mode === 'REGISTER_INVITE')) {
             if (!isPasswordStrong) {
                 setError('La contraseña no cumple los requisitos de seguridad.');
                 return;
@@ -124,6 +163,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 setMode('LOGIN');
                 setPassword('');
                 setConfirmPassword('');
+            } else if (mode === 'REGISTER_INVITE' && inviteToken) {
+                const res = await acceptInvite(inviteToken, password);
+                setSuccessMsg("Cuenta creada. Ahora configura el doble factor de autenticación.");
+                
+                // Iniciar setup 2FA inmediatamente
+                const setup = await setup2FA();
+                setQrCode(setup.qrCode);
+                setSecret(setup.secret);
+                setMode('SETUP_2FA_MANDATORY');
+                setTwoFactorCode('');
             } else if (mode === 'FORGOT') {
                 await requestPasswordReset(email);
                 setSuccessMsg('Si el email existe, recibirás instrucciones para resetear la contraseña (mira la consola server si estás en local).');
@@ -239,6 +288,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             <p className="text-xs text-slate-500 mt-1">Introduce el código de Google Authenticator</p>
                         </div>
                     )}
+                    {mode === 'SETUP_2FA_MANDATORY' && (
+                         <div className="text-center mb-4 animate-in slide-in-from-right">
+                            <QrCode className="w-12 h-12 text-indigo-600 mx-auto mb-3" />
+                            <h3 className="text-lg font-black text-slate-900 uppercase">Configurar 2FA</h3>
+                            <p className="text-xs text-slate-500 mt-1 mb-4">Escanea este código con Google Authenticator</p>
+                            {qrCode && <img src={qrCode} className="mx-auto w-48 h-48 border-4 border-white shadow-lg rounded-xl mb-4" />}
+                            <p className="text-[10px] text-slate-400 font-mono bg-slate-100 p-2 rounded mb-4 break-all">{secret}</p>
+                        </div>
+                    )}
+                    {mode === 'REGISTER_INVITE' && (
+                         <div className="text-center mb-4 animate-in slide-in-from-right">
+                            <UserPlus className="w-12 h-12 text-indigo-600 mx-auto mb-3" />
+                            <h3 className="text-lg font-black text-slate-900 uppercase">Completar Registro</h3>
+                            <p className="text-xs text-slate-500 mt-1">Crea tu contraseña para aceptar la invitación</p>
+                        </div>
+                    )}
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {error && (
@@ -261,7 +326,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             </div>
                         )}
                         
-                        {mode !== 'RESET_PASSWORD' && mode !== 'TWO_FACTOR' && (
+                        {mode !== 'RESET_PASSWORD' && mode !== 'TWO_FACTOR' && mode !== 'SETUP_2FA_MANDATORY' && (
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
                                 <div className="relative group">
@@ -270,7 +335,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                                         type="email" 
                                         required
                                         autoComplete="email"
-                                        className="w-full pl-14 pr-6 py-5 bg-slate-50 border-2 border-transparent rounded-2xl focus:outline-none focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-800"
+                                        disabled={mode === 'REGISTER_INVITE'}
+                                        className={`w-full pl-14 pr-6 py-5 bg-slate-50 border-2 border-transparent rounded-2xl focus:outline-none focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-800 ${mode === 'REGISTER_INVITE' ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         placeholder="usuario@email.com"
                                         value={email}
                                         onChange={e => setEmail(e.target.value)}
@@ -279,11 +345,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             </div>
                         )}
 
-                        {mode !== 'FORGOT' && mode !== 'TWO_FACTOR' && (
+                        {mode !== 'FORGOT' && mode !== 'TWO_FACTOR' && mode !== 'SETUP_2FA_MANDATORY' && (
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex justify-between">
                                     <span>Contraseña</span>
-                                    {(mode === 'REGISTER' || mode === 'RESET_PASSWORD') && (
+                                    {(mode === 'REGISTER' || mode === 'RESET_PASSWORD' || mode === 'REGISTER_INVITE') && (
                                         <span className={`transition-colors ${isPasswordStrong ? 'text-emerald-500' : 'text-rose-500'}`}>
                                             {isPasswordStrong ? 'Fuerte' : 'Débil'}
                                         </span>
@@ -295,14 +361,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                                         type="password" 
                                         required
                                         autoComplete={mode === 'LOGIN' ? "current-password" : "new-password"}
-                                        className={`w-full pl-14 pr-6 py-5 bg-slate-50 border-2 rounded-2xl focus:outline-none focus:bg-white transition-all font-bold text-slate-800 ${(mode === 'REGISTER' || mode === 'RESET_PASSWORD') && !isPasswordStrong && password.length > 0 ? 'border-rose-100 focus:border-rose-300' : 'border-transparent focus:border-indigo-500'}`}
+                                        className={`w-full pl-14 pr-6 py-5 bg-slate-50 border-2 rounded-2xl focus:outline-none focus:bg-white transition-all font-bold text-slate-800 ${(mode === 'REGISTER' || mode === 'RESET_PASSWORD' || mode === 'REGISTER_INVITE') && !isPasswordStrong && password.length > 0 ? 'border-rose-100 focus:border-rose-300' : 'border-transparent focus:border-indigo-500'}`}
                                         placeholder="••••••••"
                                         value={password}
                                         onChange={e => setPassword(e.target.value)}
                                     />
                                 </div>
                                 
-                                {(mode === 'REGISTER' || mode === 'RESET_PASSWORD') && (
+                                {(mode === 'REGISTER' || mode === 'RESET_PASSWORD' || mode === 'REGISTER_INVITE') && (
                                     <div className="flex flex-wrap gap-2 pt-2 animate-in slide-in-from-top-1">
                                         {passwordRequirements.map(req => (
                                             <div key={req.id} className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase border transition-all ${req.valid ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
@@ -315,7 +381,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             </div>
                         )}
 
-                        {mode === 'TWO_FACTOR' && (
+                        {(mode === 'TWO_FACTOR' || mode === 'SETUP_2FA_MANDATORY') && (
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Código de Seguridad</label>
                                 <div className="relative group">
@@ -340,7 +406,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             </div>
                         )}
 
-                        {(mode === 'REGISTER' || mode === 'RESET_PASSWORD') && (
+                        {(mode === 'REGISTER' || mode === 'RESET_PASSWORD' || mode === 'REGISTER_INVITE') && (
                             <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Confirmar Contraseña</label>
                                 <div className="relative group">
@@ -365,7 +431,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
                         <button 
                             type="submit" 
-                            disabled={loading || ((mode === 'REGISTER' || mode === 'RESET_PASSWORD') && (!isPasswordStrong || !doPasswordsMatch))}
+                            disabled={loading || ((mode === 'REGISTER' || mode === 'RESET_PASSWORD' || mode === 'REGISTER_INVITE') && (!isPasswordStrong || !doPasswordsMatch))}
                             className="w-full bg-slate-950 text-white py-6 rounded-2xl font-black uppercase tracking-[0.3em] text-[10px] hover:bg-indigo-600 transition-all shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-3 mt-4"
                         >
                             {loading ? (
@@ -377,6 +443,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                                     {mode === 'REGISTER' && <><UserPlus size={18} /> Registrarse</>}
                                     {mode === 'FORGOT' && <><Mail size={18} /> Enviar Enlace</>}
                                     {mode === 'RESET_PASSWORD' && <><KeyRound size={18} /> Cambiar Clave</>}
+                                    {mode === 'REGISTER_INVITE' && <><UserPlus size={18} /> Completar Registro</>}
+                                    {mode === 'SETUP_2FA_MANDATORY' && <><ShieldCheck size={18} /> Activar 2FA</>}
                                 </>
                             )}
                         </button>

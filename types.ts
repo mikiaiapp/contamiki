@@ -97,6 +97,8 @@ export interface BookMetadata {
   color: BookColor;
   currency: string;
   logo?: string;
+  owner?: string;
+  isShared?: boolean;
 }
 
 export interface MultiBookState {

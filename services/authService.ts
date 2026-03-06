@@ -264,3 +264,53 @@ export const disable2FA = async () => {
     if (!res.ok) throw new Error("Error desactivando 2FA");
     return true;
 };
+
+export const acceptInvite = async (token: string, password?: string, username?: string) => {
+    const response = await fetch('/api/accept-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password, username })
+    });
+    
+    if (response.ok) {
+        const data = await response.json();
+        if (data.token) {
+            setSession(data.token, data.username);
+        }
+        return data;
+    } else {
+        const err = await response.json();
+        throw new Error(err.error || "Error al aceptar invitación");
+    }
+};
+
+export const testEmail = async () => {
+    const token = getToken();
+    const res = await fetch('/api/test-email', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Error enviando email de prueba");
+    }
+    return true;
+};
+
+export const inviteUser = async (email: string, bookId: string) => {
+    const token = getToken();
+    const res = await fetch('/api/invite', {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ email, bookId })
+    });
+    
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Error enviando invitación");
+    }
+    return await res.json();
+};
