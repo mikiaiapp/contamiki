@@ -185,6 +185,15 @@ const saveInvitations = async (invitations) => {
     await fs.writeFile(INVITATIONS_FILE, JSON.stringify(invitations, null, 2));
 };
 
+// --- Helper Functions ---
+const getSafeUsername = (username) => {
+    return username.replace(/[^a-zA-Z0-9]/g, '_');
+};
+
+const getUserDir = (username) => {
+    return path.join(USERS_DIR, getSafeUsername(username));
+};
+
 // Lee y reconstruye el estado completo desde la estructura de carpetas
 const readFullUserState = async (username) => {
     const userDir = getUserDir(username);
