@@ -141,17 +141,15 @@ const DEFAULT_APP_STATE = {
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
-// Servir bundle.js explícitamente solo en producción
-if (process.env.NODE_ENV === 'production') {
-    app.get('/bundle.js', (req, res) => {
-        console.log(`[SERVER] Serving bundle.js to ${req.ip}`);
-        res.setHeader('Content-Type', 'application/javascript');
-        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-        res.setHeader('Pragma', 'no-cache');
-        res.setHeader('Expires', '0');
-        res.sendFile(path.join(__dirname, 'bundle.js'));
-    });
-}
+// Servir bundle.js explícitamente
+app.get('/bundle.js', (req, res) => {
+    console.log(`[SERVER] Serving bundle.js to ${req.ip}`);
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.sendFile(path.join(__dirname, 'bundle.js'));
+});
 
 if (process.env.NODE_ENV === 'production') {
     app.use(express.static(__dirname));
@@ -1175,9 +1173,11 @@ app.get('/api/config', authenticateToken, (req, res) => {
             let html = await fs.readFile(path.join(__dirname, 'index.html'), 'utf-8');
             
             if (process.env.NODE_ENV !== 'production' && vite) {
-                // Replace bundle.js with index.tsx for Vite dev mode BEFORE transform
-                html = html.replace('src="./bundle.js"', 'src="/index.tsx"');
+                // En desarrollo, Vite ya maneja /index.tsx
                 html = await vite.transformIndexHtml(req.url, html);
+            } else {
+                // En producción, cambiamos /index.tsx por /bundle.js
+                html = html.replace('src="/index.tsx"', 'src="/bundle.js"');
             }
             
             res.status(200).set({ 'Content-Type': 'text/html' }).end(html);

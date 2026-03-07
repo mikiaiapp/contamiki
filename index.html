@@ -48,7 +48,7 @@
       }, 10000);
     </script>
 
-    <!-- En Docker y Producción, cargamos el bundle generado por esbuild -->
-    <script type="module" src="./bundle.js" onerror="console.error('Error loading bundle.js'); document.getElementById('loader-status').innerHTML = '<span style=\'color:red\'>Error cargando script principal.</span>'"></script>
+    <!-- En desarrollo usamos index.tsx, en producción server.js lo cambiará por bundle.js -->
+    <script type="module" src="/index.tsx" onerror="console.error('Error loading index.tsx'); document.getElementById('loader-status').innerHTML = '<span style=\'color:red\'>Error cargando script principal.</span>'"></script>
   </body>
 </html>
