@@ -151,6 +151,13 @@ app.get('/bundle.js', (req, res) => {
     res.sendFile(path.join(__dirname, 'bundle.js'));
 });
 
+// Fallback para index.tsx en producción (redirección a bundle.js)
+if (process.env.NODE_ENV === 'production') {
+    app.get('/index.tsx', (req, res) => {
+        res.redirect('/bundle.js');
+    });
+}
+
 if (process.env.NODE_ENV === 'production') {
     app.use(express.static(__dirname));
 }
@@ -1173,10 +1180,11 @@ app.get('/api/config', authenticateToken, (req, res) => {
             let html = await fs.readFile(path.join(__dirname, 'index.html'), 'utf-8');
             
             if (process.env.NODE_ENV !== 'production' && vite) {
-                // En desarrollo, Vite ya maneja /index.tsx
+                // En desarrollo, Vite ya maneja index.tsx
                 html = await vite.transformIndexHtml(req.url, html);
             } else {
-                // En producción, cambiamos /index.tsx por /bundle.js
+                // En producción, cambiamos index.tsx por bundle.js (manejamos ambos casos por seguridad)
+                html = html.replace('src="index.tsx"', 'src="bundle.js"');
                 html = html.replace('src="/index.tsx"', 'src="/bundle.js"');
             }
             
