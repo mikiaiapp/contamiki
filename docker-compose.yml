@@ -9,26 +9,26 @@ services:
     volumes:
 # Ajusta la ruta de abajo según tu NAS
       - /volume1/docker/contamiki/data:/app/data
-    secrets:
-      - JWT_SECRET
-      - APP_URL
-      - SMTP_HOST
-      - SMTP_PORT
-      - SMTP_SECURE
-      - SMTP_USER
-      - SMTP_PASS
-secrets:
-  JWT_SECRET:
-    environment: JWT_SECRET
-  APP_URL:
-    environment: APP_URL
-  SMTP_HOST:
-    environment: SMTP_HOST
-  SMTP_PORT:
-    environment: SMTP_PORT
-  SMTP_SECURE:
-    environment: SMTP_SECURE
-  SMTP_USER:
-    environment: SMTP_USER
-  SMTP_PASS:
-    environment: SMTP_PASS
+#    secrets:
+#      - JWT_SECRET
+#      - APP_URL
+#      - SMTP_HOST
+#      - SMTP_PORT
+#      - SMTP_SECURE
+#      - SMTP_USER
+#      - SMTP_PASS
+#secrets:
+#  JWT_SECRET:
+#    environment: JWT_SECRET
+#  APP_URL:
+#    environment: APP_URL
+#  SMTP_HOST:
+#    environment: SMTP_HOST
+#  SMTP_PORT:
+#    environment: SMTP_PORT
+#  SMTP_SECURE:
+#    environment: SMTP_SECURE
+#  SMTP_USER:
+#    environment: SMTP_USER
+#  SMTP_PASS:
+#    environment: SMTP_PASS
