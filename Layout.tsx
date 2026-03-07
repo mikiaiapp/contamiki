@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle, ShieldCheck, QrCode, PieChart, Mail } from 'lucide-react';
+import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle, ShieldCheck, QrCode, PieChart, Mail, Users } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
 import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus, testEmail } from './services/authService';
 

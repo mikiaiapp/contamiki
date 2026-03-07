@@ -457,9 +457,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
             {id: 'RECURRENTS', label: 'Recurrentes', icon: <CalendarClock size={16}/>}, 
             {id: 'FAVORITES', label: 'Favoritos', icon: <Heart size={16}/>}, 
             {id: 'DATA', label: 'Gestión', icon: <ShieldAlert size={16}/>},
-            ...(!isRestricted ? [{id: 'USERS', label: 'Usuarios', icon: <Users size={16}/>}] : [])
+            {id: 'USERS', label: 'Usuarios', icon: <Users size={16}/>}
         ].map(t => (
-            <button key={t.id} className={`flex-1 min-w-[70px] sm:min-w-[fit-content] flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 sm:px-6 py-2 sm:py-3.5 font-black text-[8px] sm:text-[10px] uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} onClick={() => { setActiveTab(t.id); resetForm(); }}>{t.icon} <span className="block sm:inline mt-1 sm:mt-0">{t.label}</span></button>
+            <button 
+                key={t.id} 
+                className={`flex-1 min-w-[70px] sm:min-w-[fit-content] flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 sm:px-6 py-2 sm:py-3.5 font-black text-[8px] sm:text-[10px] uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`} 
+                onClick={() => { setActiveTab(t.id); resetForm(); }}
+            >
+                {t.icon} <span className="block sm:inline mt-1 sm:mt-0">{t.label}</span>
+            </button>
         ))}
       </nav>
 
@@ -484,7 +490,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
              <div className="space-y-6">
                 <button onClick={() => { resetForm(); openEditor(); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2"><Plus size={16}/> Nueva Familia</button>
                 <div className="space-y-4">{data.families.map(f => (<div key={f.id} className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all"><div className="flex items-center gap-4"><div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${f.type === 'INCOME' ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>{renderIcon(f.icon, "w-10 h-10")}</div><span className="font-bold text-slate-700 uppercase text-xs">{f.name}</span></div><div className="flex gap-2 opacity-50 group-hover:opacity-100"><button onClick={() => { setFamId(f.id); setFamName(f.name); setFamIcon(f.icon); setFamType(f.type); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"><Edit2 size={16}/></button><button onClick={() => { if(confirm('¿Borrar familia?')) onUpdateData({families: data.families.filter(x => x.id !== f.id)}); }} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100"><Trash2 size={16}/></button></div></div>))}</div>
-                {isEditModalOpen && (<div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in"><div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20"><button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button><h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Layers className="text-indigo-600"/> {famId ? 'Editar Familia' : 'Nueva Familia'}</h3><div className="space-y-6"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={famName} onChange={e => setFamName(e.target.value)} /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tipo</label><div className="flex bg-slate-100 p-1.5 rounded-2xl"><button onClick={() => setFamType('EXPENSE')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl ${famType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-600' : 'text-slate-400'}`}>Gasto</button><button onClick={() => setFamType('INCOME')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl ${famType === 'INCOME' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}>Ingreso</button></div></div>{renderIconInput(famIcon, setFamIcon, famName)}<button onClick={() => { if(!famName) return; if(famId) onUpdateData({families: data.families.map(f=>f.id===famId?{...f,name:famName,icon:famIcon,type:famType}:f)}); else onUpdateData({families: [...data.families, {id:generateId(),name:famName,icon:famIcon,type:famType}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar</button></div></div></div>)}
+                {isEditModalOpen && (<div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-in fade-in"><div className="bg-white rounded-[3rem] shadow-2xl w-full max-lg p-10 relative border border-white/20"><button onClick={resetForm} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button><h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Layers className="text-indigo-600"/> {famId ? 'Editar Familia' : 'Nueva Familia'}</h3><div className="space-y-6"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre</label><input type="text" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" value={famName} onChange={e => setFamName(e.target.value)} /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tipo</label><div className="flex bg-slate-100 p-1.5 rounded-2xl"><button onClick={() => setFamType('EXPENSE')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl ${famType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-600' : 'text-slate-400'}`}>Gasto</button><button onClick={() => setFamType('INCOME')} className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl ${famType === 'INCOME' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}>Ingreso</button></div></div>{renderIconInput(famIcon, setFamIcon, famName)}<button onClick={() => { if(!famName) return; if(famId) onUpdateData({families: data.families.map(f=>f.id===famId?{...f,name:famName,icon:famIcon,type:famType}:f)}); else onUpdateData({families: [...data.families, {id:generateId(),name:famName,icon:famIcon,type:famType}]}); resetForm(); }} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] hover:bg-indigo-600 shadow-xl">Guardar</button></div></div></div>)}
             </div>
         )}
 
@@ -750,7 +756,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
         )}
 
         {activeTab === 'DATA' && (
-            <div className={`space-y-12 animate-in fade-in slide-in-from-bottom-4 ${isRestricted ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+            <div className={`space-y-12 animate-in fade-in slide-in-from-bottom-4 ${isRestricted ? 'opacity-40 pointer-events-none grayscale select-none' : ''}`}>
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex items-center gap-4">
                         <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Download size={24}/></div>
@@ -858,8 +864,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
             </div>
         )}
 
-        {activeTab === 'USERS' && !isRestricted && (
-            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
+        {activeTab === 'USERS' && (
+            <div className={`space-y-12 animate-in fade-in slide-in-from-bottom-4 ${isRestricted ? 'opacity-40 pointer-events-none grayscale select-none' : ''}`}>
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex items-center gap-4">
                         <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Users size={24}/></div>
