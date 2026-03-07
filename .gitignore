@@ -12,15 +12,6 @@ dist
 dist-ssr
 *.local
 
-# Sensitive information and local data
-.env
-data/
-users.json
-
-# Debug and temporary files
-debug_paths.js
-fetch_debug.ts
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
