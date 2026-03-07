@@ -9,6 +9,9 @@ import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 import { createServer as createViteServer } from 'vite';
 
@@ -34,12 +37,17 @@ async function startServer() {
     const JWT_SECRET = await getSecret('JWT_SECRET') || 'super_secret_master_key_conta_miki';
     const APP_URL = await getSecret('APP_URL') || `http://localhost:${PORT}`;
     
+    console.log(`🚀 [CONFIG] APP_URL: ${APP_URL}`);
+    console.log(`🔐 [CONFIG] JWT_SECRET: ${JWT_SECRET === 'super_secret_master_key_conta_miki' ? 'DEFAULT (INSECURE)' : 'CUSTOM'}`);
+    
     // EMAIL CONFIGURATION
     const smtpHost = await getSecret('SMTP_HOST');
     const smtpPort = await getSecret('SMTP_PORT');
     const smtpSecure = await getSecret('SMTP_SECURE');
     const smtpUser = await getSecret('SMTP_USER');
     const smtpPass = await getSecret('SMTP_PASS');
+
+    console.log(`🔍 [SMTP DEBUG] Host: ${smtpHost ? 'DETECTED' : 'MISSING'}, Port: ${smtpPort}, Secure: ${smtpSecure}, User: ${smtpUser ? 'DETECTED' : 'MISSING'}`);
 
     const SMTP_CONFIG = {
         host: smtpHost,
