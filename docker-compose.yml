@@ -6,14 +6,8 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    environment:
-      - JWT_SECRET=${JWT_SECRET}
-      - APP_URL=${APP_URL}
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT}
-      - SMTP_SECURE=${SMTP_SECURE}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASS=${SMTP_PASS}
+    env_file:
+      - .env
     volumes:
 # Ajusta la ruta de abajo según tu NAS
       - /volume1/docker/contamiki/data:/app/data

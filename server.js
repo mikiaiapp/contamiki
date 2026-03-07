@@ -23,16 +23,37 @@ async function startServer() {
 
     // Helper to read secrets from environment or file
     const getSecret = async (key) => {
-        if (process.env[key]) return process.env[key];
-        try {
-            const secretPath = `/run/secrets/${key}`;
-            await fs.access(secretPath);
-            const secretValue = await fs.readFile(secretPath, 'utf-8');
-            return secretValue.trim();
-        } catch (e) {
-            return undefined;
+        let source = 'NONE';
+        let value = undefined;
+
+        // 1. Check process.env
+        if (process.env[key] !== undefined && process.env[key] !== null && process.env[key].trim() !== '') {
+            value = process.env[key].trim();
+            source = 'ENV_VAR';
+        } 
+        // 2. Check Docker Secrets
+        else {
+            try {
+                const secretPath = `/run/secrets/${key}`;
+                await fs.access(secretPath);
+                value = (await fs.readFile(secretPath, 'utf-8')).trim();
+                source = 'DOCKER_SECRET';
+            } catch (e) {
+                // Not in secrets
+            }
         }
+
+        if (value) {
+            console.log(`🔑 [SECRET] ${key} loaded from ${source}`);
+        }
+        return value;
     };
+
+    // DEBUG: List all SMTP related env vars
+    console.log("📋 [ENV DEBUG] SMTP related variables in process.env:");
+    Object.keys(process.env).filter(k => k.startsWith('SMTP_') || k === 'APP_URL' || k === 'JWT_SECRET').forEach(k => {
+        console.log(`   - ${k}: ${process.env[k] ? 'SET' : 'EMPTY'}`);
+    });
 
     const JWT_SECRET = await getSecret('JWT_SECRET') || 'super_secret_master_key_conta_miki';
     const APP_URL = await getSecret('APP_URL') || `http://localhost:${PORT}`;
