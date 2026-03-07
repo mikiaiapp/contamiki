@@ -6,8 +6,7 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    env_file:
-      - .env
     volumes:
 # Ajusta la ruta de abajo según tu NAS
       - /volume1/docker/contamiki/data:/app/data
+      - /volume1/docker/contamiki/.env:/app/.env

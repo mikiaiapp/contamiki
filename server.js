@@ -11,7 +11,12 @@ import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import dotenv from 'dotenv';
 
-dotenv.config();
+const envConfig = dotenv.config();
+if (envConfig.error) {
+    console.log("ℹ️ [ENV] No se encontró archivo .env o no se pudo leer (esto es normal si usas variables de entorno de Docker)");
+} else {
+    console.log("✅ [ENV] Archivo .env cargado correctamente desde el volumen.");
+}
 
 import { createServer as createViteServer } from 'vite';
 
