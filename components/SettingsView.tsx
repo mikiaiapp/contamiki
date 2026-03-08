@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { AppState, Account, Family, Category, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, BookMetadata, BookColor, MultiBookState } from '../types';
 import { Trash2, Edit2, Wallet, BoxSelect, Check, X, ChevronDown, AlertTriangle, Loader2, Search, Layers, Tag, CalendarClock, Heart, Palette, DatabaseZap, ShieldAlert, Image as ImageIcon, Sparkles, Eye, EyeOff, Plus, Upload, Eraser, Bot, XCircle, Download, FileJson, CheckCircle2, History, Fingerprint, Play, Pause, Users, Mail } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
-import { inviteUser, getUsername } from '../services/authService';
+import { inviteUser, getUsername, getCollaborators, revokeCollaborator, cancelInvitation } from '../services/authService';
 
 interface SettingsViewProps {
   data: AppState;
@@ -58,6 +58,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
   // Invite State
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteStatus, setInviteStatus] = useState('');
+  const [collaborators, setCollaborators] = useState<{userId: string, role: string, timestamp: number}[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<{email: string, timestamp: number}[]>([]);
+  const [isLoadingCollaborators, setIsLoadingCollaborators] = useState(false);
   
   // Delete State
   const [yearToDelete, setYearToDelete] = useState<string>('');
@@ -140,6 +143,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
         accounts: data.accounts.filter(a => a.groupId === g.id && a.active !== false).sort((a, b) => a.name.localeCompare(b.name))
     })).filter(g => g.accounts.length > 0).sort((a, b) => a.group.name.localeCompare(b.group.name));
   }, [data.accountGroups, data.accounts]);
+
+  // Fetch Collaborators
+  const fetchCollaborators = async () => {
+    if (isRestricted) return;
+    setIsLoadingCollaborators(true);
+    try {
+        const data = await getCollaborators(currentBookId);
+        setCollaborators(data.collaborators);
+        setPendingInvites(data.pending);
+    } catch (e) {
+        console.error("Error fetching collaborators:", e);
+    } finally {
+        setIsLoadingCollaborators(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (activeTab === 'USERS' && !isRestricted) {
+        fetchCollaborators();
+    }
+  }, [activeTab, currentBookId]);
 
   const availableYears = useMemo(() => {
       const years = new Set(data.transactions.map(t => t.date.substring(0, 4)));
@@ -884,6 +908,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                          await inviteUser(inviteEmail, currentBookId);
                                          setInviteStatus('SENT');
                                          setInviteEmail('');
+                                         fetchCollaborators(); // Refrescar lista
                                          setTimeout(() => setInviteStatus(''), 3000);
                                      } catch(e: any) {
                                          alert(e.message);
@@ -903,6 +928,83 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                 Los usuarios invitados tienen acceso completo para gestionar movimientos, cuentas, categorías y realizar copias de seguridad. No podrán invitar a otros usuarios ni eliminar la contabilidad completa.
                             </p>
                         </div>
+
+                        {/* Listado de Colaboradores e Invitaciones */}
+                        {!isRestricted && (
+                            <div className="space-y-8 pt-6 border-t border-slate-100">
+                                <div className="space-y-4">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Colaboradores Activos</h4>
+                                    {isLoadingCollaborators ? (
+                                        <div className="flex items-center gap-2 text-slate-400 text-xs font-bold py-4"><Loader2 className="animate-spin" size={14}/> Cargando...</div>
+                                    ) : collaborators.length > 0 ? (
+                                        <div className="grid grid-cols-1 gap-3">
+                                            {collaborators.map(collab => (
+                                                <div key={collab.userId} className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-200 transition-all">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-600 shadow-sm font-bold uppercase">{collab.userId.substring(0, 2)}</div>
+                                                        <div>
+                                                            <p className="text-sm font-bold text-slate-700">{collab.userId}</p>
+                                                            <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">{collab.role}</p>
+                                                        </div>
+                                                    </div>
+                                                    <button 
+                                                        onClick={async () => {
+                                                            if (confirm(`¿Revocar acceso a ${collab.userId}?`)) {
+                                                                try {
+                                                                    await revokeCollaborator(currentBookId, collab.userId);
+                                                                    fetchCollaborators();
+                                                                } catch (e: any) { alert(e.message); }
+                                                            }
+                                                        }}
+                                                        className="p-3 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                                                        title="Revocar Acceso"
+                                                    >
+                                                        <XCircle size={20}/>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs font-bold text-slate-400 py-4 italic">No hay colaboradores activos.</p>
+                                    )}
+                                </div>
+
+                                <div className="space-y-4">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Invitaciones Pendientes</h4>
+                                    {pendingInvites.length > 0 ? (
+                                        <div className="grid grid-cols-1 gap-3">
+                                            {pendingInvites.map(invite => (
+                                                <div key={invite.email} className="flex items-center justify-between p-5 bg-amber-50/30 rounded-2xl border border-amber-100/50 group hover:border-amber-200 transition-all">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-amber-500 shadow-sm"><Mail size={18}/></div>
+                                                        <div>
+                                                            <p className="text-sm font-bold text-slate-700">{invite.email}</p>
+                                                            <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Pendiente de aceptar</p>
+                                                        </div>
+                                                    </div>
+                                                    <button 
+                                                        onClick={async () => {
+                                                            if (confirm(`¿Cancelar invitación a ${invite.email}?`)) {
+                                                                try {
+                                                                    await cancelInvitation(currentBookId, invite.email);
+                                                                    fetchCollaborators();
+                                                                } catch (e: any) { alert(e.message); }
+                                                            }
+                                                        }}
+                                                        className="p-3 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                                                        title="Cancelar Invitación"
+                                                    >
+                                                        <Trash2 size={20}/>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs font-bold text-slate-400 py-4 italic">No hay invitaciones pendientes.</p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

@@ -1139,6 +1139,69 @@ app.post('/api/accept-invite', async (req, res) => {
     }
 });
 
+app.get('/api/book/:bookId/collaborators', authenticateToken, async (req, res) => {
+    const { bookId } = req.params;
+    const username = req.user.username;
+
+    try {
+        // Solo el propietario puede ver colaboradores
+        const fullState = await readFullUserState(username);
+        const book = fullState.booksMetadata.find(b => b.id === bookId && !b.isShared);
+        if (!book) return res.status(403).json({ error: "No tienes permiso para ver colaboradores de este libro" });
+
+        const sharedAccess = await readSharedAccess();
+        const invitations = await readInvitations();
+
+        const collaborators = sharedAccess
+            .filter(a => a.bookId === bookId && a.ownerUsername === username)
+            .map(a => ({ userId: a.userId, role: a.role, timestamp: a.timestamp }));
+
+        const pending = invitations
+            .filter(i => i.bookId === bookId && i.fromUser === username && i.status === 'PENDING')
+            .map(i => ({ email: i.toEmail, timestamp: i.timestamp }));
+
+        res.json({ collaborators, pending });
+    } catch (err) {
+        res.status(500).json({ error: "Error al obtener colaboradores" });
+    }
+});
+
+app.delete('/api/book/:bookId/collaborators/:targetUserId', authenticateToken, async (req, res) => {
+    const { bookId, targetUserId } = req.params;
+    const username = req.user.username;
+
+    try {
+        const sharedAccess = await readSharedAccess();
+        const index = sharedAccess.findIndex(a => a.bookId === bookId && a.ownerUsername === username && a.userId === targetUserId);
+        
+        if (index === -1) return res.status(404).json({ error: "Colaborador no encontrado" });
+
+        sharedAccess.splice(index, 1);
+        await saveSharedAccess(sharedAccess);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Error al revocar acceso" });
+    }
+});
+
+app.delete('/api/book/:bookId/invitations/:email', authenticateToken, async (req, res) => {
+    const { bookId, email } = req.params;
+    const username = req.user.username;
+
+    try {
+        const invitations = await readInvitations();
+        const index = invitations.findIndex(i => i.bookId === bookId && i.fromUser === username && i.toEmail === email && i.status === 'PENDING');
+        
+        if (index === -1) return res.status(404).json({ error: "Invitación no encontrada" });
+
+        invitations.splice(index, 1);
+        await saveInvitations(invitations);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Error al cancelar invitación" });
+    }
+});
+
 app.post('/api/test-email', authenticateToken, async (req, res) => {
     try {
         const success = await sendEmail(

@@ -314,3 +314,32 @@ export const inviteUser = async (email: string, bookId: string) => {
     }
     return await res.json();
 };
+
+export const getCollaborators = async (bookId: string) => {
+    const token = getToken();
+    const res = await fetch(`/api/book/${bookId}/collaborators`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Error al obtener colaboradores");
+    return await res.json();
+};
+
+export const revokeCollaborator = async (bookId: string, userId: string) => {
+    const token = getToken();
+    const res = await fetch(`/api/book/${bookId}/collaborators/${userId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Error al revocar acceso");
+    return await res.json();
+};
+
+export const cancelInvitation = async (bookId: string, email: string) => {
+    const token = getToken();
+    const res = await fetch(`/api/book/${bookId}/invitations/${email}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Error al cancelar invitación");
+    return await res.json();
+};
