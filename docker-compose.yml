@@ -9,4 +9,4 @@ services:
     volumes:
 # Ajusta la ruta de abajo según tu NAS
       - /volume1/docker/contamiki/data:/app/data
-      #- /volume1/docker/contamiki/.env:/app/.env
+      - /volume1/docker/contamiki/.env:/app/.env
