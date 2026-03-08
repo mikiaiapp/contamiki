@@ -104,6 +104,7 @@ const sendEmail = async (to, subject, text, html) => {
     // 1. INTENTAR USAR EL CARTERO CENTRAL (SI ESTÁ CONFIGURADO)
     const centralUrl = await getSecret('CENTRAL_EMAIL_URL');
     const centralKey = await getSecret('CENTRAL_EMAIL_KEY');
+    const smtpUser = await getSecret('SMTP_USER');
 
     if (centralUrl && centralKey) {
         try {
@@ -116,6 +117,7 @@ const sendEmail = async (to, subject, text, html) => {
                     text, 
                     html, 
                     key: centralKey,
+                    from: smtpUser || 'mikiaiapp@gmail.com',
                     fromName: 'ContaMiki'
                 })
             });
@@ -133,7 +135,7 @@ const sendEmail = async (to, subject, text, html) => {
     // 2. SI NO HAY CENTRAL O FALLA, USAR EL LOCAL (SI ESTÁ CONFIGURADO)
     if (mailer) {
         try {
-            await mailer.sendMail({ from: `"ContaMiki Security" <${smtpUser || 'noreply@contamiki.local'}>`, to, subject, text, html });
+            await mailer.sendMail({ from: `"ContaMiki Security" <${smtpUser || 'mikiaiapp@gmail.com'}>`, to, subject, text, html });
             console.log(`[LOCAL EMAIL SENT] To: ${to} | Subject: ${subject}`);
             return true;
         } catch (error) {
@@ -263,6 +265,41 @@ const readInvitations = async () => {
 
 const saveInvitations = async (invitations) => {
     await fs.writeFile(INVITATIONS_FILE, JSON.stringify(invitations, null, 2));
+};
+
+// --- Auto-Backup Helper ---
+const autoBackupBook = async (username, bookId, bookData) => {
+    const userDir = getUserDir(username);
+    const backupsDir = path.join(userDir, 'backups', bookId);
+    await fs.mkdir(backupsDir, { recursive: true });
+
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const backupFile = path.join(backupsDir, `backup_${today}.json`);
+
+    try {
+        await fs.access(backupFile);
+        // Backup already exists for today, skip
+        return;
+    } catch {
+        // Backup doesn't exist, create it
+        await fs.writeFile(backupFile, JSON.stringify(bookData, null, 2));
+        console.log(`[AUTO-BACKUP] Created backup for ${username} - Book ${bookId} - Date ${today}`);
+
+        // Rotate: keep only 5
+        const files = await fs.readdir(backupsDir);
+        const backupFiles = files
+            .filter(f => f.startsWith('backup_') && f.endsWith('.json'))
+            .sort()
+            .reverse();
+
+        if (backupFiles.length > 5) {
+            const toDelete = backupFiles.slice(5);
+            for (const file of toDelete) {
+                await fs.unlink(path.join(backupsDir, file));
+                console.log(`[AUTO-BACKUP] Deleted old backup: ${file}`);
+            }
+        }
+    }
 };
 
 // --- Helper Functions ---
@@ -435,6 +472,19 @@ const readFullUserState = async (username) => {
         }
     } catch (err) {
         console.error("Error loading shared books:", err);
+    }
+
+    // 4. AUTO-BACKUP (Solo libros propios)
+    for (const book of fullState.booksMetadata) {
+        if (!book.isShared) {
+            const bookData = fullState.booksData[book.id];
+            if (bookData) {
+                // No esperamos a que termine para no bloquear la respuesta
+                autoBackupBook(username, book.id, bookData).catch(err => {
+                    console.error(`[AUTO-BACKUP ERROR] ${username} - ${book.id}:`, err);
+                });
+            }
+        }
     }
 
     return fullState;
