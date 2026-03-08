@@ -8,7 +8,7 @@ import { AIInsights } from './components/AIInsights';
 import { LoginView } from './LoginView';
 import { AppState, View, Transaction, GlobalFilter, MultiBookState, BookMetadata, BookColor } from './types';
 import { loadData, saveData, defaultAppState } from './services/dataService';
-import { isAuthenticated, logout, getToken } from './services/authService';
+import { isAuthenticated, logout, getToken, deleteBook } from './services/authService';
 import { X, Check, WifiOff, RefreshCw, Plus, LayoutList } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -138,27 +138,34 @@ const App: React.FC = () => {
       setCurrentView('RESUMEN');
   };
 
-  const handleDeleteBook = () => {
-      setMultiState(prev => {
-          if (prev.booksMetadata.length <= 1) {
-              const currentId = prev.currentBookId;
-              return {
-                  ...prev,
-                  booksData: { ...prev.booksData, [currentId]: { ...defaultAppState, transactions: [], recurrents: [], favorites: [] } }
-              };
-          } else {
+  const handleDeleteBook = async () => {
+      if (currentBookMeta.isShared) {
+          alert("No puedes eliminar una contabilidad a la que has sido invitado.");
+          return;
+      }
+
+      try {
+          const token = getToken();
+          if (token && !token.startsWith('local_') && !token.startsWith('guest_')) {
+              await deleteBook(multiState.currentBookId);
+          }
+          
+          setMultiState(prev => {
               const remainingBooks = prev.booksMetadata.filter(b => b.id !== prev.currentBookId);
-              const newCurrentId = remainingBooks[0].id;
               const { [prev.currentBookId]: deleted, ...remainingData } = prev.booksData;
+              const newCurrentId = remainingBooks.length > 0 ? remainingBooks[0].id : '';
+              
               return {
                   ...prev,
                   booksMetadata: remainingBooks,
                   currentBookId: newCurrentId,
                   booksData: remainingData
               };
-          }
-      });
-      setCurrentView('RESUMEN');
+          });
+          setCurrentView('RESUMEN');
+      } catch (e: any) {
+          alert(e.message);
+      }
   };
 
   const handleSwitchBook = (bookId: string) => { 

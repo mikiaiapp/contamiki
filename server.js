@@ -1108,6 +1108,53 @@ app.get('/api/system/logo', async (req, res) => {
 });
 
 // --- INVITATION ROUTES ---
+app.delete('/api/book/:bookId', authenticateToken, async (req, res) => {
+    const { username } = req.user;
+    const { bookId } = req.params;
+    const userDir = getUserDir(username);
+    const metadataFile = path.join(userDir, 'metadata.json');
+
+    try {
+        const metadata = JSON.parse(await fs.readFile(metadataFile, 'utf-8'));
+        const bookIndex = metadata.booksMetadata.findIndex(b => b.id === bookId);
+
+        if (bookIndex === -1) {
+            // No es el propietario (o no existe en su metadata.json)
+            return res.status(403).json({ error: "No eres el propietario de esta contabilidad o no existe." });
+        }
+
+        // 1. Eliminar de los metadatos del usuario
+        metadata.booksMetadata.splice(bookIndex, 1);
+        if (metadata.currentBookId === bookId) {
+            metadata.currentBookId = metadata.booksMetadata.length > 0 ? metadata.booksMetadata[0].id : '';
+        }
+        await fs.writeFile(metadataFile, JSON.stringify(metadata, null, 2));
+
+        // 2. Eliminar el directorio del libro (y sus backups)
+        const bookDir = path.join(userDir, bookId);
+        const backupsDir = path.join(userDir, 'backups', bookId);
+        
+        await fs.rm(bookDir, { recursive: true, force: true }).catch(err => console.warn(`Could not delete book directory ${bookDir}`, err));
+        await fs.rm(backupsDir, { recursive: true, force: true }).catch(err => console.warn(`Could not delete backups directory ${backupsDir}`, err));
+
+        // 3. Limpiar accesos compartidos (quitar acceso a todos los que lo tenían)
+        const sharedAccess = await readSharedAccess();
+        const newSharedAccess = sharedAccess.filter(a => !(a.bookId === bookId && a.ownerUsername === username));
+        await saveSharedAccess(newSharedAccess);
+
+        // 4. Limpiar invitaciones pendientes
+        const invitations = await readInvitations();
+        const newInvitations = invitations.filter(i => !(i.bookId === bookId && i.ownerUsername === username));
+        await saveInvitations(newInvitations);
+
+        res.json({ success: true, message: "Contabilidad eliminada correctamente" });
+    } catch (err) {
+        console.error("Error deleting book:", err);
+        res.status(500).json({ error: "Error al eliminar la contabilidad" });
+    }
+});
+
+// --- INVITATION ROUTES ---
 
 app.post('/api/invite', authenticateToken, async (req, res) => {
     const { email, bookId } = req.body;

@@ -365,3 +365,16 @@ export const restoreAutoBackup = async (bookId: string, filename: string) => {
     }
     return await res.json();
 };
+
+export const deleteBook = async (bookId: string) => {
+    const token = getToken();
+    const res = await fetch(`/api/book/${bookId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Error al eliminar la contabilidad");
+    }
+    return await res.json();
+};
