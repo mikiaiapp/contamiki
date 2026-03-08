@@ -343,3 +343,25 @@ export const cancelInvitation = async (bookId: string, email: string) => {
     if (!res.ok) throw new Error("Error al cancelar invitación");
     return await res.json();
 };
+
+export const getAutoBackups = async (bookId: string) => {
+    const token = getToken();
+    const res = await fetch(`/api/book/${bookId}/backups`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Error al obtener copias automáticas");
+    return await res.json();
+};
+
+export const restoreAutoBackup = async (bookId: string, filename: string) => {
+    const token = getToken();
+    const res = await fetch(`/api/book/${bookId}/backups/${filename}/restore`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Error al restaurar copia automática");
+    }
+    return await res.json();
+};

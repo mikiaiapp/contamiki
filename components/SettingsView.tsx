@@ -1,8 +1,8 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { AppState, Account, Family, Category, TransactionType, RecurrentMovement, FavoriteMovement, RecurrenceFrequency, BookMetadata, BookColor, MultiBookState } from '../types';
-import { Trash2, Edit2, Wallet, BoxSelect, Check, X, ChevronDown, AlertTriangle, Loader2, Search, Layers, Tag, CalendarClock, Heart, Palette, DatabaseZap, ShieldAlert, Image as ImageIcon, Sparkles, Eye, EyeOff, Plus, Upload, Eraser, Bot, XCircle, Download, FileJson, CheckCircle2, History, Fingerprint, Play, Pause, Users, Mail } from 'lucide-react';
+import { Trash2, Edit2, Wallet, BoxSelect, Check, X, ChevronDown, AlertTriangle, Loader2, Search, Layers, Tag, CalendarClock, Heart, Palette, DatabaseZap, ShieldAlert, Image as ImageIcon, Sparkles, Eye, EyeOff, Plus, Upload, Eraser, Bot, XCircle, Download, FileJson, CheckCircle2, History, Fingerprint, Play, Pause, Users, Mail, RefreshCw } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
-import { inviteUser, getUsername, getCollaborators, revokeCollaborator, cancelInvitation } from '../services/authService';
+import { inviteUser, getUsername, getCollaborators, revokeCollaborator, cancelInvitation, getAutoBackups, restoreAutoBackup } from '../services/authService';
 
 interface SettingsViewProps {
   data: AppState;
@@ -61,6 +61,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
   const [collaborators, setCollaborators] = useState<{userId: string, role: string, timestamp: number}[]>([]);
   const [pendingInvites, setPendingInvites] = useState<{email: string, timestamp: number}[]>([]);
   const [isLoadingCollaborators, setIsLoadingCollaborators] = useState(false);
+  
+  const [autoBackups, setAutoBackups] = useState<{filename: string, date: string, timestamp: number}[]>([]);
+  const [isLoadingAutoBackups, setIsLoadingAutoBackups] = useState(false);
   
   // Delete State
   const [yearToDelete, setYearToDelete] = useState<string>('');
@@ -159,9 +162,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
     }
   };
 
+  const fetchAutoBackups = async () => {
+    if (isRestricted) return;
+    setIsLoadingAutoBackups(true);
+    try {
+        const data = await getAutoBackups(currentBookId);
+        setAutoBackups(data);
+    } catch (e) {
+        console.error("Error fetching auto backups:", e);
+    } finally {
+        setIsLoadingAutoBackups(false);
+    }
+  };
+
   React.useEffect(() => {
     if (activeTab === 'USERS' && !isRestricted) {
         fetchCollaborators();
+    }
+    if (activeTab === 'DATA' && !isRestricted) {
+        fetchAutoBackups();
     }
   }, [activeTab, currentBookId]);
 
@@ -420,6 +439,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
       };
       reader.readAsText(file);
       e.target.value = '';
+  };
+
+  const handleRestoreAutoBackupClick = async (backup: {filename: string, date: string, timestamp: number}) => {
+      if (confirm(`¿Estás seguro de que quieres restaurar la copia del día ${backup.date}? Se sobrescribirán todos los datos del libro actual.`)) {
+          try {
+              await restoreAutoBackup(currentBookId, backup.filename);
+              alert("Copia de seguridad restaurada con éxito. La aplicación se recargará.");
+              window.location.reload();
+          } catch (e: any) {
+              alert(e.message);
+          }
+      }
   };
 
   const executeRestore = () => {
@@ -828,6 +859,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                         </div>
                         <input type="file" ref={restoreFileRef} className="hidden" accept=".json" onChange={handleRestoreFileSelect} />
                     </div>
+
+                    {/* Copias Automáticas */}
+                    {!isRestricted && (
+                        <div className="space-y-6 pt-8 border-t border-slate-100">
+                            <div className="flex items-center justify-between">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Copias Automáticas (Últimos 5 días)</h4>
+                                <button onClick={fetchAutoBackups} className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"><RefreshCw size={14} className={isLoadingAutoBackups ? 'animate-spin' : ''}/></button>
+                            </div>
+                            {isLoadingAutoBackups ? (
+                                <div className="flex items-center gap-2 text-slate-400 text-xs font-bold py-4"><Loader2 className="animate-spin" size={14}/> Cargando historial...</div>
+                            ) : autoBackups.length > 0 ? (
+                                <div className="grid grid-cols-1 gap-3">
+                                    {autoBackups.map(backup => (
+                                        <div key={backup.filename} className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-200 transition-all">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-600 shadow-sm"><History size={18}/></div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-slate-700">Copia del {backup.date}</p>
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Generada el {new Date(backup.timestamp).toLocaleString()}</p>
+                                                </div>
+                                            </div>
+                                            <button 
+                                                onClick={() => handleRestoreAutoBackupClick(backup)}
+                                                className="px-4 py-2 bg-white text-indigo-600 border border-indigo-100 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                                            >
+                                                Restaurar
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-xs font-bold text-slate-400 py-4 italic">No hay copias automáticas disponibles todavía.</p>
+                            )}
+                        </div>
+                    )}
 
                     {restoreStats && (
                         <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 space-y-2 animate-in zoom-in-95">

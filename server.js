@@ -791,6 +791,55 @@ app.post('/api/verify', async (req, res) => {
 });
 
 // LOGIN MEJORADO CON 2FA
+// --- Backup Management ---
+app.get('/api/book/:bookId/backups', authenticateToken, async (req, res) => {
+    const { username } = req.user;
+    const { bookId } = req.params;
+    const userDir = getUserDir(username);
+    const backupsDir = path.join(userDir, 'backups', bookId);
+
+    try {
+        const files = await fs.readdir(backupsDir);
+        const backupFiles = await Promise.all(
+            files
+                .filter(f => f.startsWith('backup_') && f.endsWith('.json'))
+                .map(async (f) => {
+                    const stats = await fs.stat(path.join(backupsDir, f));
+                    return {
+                        filename: f,
+                        date: f.replace('backup_', '').replace('.json', ''),
+                        timestamp: stats.mtime.getTime()
+                    };
+                })
+        );
+        res.json(backupFiles.sort((a, b) => b.timestamp - a.timestamp));
+    } catch (err) {
+        res.json([]);
+    }
+});
+
+app.post('/api/book/:bookId/backups/:filename/restore', authenticateToken, async (req, res) => {
+    const { username } = req.user;
+    const { bookId, filename } = req.params;
+    const userDir = getUserDir(username);
+    const backupPath = path.join(userDir, 'backups', bookId, filename);
+
+    try {
+        const content = await fs.readFile(backupPath, 'utf-8');
+        const backupData = JSON.parse(content);
+
+        // Restaurar el libro (sobrescribir el actual)
+        const fullState = await readFullUserState(username);
+        fullState.booksData[bookId] = backupData;
+        
+        await saveFullUserState(username, fullState);
+        res.json({ success: true, message: "Copia de seguridad restaurada correctamente" });
+    } catch (err) {
+        console.error("Error restoring backup:", err);
+        res.status(500).json({ error: "Error al restaurar la copia de seguridad" });
+    }
+});
+
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     try {
