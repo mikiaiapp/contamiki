@@ -756,7 +756,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
         )}
 
         {activeTab === 'DATA' && (
-            <div className={`space-y-12 animate-in fade-in slide-in-from-bottom-4 ${isRestricted ? 'opacity-40 pointer-events-none grayscale select-none' : ''}`}>
+            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
                 <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
                     <div className="flex items-center gap-4">
                         <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Download size={24}/></div>
@@ -814,7 +814,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                     )}
                 </div>
 
-                <div className="bg-rose-50 p-10 rounded-[3rem] border border-rose-100 space-y-6 text-center mt-8">
+                <div className={`bg-rose-50 p-10 rounded-[3rem] border border-rose-100 space-y-6 text-center mt-8 ${isRestricted ? 'opacity-40 pointer-events-none grayscale select-none' : ''}`}>
                     <div className="mx-auto w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-rose-600 shadow-sm"><ShieldAlert size={32}/></div>
                     <div><h3 className="text-xl font-black text-rose-900 uppercase">Zona de Peligro</h3><p className="text-xs font-bold text-rose-400 mt-2">Acciones destructivas locales. Requieren verificación.</p></div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -900,7 +900,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                         <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 space-y-2">
                             <div className="flex items-center gap-2 text-indigo-700 font-black uppercase text-xs"><ShieldAlert size={14}/> Permisos de Invitados</div>
                             <p className="text-xs font-medium text-indigo-900/70 leading-relaxed">
-                                Los usuarios invitados podrán ver y gestionar movimientos, pero tendrán acceso de solo lectura a la configuración (Ajustes). No podrán invitar a otros usuarios ni eliminar la contabilidad.
+                                Los usuarios invitados tienen acceso completo para gestionar movimientos, cuentas, categorías y realizar copias de seguridad. No podrán invitar a otros usuarios ni eliminar la contabilidad completa.
                             </p>
                         </div>
                     </div>

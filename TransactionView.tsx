@@ -885,7 +885,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   };
 
   const handleDuplicate = (t: Transaction) => {
-      setEditingTx(null); setFType(t.type); setFAmount(Math.abs(t.amount).toString()); setFDesc(t.description + ' (Copia)'); setFDate(new Date().toISOString().split('T')[0]); setFAcc(t.accountId); setFCat(t.categoryId); setFTransferDest(t.transferAccountId || ''); setFAttachment(t.attachment); setActiveMenuTxId(null); setIsModalOpen(true);
+      setEditingTx(null); setFType(t.type); setFAmount(Math.abs(t.amount).toString()); setFDesc(t.description); setFDate(new Date().toISOString().split('T')[0]); setFAcc(t.accountId); setFCat(t.categoryId); setFTransferDest(t.transferAccountId || ''); setFAttachment(t.attachment); setActiveMenuTxId(null); setIsModalOpen(true);
   };
 
   const handleSaveRecurrent = () => {

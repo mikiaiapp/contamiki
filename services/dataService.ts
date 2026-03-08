@@ -46,15 +46,22 @@ export const defaultAppState: AppState = {
 };
 
 const createInitialMultiBookState = (initialData?: AppState): MultiBookState => {
-    const defaultBookId = 'default_book_1';
+    if (initialData) {
+        const defaultBookId = 'default_book_1';
+        return {
+            booksMetadata: [
+                { id: defaultBookId, name: 'Mi Contabilidad', color: 'BLACK', currency: 'EUR' }
+            ],
+            currentBookId: defaultBookId,
+            booksData: {
+                [defaultBookId]: initialData
+            }
+        };
+    }
     return {
-        booksMetadata: [
-            { id: defaultBookId, name: 'Mi Contabilidad', color: 'BLACK', currency: 'EUR' }
-        ],
-        currentBookId: defaultBookId,
-        booksData: {
-            [defaultBookId]: initialData || defaultAppState
-        }
+        booksMetadata: [],
+        currentBookId: '',
+        booksData: {}
     };
 };
 

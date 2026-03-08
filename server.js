@@ -54,12 +54,6 @@ async function startServer() {
         return value;
     };
 
-    // DEBUG: List all SMTP related env vars
-    console.log("📋 [ENV DEBUG] SMTP related variables in process.env:");
-    Object.keys(process.env).filter(k => k.startsWith('SMTP_') || k === 'APP_URL' || k === 'JWT_SECRET').forEach(k => {
-        console.log(`   - ${k}: ${process.env[k] ? 'SET' : 'EMPTY'}`);
-    });
-
     const JWT_SECRET = await getSecret('JWT_SECRET') || 'super_secret_master_key_conta_miki';
     const APP_URL = await getSecret('APP_URL') || `http://localhost:${PORT}`;
     
@@ -72,8 +66,6 @@ async function startServer() {
     const smtpSecure = await getSecret('SMTP_SECURE');
     const smtpUser = await getSecret('SMTP_USER');
     const smtpPass = await getSecret('SMTP_PASS');
-
-    console.log(`🔍 [SMTP DEBUG] Host: ${smtpHost ? 'DETECTED' : 'MISSING'}, Port: ${smtpPort}, Secure: ${smtpSecure}, User: ${smtpUser ? 'DETECTED' : 'MISSING'}`);
 
     const SMTP_CONFIG = {
         host: smtpHost,
@@ -109,13 +101,43 @@ if (mailer) {
 }
 
 const sendEmail = async (to, subject, text, html) => {
+    // 1. INTENTAR USAR EL CARTERO CENTRAL (SI ESTÁ CONFIGURADO)
+    const centralUrl = await getSecret('CENTRAL_EMAIL_URL');
+    const centralKey = await getSecret('CENTRAL_EMAIL_KEY');
+
+    if (centralUrl && centralKey) {
+        try {
+            const response = await fetch(`${centralUrl}/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    to, 
+                    subject, 
+                    text, 
+                    html, 
+                    key: centralKey,
+                    fromName: 'ContaMiki'
+                })
+            });
+            const result = await response.json();
+            if (result.success) {
+                console.log(`[CENTRAL EMAIL] Enviado a ${to} vía Proxy`);
+                return true;
+            }
+        } catch (error) {
+            console.error("[CENTRAL EMAIL ERROR]", error);
+            // Si falla el central, intentamos el local si existe
+        }
+    }
+
+    // 2. SI NO HAY CENTRAL O FALLA, USAR EL LOCAL (SI ESTÁ CONFIGURADO)
     if (mailer) {
         try {
             await mailer.sendMail({ from: `"ContaMiki Security" <${smtpUser || 'noreply@contamiki.local'}>`, to, subject, text, html });
-            console.log(`[EMAIL SENT] To: ${to} | Subject: ${subject}`);
+            console.log(`[LOCAL EMAIL SENT] To: ${to} | Subject: ${subject}`);
             return true;
         } catch (error) {
-            console.error("[EMAIL ERROR]", error);
+            console.error("[LOCAL EMAIL ERROR]", error);
             return false;
         }
     } else {
@@ -437,26 +459,45 @@ const saveFullUserState = async (username, fullState) => {
         }
     }
 
-    // 0. EXTRACCIÓN DE LOGOS (Base64 -> Archivo) - SOLO PROPIOS
-    for (const book of ownBooksMeta) {
-        if (book.logo && book.logo.startsWith('data:image')) {
-            const bookDir = path.join(userDir, book.id);
-            await fs.mkdir(bookDir, { recursive: true });
-            
-            const matches = book.logo.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/);
-            if (matches) {
-                const buffer = Buffer.from(matches[2], 'base64');
-                await fs.writeFile(path.join(bookDir, 'logo.png'), buffer);
-                book.logo = `/api/book/${book.id}/logo?v=${Date.now()}`;
+    // 0. EXTRACCIÓN DE LOGOS (Base64 -> Archivo)
+    if (fullState.booksMetadata && Array.isArray(fullState.booksMetadata)) {
+        for (const book of fullState.booksMetadata) {
+            if (book.logo && book.logo.startsWith('data:image')) {
+                let bookTargetDir;
+                if (book.isShared) {
+                    // Verificar permiso antes de guardar logo en libro compartido
+                    const sharedAccess = await readSharedAccess();
+                    const hasAccess = sharedAccess.find(a => a.userId === username && a.bookId === book.id && a.ownerUsername === book.owner);
+                    if (!hasAccess) continue;
+                    bookTargetDir = path.join(getUserDir(book.owner), book.id);
+                } else {
+                    bookTargetDir = path.join(userDir, book.id);
+                }
 
-                // Sistema de logo global (solo si es propio)
-                try {
-                    await fs.writeFile(SYSTEM_LOGO_FILE, buffer);
-                } catch (sysErr) {}
+                await fs.mkdir(bookTargetDir, { recursive: true });
+                
+                const matches = book.logo.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/);
+                if (matches) {
+                    const buffer = Buffer.from(matches[2], 'base64');
+                    await fs.writeFile(path.join(bookTargetDir, 'logo.png'), buffer);
+                    book.logo = `/api/book/${book.id}/logo?v=${Date.now()}`;
+
+                    // Sistema de logo global (solo si es propio)
+                    if (!book.isShared) {
+                        try {
+                            await fs.writeFile(SYSTEM_LOGO_FILE, buffer);
+                        } catch (sysErr) {}
+                    }
+                }
+            } else if (book.logo === undefined || book.logo === null) {
+                let bookTargetDir;
+                if (book.isShared) {
+                    bookTargetDir = path.join(getUserDir(book.owner), book.id);
+                } else {
+                    bookTargetDir = path.join(userDir, book.id);
+                }
+                try { await fs.unlink(path.join(bookTargetDir, 'logo.png')); } catch (e) {}
             }
-        } else if (book.logo === undefined || book.logo === null) {
-            const bookDir = path.join(userDir, book.id);
-            try { await fs.unlink(path.join(bookDir, 'logo.png')); } catch (e) {}
         }
     }
 
@@ -467,6 +508,38 @@ const saveFullUserState = async (username, fullState) => {
         currentBookId: fullState.currentBookId || ''
     };
     await fs.writeFile(path.join(userDir, 'metadata.json'), JSON.stringify(rootState, null, 2));
+
+    // 1.5 Actualizar metadatos de libros compartidos (si han cambiado)
+    const sharedAccess = await readSharedAccess();
+    for (const sharedBook of sharedBooksMeta) {
+        try {
+            // Verificar permiso de escritura (EDITOR o superior)
+            const hasAccess = sharedAccess.find(a => a.userId === username && a.bookId === sharedBook.id && a.ownerUsername === sharedBook.owner);
+            if (!hasAccess) continue;
+
+            const ownerDir = getUserDir(sharedBook.owner);
+            const ownerMetaFile = path.join(ownerDir, 'metadata.json');
+            const ownerMeta = JSON.parse(await fs.readFile(ownerMetaFile, 'utf-8'));
+            
+            const bookIndex = ownerMeta.booksMetadata.findIndex(b => b.id === sharedBook.id);
+            if (bookIndex !== -1) {
+                const original = ownerMeta.booksMetadata[bookIndex];
+                // Solo actualizar si hay cambios
+                if (original.name !== sharedBook.name || original.color !== sharedBook.color || original.logo !== sharedBook.logo) {
+                    ownerMeta.booksMetadata[bookIndex] = {
+                        ...original,
+                        name: sharedBook.name,
+                        color: sharedBook.color,
+                        logo: sharedBook.logo
+                    };
+                    await fs.writeFile(ownerMetaFile, JSON.stringify(ownerMeta, null, 2));
+                    console.log(`[SHARED META UPDATE] Book ${sharedBook.id} updated by ${username}`);
+                }
+            }
+        } catch (err) {
+            console.warn(`Could not update metadata for shared book ${sharedBook.id} of owner ${sharedBook.owner}`, err);
+        }
+    }
 
     // 2. Guardar Libros Individualmente
     if (fullState.booksData) {
@@ -604,47 +677,6 @@ app.post('/api/register', async (req, res) => {
         const userDir = getUserDir(username);
         await fs.mkdir(userDir, { recursive: true });
 
-        // --- INICIALIZAR DATOS CON LOGO SI EXISTE ---
-        try {
-            // Verificamos si existe el logo del sistema
-            await fs.access(SYSTEM_LOGO_FILE);
-            
-            // Si llegamos aquí, existe. Inicializamos estructura básica del usuario.
-            const defaultBookId = 'default_book_1';
-            const bookDir = path.join(userDir, defaultBookId);
-            await fs.mkdir(bookDir, { recursive: true });
-
-            // 1. Copiar Logo
-            await fs.copyFile(SYSTEM_LOGO_FILE, path.join(bookDir, 'logo.png'));
-
-            // 2. Escribir Configuración por Defecto
-            await fs.writeFile(path.join(bookDir, 'config.json'), JSON.stringify(DEFAULT_APP_STATE, null, 2));
-
-            // 3. Escribir Metadata apuntando al logo
-            const meta = {
-                booksMetadata: [
-                    { 
-                        id: defaultBookId, 
-                        name: 'Mi Contabilidad', 
-                        color: 'BLACK', 
-                        currency: 'EUR',
-                        logo: `/api/book/${defaultBookId}/logo?v=${Date.now()}` // URL persistente
-                    }
-                ],
-                currentBookId: defaultBookId
-            };
-            await fs.writeFile(path.join(userDir, 'metadata.json'), JSON.stringify(meta, null, 2));
-            
-            console.log(`[AUTO-SETUP] Initialized data for new user ${username} with system logo.`);
-
-        } catch (initErr) {
-            // Si no hay logo del sistema o falla algo, no bloqueamos el registro.
-            // El cliente inicializará los datos por defecto (sin logo) en la primera carga.
-            if (initErr.code !== 'ENOENT') {
-                console.error("[AUTO-SETUP] Error initializing default user data:", initErr);
-            }
-        }
-        
         // Enviar Email Verificación
         const link = `${APP_URL}?action=verify&token=${verificationToken}`;
         await sendEmail(
@@ -1067,18 +1099,6 @@ app.post('/api/accept-invite', async (req, res) => {
             // Inicializar directorio
             const userDir = getUserDir(user.username);
             await fs.mkdir(userDir, { recursive: true });
-            
-            // Crear libro por defecto propio también
-            const defaultBookId = 'default_book_1';
-            const bookDir = path.join(userDir, defaultBookId);
-            await fs.mkdir(bookDir, { recursive: true });
-            await fs.writeFile(path.join(bookDir, 'config.json'), JSON.stringify(DEFAULT_APP_STATE, null, 2));
-            
-            const meta = {
-                booksMetadata: [{ id: defaultBookId, name: 'Mi Contabilidad', color: 'BLACK', currency: 'EUR' }],
-                currentBookId: defaultBookId
-            };
-            await fs.writeFile(path.join(userDir, 'metadata.json'), JSON.stringify(meta, null, 2));
             
             isNewUser = true;
         }
