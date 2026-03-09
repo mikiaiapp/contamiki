@@ -9,7 +9,7 @@ import { LoginView } from './LoginView';
 import { AppState, View, Transaction, GlobalFilter, MultiBookState, BookMetadata, BookColor } from './types';
 import { loadData, saveData, defaultAppState } from './services/dataService';
 import { isAuthenticated, logout, getToken, deleteBook } from './services/authService';
-import { X, Check, WifiOff, RefreshCw, Plus, LayoutList } from 'lucide-react';
+import { X, Check, WifiOff, RefreshCw, Plus, LayoutList, LogOut } from 'lucide-react';
 
 const App: React.FC = () => {
   console.log("App: Rendering...");
@@ -256,12 +256,20 @@ const App: React.FC = () => {
               <p className="text-slate-400 text-sm max-w-md mb-10 leading-relaxed">
                   Para comenzar a gestionar tus finanzas, necesitas crear tu primera contabilidad o aceptar una invitación.
               </p>
-              <button 
-                  onClick={() => { setEditingBookId(null); setTempBookName(''); setTempBookColor('BLACK'); setIsBookModalOpen(true); }}
-                  className="bg-white text-slate-900 px-10 py-5 rounded-[2rem] font-black uppercase text-xs tracking-widest flex items-center gap-3 shadow-xl shadow-white/5 hover:scale-105 transition-transform"
-              >
-                  <Plus size={18} /> Crear Primera Contabilidad
-              </button>
+              <div className="flex flex-col sm:flex-row gap-4">
+                  <button 
+                      onClick={() => { setEditingBookId(null); setTempBookName(''); setTempBookColor('BLACK'); setIsBookModalOpen(true); }}
+                      className="bg-white text-slate-900 px-10 py-5 rounded-[2rem] font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-white/5 hover:scale-105 transition-transform"
+                  >
+                      <Plus size={18} /> Crear Primera Contabilidad
+                  </button>
+                  <button 
+                      onClick={() => { logout(); setIsLoggedIn(false); }}
+                      className="bg-slate-800 text-white px-10 py-5 rounded-[2rem] font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-slate-700 transition-colors"
+                  >
+                      <LogOut size={18} /> Cerrar Sesión
+                  </button>
+              </div>
 
               {isBookModalOpen && (
                   <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
