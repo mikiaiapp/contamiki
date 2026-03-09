@@ -5,7 +5,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
@@ -60,98 +59,48 @@ async function startServer() {
     console.log(`🚀 [CONFIG] APP_URL: ${APP_URL}`);
     console.log(`🔐 [CONFIG] JWT_SECRET: ${JWT_SECRET === 'super_secret_master_key_conta_miki' ? 'DEFAULT (INSECURE)' : 'CUSTOM'}`);
     
-    // EMAIL CONFIGURATION
-    const smtpHost = await getSecret('SMTP_HOST');
-    const smtpPort = await getSecret('SMTP_PORT');
-    const smtpSecure = await getSecret('SMTP_SECURE');
-    const smtpUser = await getSecret('SMTP_USER');
-    const smtpPass = await getSecret('SMTP_PASS');
+    const sendEmail = async (to, subject, text, html) => {
+        const centralUrl = await getSecret('CENTRAL_EMAIL_URL') || 'https://cartero.mafede.i234.me';
+        const centralKey = await getSecret('CENTRAL_EMAIL_KEY') || 'mikiaiapp';
 
-    const SMTP_CONFIG = {
-        host: smtpHost,
-        port: smtpPort || 587,
-        secure: smtpSecure === 'true',
-        auth: {
-            user: smtpUser,
-            pass: smtpPass,
-        },
-    };
-
-    // Transporter (o Mock si no hay config)
-    const hasSmtp = smtpHost && smtpHost.trim() !== '';
-
-const mailer = hasSmtp 
-    ? nodemailer.createTransport(SMTP_CONFIG)
-    : null;
-
-// VERIFICACIÓN DE CONEXIÓN SMTP AL INICIO
-if (mailer) {
-    console.log(`📧 [SMTP INIT] Intentando conectar a ${SMTP_CONFIG.host}:${SMTP_CONFIG.port} con usuario ${SMTP_CONFIG.auth.user}...`);
-    mailer.verify((error, success) => {
-        if (error) {
-            console.error("❌ [SMTP ERROR] No se pudo conectar al servidor de correo:");
-            console.error(error);
-            console.error("SUGERENCIA: Si usas Gmail, asegúrate de usar una 'Contraseña de Aplicación' y no tu clave normal.");
-        } else {
-            console.log("✅ [SMTP SUCCESS] Servidor de correo conectado y listo.");
-        }
-    });
-} else {
-    console.log("⚠️ [SMTP DISABLED] No se detectó configuración SMTP válida. Los correos se imprimirán en la consola del servidor.");
-}
-
-const sendEmail = async (to, subject, text, html) => {
-    // 1. INTENTAR USAR EL CARTERO CENTRAL (SI ESTÁ CONFIGURADO)
-    const centralUrl = await getSecret('CENTRAL_EMAIL_URL');
-    const centralKey = await getSecret('CENTRAL_EMAIL_KEY');
-    const smtpUser = await getSecret('SMTP_USER');
-
-    if (centralUrl && centralKey) {
-        try {
-            const response = await fetch(`${centralUrl}/send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    to, 
-                    subject, 
-                    text, 
-                    html, 
-                    key: centralKey,
-                    from: smtpUser || 'mikiaiapp@gmail.com',
-                    fromName: 'ContaMiki'
-                })
-            });
-            const result = await response.json();
-            if (result.success) {
-                console.log(`[CENTRAL EMAIL] Enviado a ${to} vía Proxy`);
-                return true;
+        if (centralUrl && centralKey) {
+            try {
+                // Asegurarse de que la URL tiene protocolo
+                const url = centralUrl.startsWith('http') ? centralUrl : `https://${centralUrl}`;
+                const response = await fetch(`${url}/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        to, 
+                        subject, 
+                        text, 
+                        html, 
+                        key: centralKey,
+                        from: 'mikiaiapp@gmail.com',
+                        fromName: 'ContaMiki'
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    console.log(`[CENTRAL EMAIL] Enviado a ${to} vía Proxy`);
+                    return true;
+                } else {
+                    console.error("[CENTRAL EMAIL ERROR] Respuesta del servidor:", result);
+                    return false;
+                }
+            } catch (error) {
+                console.error("[CENTRAL EMAIL ERROR]", error);
+                return false;
             }
-        } catch (error) {
-            console.error("[CENTRAL EMAIL ERROR]", error);
-            // Si falla el central, intentamos el local si existe
-        }
-    }
-
-    // 2. SI NO HAY CENTRAL O FALLA, USAR EL LOCAL (SI ESTÁ CONFIGURADO)
-    if (mailer) {
-        try {
-            await mailer.sendMail({ from: `"ContaMiki Security" <${smtpUser || 'mikiaiapp@gmail.com'}>`, to, subject, text, html });
-            console.log(`[LOCAL EMAIL SENT] To: ${to} | Subject: ${subject}`);
+        } else {
+            console.log("==================================================");
+            console.log(`[MOCK EMAIL] To: ${to}`);
+            console.log(`Subject: ${subject}`);
+            console.log(`Content: ${text}`);
+            console.log("==================================================");
             return true;
-        } catch (error) {
-            console.error("[LOCAL EMAIL ERROR]", error);
-            return false;
         }
-    } else {
-        // MODO DESARROLLO / LOCAL: Imprimir en consola
-        console.log("==================================================");
-        console.log(`[MOCK EMAIL] To: ${to}`);
-        console.log(`Subject: ${subject}`);
-        console.log(`Content: ${text}`);
-        console.log("==================================================");
-        return true;
-    }
-};
+    };
 
 // DEFINICIÓN DE DIRECTORIO DE DATOS ROBUSTA
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');

@@ -13,7 +13,6 @@ dist-ssr
 *.local
 
 # Sensitive information and local data
-.env
 data/
 users.json
 
