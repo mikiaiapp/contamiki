@@ -812,7 +812,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
 
         {activeTab === 'DATA' && (
             <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                <div className={`bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8 ${isRestricted ? 'opacity-40 pointer-events-none grayscale select-none' : ''}`}>
                     <div className="flex items-center gap-4">
                         <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Download size={24}/></div>
                         <div><h3 className="text-xl font-black text-slate-900 uppercase">Copia de Seguridad</h3><p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Exportar datos con adjuntos (.json)</p></div>
@@ -845,7 +845,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                     )}
                 </div>
 
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8">
+                <div className={`bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 space-y-8 ${isRestricted ? 'opacity-40 pointer-events-none grayscale select-none' : ''}`}>
                     <div className="flex items-center gap-4">
                         <div className="bg-amber-500 p-4 rounded-3xl text-white shadow-xl shadow-amber-500/20"><History size={24}/></div>
                         <div><h3 className="text-xl font-black text-slate-900 uppercase">Restauración</h3><p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Cargar archivo de copia anterior</p></div>
@@ -914,7 +914,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                     </div>
                 </div>
 
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col md:flex-row items-center gap-10 mt-8">
+                <div className={`bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col md:flex-row items-center gap-10 mt-8 ${isRestricted ? 'opacity-40 pointer-events-none grayscale select-none' : ''}`}>
                     <div className="flex flex-col items-center gap-4 relative group">
                         <div className="w-32 h-32 md:w-40 md:h-40 rounded-[2.5rem] border-4 border-slate-50 bg-slate-50 shadow-inner flex items-center justify-center overflow-hidden relative">
                             {currentBook?.logo ? (
