@@ -1301,7 +1301,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     </div>
 
       {selectedIds.size > 0 && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[150] animate-in slide-in-from-bottom-4 fade-in duration-300">
+          <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-[150] animate-in slide-in-from-bottom-4 fade-in duration-300 w-max max-w-[95vw]">
               <div className="bg-slate-950 text-white rounded-2xl shadow-2xl p-2 px-4 flex items-center gap-4 border border-white/10"><span className="text-[10px] font-black uppercase tracking-widest px-2">{selectedIds.size} Seleccionados</span><div className="h-6 w-px bg-white/20"></div><button onClick={() => { setBulkEditTarget('DATE'); setBulkEditValue(''); setIsBulkEditModalOpen(true); }} className="flex items-center gap-2 px-3 py-2 active:bg-white/10 lg:hover:bg-white/10 rounded-xl transition-all"><PenTool size={14}/> <span className="text-[10px] font-bold uppercase">Editar Bloque</span></button><button onClick={() => { setBulkEditTarget('DELETE'); setIsBulkEditModalOpen(true); }} className="flex items-center gap-2 px-3 py-2 bg-rose-600 active:bg-rose-700 lg:hover:bg-rose-700 rounded-xl transition-all shadow-lg"><Trash2 size={14}/> <span className="text-[10px] font-bold uppercase">Borrar</span></button><button onClick={() => setSelectedIds(new Set())} className="p-2 active:bg-white/10 lg:hover:bg-white/10 rounded-full text-slate-400 active:text-white lg:hover:text-white"><X size={14}/></button></div>
           </div>
       )}

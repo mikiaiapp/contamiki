@@ -407,19 +407,21 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       </main>
 
       {/* NAVBAR MOBILE BOTTOM */}
-      <nav className="lg:hidden fixed bottom-6 left-4 right-4 bg-slate-900/95 backdrop-blur-xl border border-white/10 flex justify-around items-center p-2 z-50 rounded-[2.5rem] shadow-2xl">
+      <nav className="lg:hidden fixed bottom-6 left-4 right-4 h-16 bg-slate-900/95 backdrop-blur-xl border border-white/10 flex items-stretch z-[100] rounded-[2.5rem] shadow-2xl overflow-hidden select-none">
         {mainNavItems.map((item) => (
           <button
             key={item.id}
             onClick={() => setCurrentView(item.id)}
-            className={`flex flex-col items-center gap-1 p-3 transition-all relative active:bg-white/5 touch-manipulation ${
-              currentView === item.id ? 'text-indigo-400 scale-110' : 'text-slate-500 lg:hover:text-slate-300'
+            className={`flex-1 flex flex-col items-center justify-center gap-1 transition-all relative active:bg-white/10 active:scale-95 touch-manipulation pointer-events-auto ${
+              currentView === item.id ? 'text-indigo-400' : 'text-slate-500 lg:hover:text-slate-300'
             }`}
           >
-            {item.icon}
-            <span className="text-[8px] font-black uppercase tracking-[0.1em]">{item.label}</span>
+            <div className={`transition-transform duration-300 pointer-events-none ${currentView === item.id ? 'scale-110' : ''}`}>
+              {item.icon}
+            </div>
+            <span className={`text-[8px] font-black uppercase tracking-[0.1em] transition-all pointer-events-none ${currentView === item.id ? 'opacity-100' : 'opacity-70'}`}>{item.label}</span>
             {item.badge !== undefined && item.badge > 0 && (
-                <span className="absolute top-1 right-2 bg-rose-500 text-white text-[7px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md">
+                <span className="absolute top-3 right-[20%] bg-rose-500 text-white text-[7px] font-black min-w-[1rem] h-4 px-1 rounded-full flex items-center justify-center shadow-md border border-slate-900 pointer-events-none">
                     {item.badge}
                 </span>
             )}
