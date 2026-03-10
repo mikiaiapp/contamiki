@@ -1155,7 +1155,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     <button onClick={(e) => { e.stopPropagation(); setShowFavoritesList(!showFavoritesList); }} className="w-12 h-12 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl shadow-sm active:bg-amber-100 lg:hover:bg-amber-100 flex items-center justify-center transition-all active:scale-95" title="Favoritos"><Heart size={20} fill={showFavoritesList ? "currentColor" : "none"} /></button>
                     {showFavoritesList && (
                         <>
-                            <div className="fixed inset-0 z-10 bg-transparent" onClick={() => setShowFavoritesList(false)}></div>
+                            <div className="fixed inset-0 z-10 bg-transparent cursor-pointer" onClick={() => setShowFavoritesList(false)}></div>
                             <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:absolute md:top-full md:right-0 md:left-auto md:translate-x-0 md:translate-y-0 md:mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 w-[85vw] max-w-xs md:w-64 p-2 z-20 animate-in fade-in zoom-in duration-200 origin-center md:origin-top-right">
                                 <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center md:text-left">Plantillas Rápidas</div>
                                 <div className="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
@@ -1245,16 +1245,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           let typeColorClass = 'text-slate-900'; if (t.type === 'EXPENSE') typeColorClass = 'text-rose-600'; else if (t.type === 'INCOME') typeColorClass = 'text-emerald-600';
           if (t.type === 'TRANSFER') {
             debitId = t.transferAccountId || ''; creditId = t.accountId;
-            debitNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(dstAcc?.icon || '🏦')} <span className="line-clamp-2">{dstAcc?.name}</span></div>;
-            creditNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></div>;
+            debitNode = <button className={`flex items-center gap-1 font-bold text-left line-clamp-2 leading-tight active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(dstAcc?.icon || '🏦')} <span className="line-clamp-2">{dstAcc?.name}</span></button>;
+            creditNode = <button className={`flex items-center gap-1 font-bold text-left line-clamp-2 leading-tight active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></button>;
           } else if (t.type === 'INCOME') {
             debitId = t.accountId; creditId = t.categoryId;
-            debitNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></div>;
-            creditNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name || 'S/C'}</span></div>;
+            debitNode = <button className={`flex items-center gap-1 font-bold text-left line-clamp-2 leading-tight active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></button>;
+            creditNode = <button className={`flex items-center gap-1 font-bold text-left line-clamp-2 leading-tight active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name || 'S/C'}</span></button>;
           } else {
             debitId = t.categoryId; creditId = t.accountId;
-            debitNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name}</span></div>;
-            creditNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></div>;
+            debitNode = <button className={`flex items-center gap-1 font-bold text-left line-clamp-2 leading-tight active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name}</span></button>;
+            creditNode = <button className={`flex items-center gap-1 font-bold text-left line-clamp-2 leading-tight active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></button>;
           }
           const balance = runningBalances.get(t.id) || 0;
           const displayAmt = getDisplayAmount(t);
@@ -1264,7 +1264,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     <div className="flex justify-center"><button onClick={(e) => { e.stopPropagation(); toggleSelection(t.id); }} className={`text-slate-400 ${isSelected ? 'text-indigo-600' : 'active:text-indigo-600 lg:hover:text-indigo-600'}`}>{isSelected ? <CheckSquare size={16} /> : <Square size={16} />}</button></div>
                     <div className="text-left text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-black text-slate-400 uppercase tracking-tighter leading-none truncate">{formatDateDisplay(t.date)}</div>
                     <div className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] pr-1 sm:pr-0 leading-tight">{debitNode}</div>
-                    <div className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-bold text-slate-800 uppercase line-clamp-2 leading-tight cursor-pointer active:text-indigo-600 lg:hover:text-indigo-600 pl-0.5 sm:pl-0" onClick={(e) => {e.stopPropagation(); setColFilterDesc(t.description);}} title={t.description}>{t.description}</div>
+                    <button className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-bold text-slate-800 uppercase text-left line-clamp-2 leading-tight active:text-indigo-600 lg:hover:text-indigo-600 pl-0.5 sm:pl-0" onClick={(e) => {e.stopPropagation(); setColFilterDesc(t.description);}} title={t.description}>{t.description}</button>
                     <div className="flex justify-center">{t.attachment ? ( <button onClick={(e) => { e.stopPropagation(); setPreviewAttachment(t.attachment || null); }} className="p-1 active:bg-indigo-50 lg:hover:bg-indigo-50 rounded-full text-indigo-500 transition-colors"><Paperclip size={12} className="md:size-4"/></button> ) : <div className="w-1 md:w-2" />}</div>
                     <div className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] pr-1 sm:pr-0 leading-tight">{creditNode}</div>
                     <div className={`text-right text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-black font-mono tracking-tighter truncate ${getAmountColor(displayAmt, t.type)} pl-0.5 sm:pl-0`}>{formatCurrency(displayAmt)}</div>
@@ -1272,7 +1272,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     <div className="flex justify-center relative"><button onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(activeMenuTxId === t.id ? null : t.id); }} className="p-1.5 md:p-2 text-slate-300 active:text-indigo-600 active:bg-indigo-50 lg:hover:text-indigo-600 lg:hover:bg-indigo-50 rounded-lg transition-colors"><MoreVertical size={16} /></button>
                         {activeMenuTxId === t.id && (
                             <>
-                                <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(null); }}></div>
+                                <div className="fixed inset-0 z-40 cursor-pointer" onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(null); }}></div>
                                 <div className="absolute top-8 right-0 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 min-w-[180px] p-2 flex flex-col gap-1 animate-in fade-in zoom-in duration-200 origin-top-right" onClick={e => e.stopPropagation()}>
                                 <button onClick={() => { setActiveMenuTxId(null); openEditor(t); }} className="flex items-center gap-3 px-3 py-2.5 active:bg-slate-50 lg:hover:bg-slate-50 rounded-xl text-left transition-colors"><Edit3 size={14} className="text-indigo-600"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Editar</span></button>
                                 <button onClick={() => handleDuplicate(t)} className="flex items-center gap-3 px-3 py-2.5 active:bg-slate-50 lg:hover:bg-slate-50 rounded-xl text-left transition-colors"><Copy size={14} className="text-slate-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Duplicar</span></button>
@@ -1308,7 +1308,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {isBulkEditModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in duration-200" onClick={() => setIsBulkEditModalOpen(false)}>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in duration-200 cursor-pointer" onClick={() => setIsBulkEditModalOpen(false)}>
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 space-y-6" onClick={e => e.stopPropagation()}><div className="flex justify-between items-center"><h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">{bulkEditTarget === 'DELETE' ? <Trash2 className="text-rose-500"/> : <LayoutList className="text-indigo-600"/>}{bulkEditTarget === 'DELETE' ? 'Borrado Masivo' : 'Edición en Bloque'}</h3><button onClick={() => setIsBulkEditModalOpen(false)} className="p-2 bg-slate-100 rounded-full active:bg-rose-100 active:text-rose-500 lg:hover:bg-rose-100 lg:hover:text-rose-500 transition-colors"><X size={18} /></button></div>
                   {bulkEditTarget === 'DELETE' ? ( <p className="text-sm font-medium text-slate-600">Estás a punto de eliminar permanentemente <span className="font-black text-slate-900">{selectedIds.size}</span> movimientos. ¿Estás seguro?</p> ) : (
                       <div className="space-y-4"><p className="text-xs text-slate-500">Se actualizarán <span className="font-bold">{selectedIds.size}</span> elementos.</p>
@@ -1327,7 +1327,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     )}
 
       {isImportModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in duration-500" onClick={closeImportModal}>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in duration-500 cursor-pointer" onClick={closeImportModal}>
           <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-slate-200" onClick={e => e.stopPropagation()}>
             <button onClick={closeImportModal} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500"><X size={24}/></button>
             <div className="flex items-center gap-4 mb-8">
@@ -1427,42 +1427,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                                 <input type="text" className="col-span-6 text-xs font-bold text-slate-800 bg-slate-50/50 active:bg-white lg:hover:bg-white border-b border-slate-200 focus:border-indigo-500 rounded px-2 py-1 outline-none transition-all placeholder-slate-300" value={t.description} title={t.description} onChange={(e) => { const newArr = [...proposedTransactions]; newArr[idxInMaster].description = e.target.value; const newCat = findSuggestedCategory(e.target.value); if (newCat) { newArr[idxInMaster].categoryId = newCat; newArr[idxInMaster].transferAccountId = undefined; } setProposedTransactions(newArr); }} />
                                                 <div className={`col-span-3 text-xs font-black text-right whitespace-nowrap ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
                                                 <div className="col-span-5 relative">
-                                                    <button onClick={(e) => { e.stopPropagation(); if(openSelectorId === t.id) setOpenSelectorId(null); else { setOpenSelectorId(t.id); setSelectorSearchTerm(''); } }} className={`w-full border rounded-lg text-[11px] font-bold py-1.5 px-2 outline-none transition-colors flex items-center justify-between gap-2 ${isAssigned ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 active:border-slate-300 lg:hover:border-slate-300'}`}>
+                                                    <button onClick={(e) => { e.stopPropagation(); if(openSelectorId === t.id) setOpenSelectorId(null); else { setOpenSelectorId(t.id); setSelectorSearchTerm(''); } }} className={`w-full border rounded-lg text-[11px] font-bold py-1.5 px-2 outline-none transition-colors flex items-center justify-between gap-2 cursor-pointer ${isAssigned ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 active:border-slate-300 lg:hover:border-slate-300'}`}>
                                                         <span className="truncate">{t.type === 'TRANSFER' && t.transferAccountId ? `➡ ${indices.acc.get(t.transferAccountId)?.name || 'Cuenta...'}` : (indices.cat.get(t.categoryId)?.name || 'Sin Asignar')}</span><ChevronDown size={12} className="opacity-50"/>
                                                     </button>
-                                                    {openSelectorId === t.id && (
-                                                        <div className="fixed inset-0 z-[250] flex items-start justify-center pt-4 md:pt-10 p-4 bg-slate-900/40 backdrop-blur-sm" onClick={(e) => { e.stopPropagation(); setOpenSelectorId(null); }}>
-                                                            <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 w-[600px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[85vh] relative" onClick={e => e.stopPropagation()}>
-                                                                <button onClick={() => setOpenSelectorId(null)} className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 transition-colors z-20"><X size={18}/></button>
-                                                                <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50">
-                                                                    <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 z-10 space-y-2">
-                                                                        <div className="font-black text-[10px] text-slate-400 uppercase tracking-widest text-center">Categorías Activas</div>
-                                                                        <div className="relative">
-                                                                            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"/>
-                                                                            <input 
-                                                                                type="text" 
-                                                                                autoFocus
-                                                                                placeholder="Buscar..." 
-                                                                                className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-500 transition-all placeholder-slate-300"
-                                                                                value={selectorSearchTerm}
-                                                                                onChange={e => setSelectorSearchTerm(e.target.value)}
-                                                                                onClick={e => e.stopPropagation()}
-                                                                            />
-                                                                        </div>
-                                                                    </div>
-                                                                    {activeGroupedCategories.map(f => {
-                                                                        const matchingCats = f.categories.filter(c => !selectorSearchTerm || c.name.toLowerCase().includes(selectorSearchTerm.toLowerCase()) || f.family.name.toLowerCase().includes(selectorSearchTerm.toLowerCase()));
-                                                                        if (matchingCats.length === 0) return null;
-                                                                        return ( <div key={f.family.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-[88px] z-0">{f.family.name}</div>{matchingCats.map(c => ( <button key={c.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].categoryId = c.id; newArr[idxInMaster].transferAccountId = undefined; newArr[idxInMaster].type = newArr[idxInMaster].amount < 0 ? 'EXPENSE' : 'INCOME'; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${t.categoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>{renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span></button> ))}</div> );
-                                                                    })}
-                                                                </div>
-                                                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white"><div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos Activos</div>{activeGroupedAccounts.map(g => { const availableAccs = g.accounts.filter(a => a.id !== importAccount); if (availableAccs.length === 0) return null; return ( <div key={g.group.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>{availableAccs.map(a => ( <button key={a.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].type = 'TRANSFER'; newArr[idxInMaster].transferAccountId = a.id; newArr[idxInMaster].categoryId = ''; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 active:bg-emerald-50 active:text-emerald-700 lg:hover:bg-emerald-50 lg:hover:text-emerald-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${t.transferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span></button> ))}</div> ); })}</div>
-                                                            </div>
-                                                        </div>
-                                                    )}
                                                 </div>
                                             </div>
-                                            <button onClick={() => setProposedTransactions(proposedTransactions.filter(pt => pt.id !== t.id))} className="text-slate-300 active:text-rose-50 p-2 rounded-full active:bg-rose-50 lg:hover:bg-rose-50 active:text-rose-500 lg:hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100" title="Descartar"><X size={16}/></button>
+                                            <button onClick={() => setProposedTransactions(proposedTransactions.filter(pt => pt.id !== t.id))} className="text-slate-300 active:text-rose-50 p-2 rounded-full active:bg-rose-50 lg:hover:bg-rose-50 active:text-rose-500 lg:hover:text-rose-500 transition-colors opacity-100 lg:opacity-0 lg:group-hover:opacity-100" title="Descartar"><X size={16}/></button>
                                         </div>
                                     );
                                 })}
@@ -1499,63 +1469,15 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in zoom-in duration-300" onClick={closeModal}>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in zoom-in duration-300 cursor-pointer" onClick={closeModal}>
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-slate-200 max-h-[95vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
                   <button onClick={closeModal} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 active:bg-rose-50 lg:hover:bg-rose-50 transition-all"><X size={24}/></button>
                   <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Edit3 className="text-indigo-600"/> {editingTx ? 'Editar Movimiento' : 'Nuevo Movimiento'}</h3>
                   <div className="space-y-6"><div className="bg-slate-100 p-1.5 rounded-2xl flex shadow-inner"><button onClick={() => setFType('EXPENSE')} className={`flex-1 py-4 text-[10px] font-black uppercase rounded-xl transition-all ${fType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-500' : 'text-slate-400 active:text-slate-600 lg:hover:text-slate-600'}`}>Gasto</button><button onClick={() => setFType('INCOME')} className={`flex-1 py-4 text-[10px] font-black uppercase rounded-xl transition-all ${fType === 'INCOME' ? 'bg-white shadow-sm text-emerald-500' : 'text-slate-400 active:text-slate-600 lg:hover:text-slate-600'}`}>Ingreso</button><button onClick={() => { setFType('TRANSFER'); if(!fDesc) setFDesc('Traspaso'); }} className={`flex-1 py-4 text-[10px] font-black uppercase rounded-xl transition-all ${fType === 'TRANSFER' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 active:text-slate-600 lg:hover:text-slate-600'}`}>Traspaso</button></div>
                       <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe</label><div className="relative"><span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 font-black">€</span><input type="number" step="0.01" inputMode="decimal" placeholder="0.00" className="w-full pl-10 pr-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-xl outline-none focus:border-indigo-500 transition-all" value={fAmount} onChange={e => setFAmount(e.target.value)} autoFocus /></div></div>
                       <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDate} onChange={e => setFDate(e.target.value)} /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">{fType === 'TRANSFER' ? 'Desde' : 'Cuenta'}</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fAcc} onChange={e => setFAcc(e.target.value)}>{groupedAccounts.map(g => (<optgroup key={g.group.id} label={g.group.name}>{g.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</optgroup>))}</select></div></div>
-                      {fType === 'TRANSFER' ? ( <div className="space-y-2 animate-in slide-in-from-top-2 relative"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Hacia Cuenta Destino</label><button onClick={() => setIsCategorySelectorOpen(!isCategorySelectorOpen)} className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-left flex items-center justify-between"><span>{fTransferDest ? indices.acc.get(fTransferDest)?.name || 'Cuenta...' : 'Selecciona destino...'}</span><ChevronDown size={16} className="opacity-50"/></button></div> ) : ( <div className="space-y-2 animate-in slide-in-from-top-2 relative"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label><button onClick={() => setIsCategorySelectorOpen(!isCategorySelectorOpen)} className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-left flex items-center justify-between"><span>{fCat ? indices.cat.get(fCat)?.name || 'Categoría...' : 'Selecciona categoría...'}</span><ChevronDown size={16} className="opacity-50"/></button></div> )}
-                      {isCategorySelectorOpen && (
-                          <div className="fixed inset-0 z-[250] flex items-start justify-center pt-4 md:pt-10 p-4 bg-slate-900/40 backdrop-blur-sm" onClick={(e) => { e.stopPropagation(); setIsCategorySelectorOpen(false); }}>
-                              <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 w-[450px] max-w-[95vw] flex flex-col overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[85vh] relative" onClick={e => e.stopPropagation()}>
-                                  <button onClick={() => setIsCategorySelectorOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 transition-colors z-20"><X size={18}/></button>
-                                  <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 z-10 space-y-2">
-                                      <div className="font-black text-[10px] text-slate-400 uppercase tracking-widest text-center">{fType === 'TRANSFER' ? 'Cuentas Activas' : 'Categorías Activas'}</div>
-                                      {fType !== 'TRANSFER' && (
-                                          <div className="relative">
-                                              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"/>
-                                              <input type="text" autoFocus placeholder="Buscar..." className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-500 transition-all placeholder-slate-300" value={categorySearchTerm} onChange={e => setCategorySearchTerm(e.target.value)} onClick={e => e.stopPropagation()} />
-                                          </div>
-                                      )}
-                                  </div>
-                                  <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
-                                      {fType === 'TRANSFER' ? (
-                                          activeGroupedAccounts.map(g => {
-                                              const availableAccs = g.accounts.filter(a => a.id !== fAcc);
-                                              if (availableAccs.length === 0) return null;
-                                              return (
-                                                  <div key={g.group.id}>
-                                                      <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-0 z-0">{g.group.name}</div>
-                                                      {availableAccs.map(a => (
-                                                          <button key={a.id} onClick={() => { setFTransferDest(a.id); setIsCategorySelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-emerald-50 active:text-emerald-700 lg:hover:bg-emerald-50 lg:hover:text-emerald-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${fTransferDest === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>
-                                                              ➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span>
-                                                          </button>
-                                                      ))}
-                                                  </div>
-                                              );
-                                          })
-                                      ) : (
-                                          activeGroupedCategories.map(f => {
-                                              const matchingCats = f.categories.filter(c => !categorySearchTerm || c.name.toLowerCase().includes(categorySearchTerm.toLowerCase()) || f.family.name.toLowerCase().includes(categorySearchTerm.toLowerCase()));
-                                              if (matchingCats.length === 0) return null;
-                                              return (
-                                                  <div key={f.family.id}>
-                                                      <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-0 z-0">{f.family.name}</div>
-                                                      {matchingCats.map(c => (
-                                                          <button key={c.id} onClick={() => { setFCat(c.id); setIsCategorySelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${fCat === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>
-                                                              {renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span>
-                                                          </button>
-                                                      ))}
-                                                  </div>
-                                              );
-                                          })
-                                      )}
-                                  </div>
-                              </div>
-                          </div>
-                      )}
+                      {fType === 'TRANSFER' ? ( <div className="space-y-2 animate-in slide-in-from-top-2 relative"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Hacia Cuenta Destino</label><button onClick={() => setIsCategorySelectorOpen(!isCategorySelectorOpen)} className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-left flex items-center justify-between cursor-pointer"><span>{fTransferDest ? indices.acc.get(fTransferDest)?.name || 'Cuenta...' : 'Selecciona destino...'}</span><ChevronDown size={16} className="opacity-50"/></button></div> ) : ( <div className="space-y-2 animate-in slide-in-from-top-2 relative"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label><button onClick={() => setIsCategorySelectorOpen(!isCategorySelectorOpen)} className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-left flex items-center justify-between cursor-pointer"><span>{fCat ? indices.cat.get(fCat)?.name || 'Categoría...' : 'Selecciona categoría...'}</span><ChevronDown size={16} className="opacity-50"/></button></div> )}
+
                       <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Concepto</label><input type="text" placeholder="Ej: Compra semanal..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDesc} onChange={e => { setFDesc(e.target.value); if(!editingTx && !fCat && fType !== 'TRANSFER') { const sugg = findSuggestedCategory(e.target.value); if(sugg) setFCat(sugg); } }} /></div>
                       <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Comprobante (Opcional)</label><div className="flex items-center gap-3"><button onClick={() => fileInputRef.current?.click()} className="flex-1 py-4 bg-white border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 active:border-indigo-400 lg:hover:border-indigo-400 active:text-indigo-500 lg:hover:text-indigo-500 transition-all font-bold uppercase text-[10px] flex justify-center items-center gap-2" disabled={isCompressing}>{isCompressing ? <span className="animate-spin">⏳</span> : <Paperclip size={16}/>}{fAttachment ? 'Cambiar Archivo' : 'Adjuntar Imagen'}</button>{fAttachment && ( <button onClick={() => setFAttachment(undefined)} className="p-4 bg-rose-50 text-rose-500 rounded-2xl active:bg-rose-100 lg:hover:bg-rose-100"><Trash2 size={18}/></button> )}</div><input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />{fAttachment && <p className="text-[10px] text-emerald-500 font-bold flex items-center gap-1"><Check size={12}/> Archivo listo para guardar</p>}</div>
                       <button onClick={handleSave} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] active:bg-indigo-600 lg:hover:bg-indigo-600 shadow-xl tracking-widest transition-all active:scale-95">{editingTx ? 'Actualizar Movimiento' : 'Guardar Movimiento'}</button>
@@ -1565,7 +1487,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {recurrenceModalTx && (
-        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in zoom-in duration-300" onClick={() => setRecurrenceModalTx(null)}>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in zoom-in duration-300 cursor-pointer" onClick={() => setRecurrenceModalTx(null)}>
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-6 relative border border-slate-200 max-h-[95vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
                   <button onClick={() => setRecurrenceModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 transition-colors"><X size={20}/></button>
                   <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2 mb-6"><CalendarClock className="text-indigo-600" size={24}/> Crear Recurrencia</h3>
@@ -1588,7 +1510,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                       </div>
                       <div className="col-span-12 sm:col-span-6 space-y-1 relative">
                           <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Destino</label>
-                          <button onClick={() => setIsRecSelectorOpen(true)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors text-left flex items-center justify-between">
+                          <button onClick={() => setIsRecSelectorOpen(true)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none text-sm focus:border-indigo-500 transition-colors text-left flex items-center justify-between cursor-pointer">
                               <span className="truncate flex items-center gap-2">
                                   {recType === 'TRANSFER' && recTransferAccountId ? (
                                       <>
@@ -1604,43 +1526,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                               </span>
                               <ChevronDown size={14} className="opacity-50"/>
                           </button>
-                          {isRecSelectorOpen && (
-                              <div className="fixed inset-0 z-[250] flex items-start justify-center pt-4 md:pt-10 p-4 bg-slate-900/40 backdrop-blur-sm" onClick={(e) => { e.stopPropagation(); setIsRecSelectorOpen(false); }}>
-                                  <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 w-[600px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[85vh] relative" onClick={e => e.stopPropagation()}>
-                                      <button onClick={() => setIsRecSelectorOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 transition-colors z-20"><X size={18}/></button>
-                                      <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50">
-                                          <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Categorías Activas</div>
-                                          {activeGroupedCategories.map(f => (
-                                              <div key={f.family.id}>
-                                                  <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-9 z-0">{f.family.name}</div>
-                                                  {f.categories.map(c => (
-                                                      <button key={c.id} onClick={() => { setRecCategoryId(c.id); setRecTransferAccountId(null); setRecType(f.family.type); setIsRecSelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${recCategoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>
-                                                          {renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span>
-                                                      </button>
-                                                  ))}
-                                              </div>
-                                          ))}
-                                      </div>
-                                      <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
-                                          <div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos Activos</div>
-                                          {activeGroupedAccounts.map(g => {
-                                              const availableAccs = g.accounts.filter(a => a.id !== recAccountId);
-                                              if (availableAccs.length === 0) return null;
-                                              return (
-                                                  <div key={g.group.id}>
-                                                      <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>
-                                                      {availableAccs.map(a => (
-                                                          <button key={a.id} onClick={() => { setRecTransferAccountId(a.id); setRecCategoryId(''); setRecType('TRANSFER'); setIsRecSelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-emerald-50 active:text-emerald-700 lg:hover:bg-emerald-50 lg:hover:text-emerald-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${recTransferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>
-                                                              ➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span>
-                                                          </button>
-                                                      ))}
-                                                  </div>
-                                              );
-                                          })}
-                                      </div>
-                                  </div>
-                              </div>
-                          )}
                       </div>
 
                       {/* Row 3: Frequency (4 cols) + Interval (4 cols) + Start Date (4 cols) */}
@@ -1674,7 +1559,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {favoriteModalTx && (
-        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in zoom-in duration-300" onClick={() => setFavoriteModalTx(null)}>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in zoom-in duration-300 cursor-pointer" onClick={() => setFavoriteModalTx(null)}>
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 text-center relative border border-slate-200" onClick={e => e.stopPropagation()}><button onClick={() => setFavoriteModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 active:bg-rose-50 lg:hover:bg-rose-50 transition-all"><X size={20}/></button><div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-amber-500"><Heart size={32}/></div><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Guardar Favorito</h3>
                   <div className="space-y-4"><div className="space-y-2 text-left"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre del Botón</label><input type="text" placeholder="Ej: Café Diario" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-amber-400 transition-colors" value={favName} onChange={e => setFavName(e.target.value)} autoFocus /></div><button onClick={handleSaveFavorite} className="w-full py-4 bg-amber-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest active:bg-amber-600 lg:hover:bg-amber-600 shadow-xl">Guardar Plantilla</button></div>
               </div>
@@ -1682,7 +1567,134 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {previewAttachment && (
-          <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[300] p-4 animate-in fade-in zoom-in duration-300" onClick={() => setPreviewAttachment(null)}><div className="relative max-w-3xl max-h-[90vh] w-full flex flex-col items-center"><button onClick={() => setPreviewAttachment(null)} className="absolute -top-12 right-0 p-2 text-white/50 active:text-white lg:hover:text-white"><X size={32}/></button><img src={previewAttachment} className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border-4 border-white/10" onClick={e => e.stopPropagation()} /><a href={previewAttachment} download={`comprobante_${Date.now()}.jpg`} onClick={e => e.stopPropagation()} className="mt-6 px-6 py-3 bg-white text-slate-900 rounded-full font-black uppercase text-[10px] tracking-widest active:scale-105 lg:hover:scale-105 transition-transform shadow-xl flex items-center gap-2"><ArrowUpDown size={14} className="rotate-180"/> Descargar Imagen Original</a></div></div>
+          <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[300] p-4 animate-in fade-in zoom-in duration-300 cursor-pointer" onClick={() => setPreviewAttachment(null)}><div className="relative max-w-3xl max-h-[90vh] w-full flex flex-col items-center" onClick={e => e.stopPropagation()}><button onClick={() => setPreviewAttachment(null)} className="absolute -top-12 right-0 p-2 text-white/50 active:text-white lg:hover:text-white cursor-pointer"><X size={32}/></button><img src={previewAttachment} className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border-4 border-white/10" /><a href={previewAttachment} download={`comprobante_${Date.now()}.jpg`} className="mt-6 px-6 py-3 bg-white text-slate-900 rounded-full font-black uppercase text-[10px] tracking-widest active:scale-105 lg:hover:scale-105 transition-transform shadow-xl flex items-center gap-2"><ArrowUpDown size={14} className="rotate-180"/> Descargar Imagen Original</a></div></div>
+      )}
+
+      {/* Global Selectors moved to top level to fix stacking and positioning issues */}
+      {openSelectorId && (
+          <div className="fixed inset-0 z-[250] flex items-start justify-center pt-4 md:pt-10 p-4 bg-slate-900/40 backdrop-blur-sm cursor-pointer" onClick={(e) => { e.stopPropagation(); setOpenSelectorId(null); }}>
+              {(() => {
+                  const t = proposedTransactions.find(pt => pt.id === openSelectorId);
+                  const idxInMaster = proposedTransactions.findIndex(pt => pt.id === openSelectorId);
+                  if (!t) return null;
+                  return (
+                      <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 w-[600px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[85vh] relative cursor-default" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => setOpenSelectorId(null)} className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 transition-colors z-20 cursor-pointer"><X size={18}/></button>
+                          <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50">
+                              <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 z-10 space-y-2">
+                                  <div className="font-black text-[10px] text-slate-400 uppercase tracking-widest text-center">Categorías Activas</div>
+                                  <div className="relative">
+                                      <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                      <input 
+                                          type="text" 
+                                          autoFocus
+                                          placeholder="Buscar..." 
+                                          className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-500 transition-all placeholder-slate-300"
+                                          value={selectorSearchTerm}
+                                          onChange={e => setSelectorSearchTerm(e.target.value)}
+                                          onClick={e => e.stopPropagation()}
+                                      />
+                                  </div>
+                              </div>
+                              {activeGroupedCategories.map(f => {
+                                  const matchingCats = f.categories.filter(c => !selectorSearchTerm || c.name.toLowerCase().includes(selectorSearchTerm.toLowerCase()) || f.family.name.toLowerCase().includes(selectorSearchTerm.toLowerCase()));
+                                  if (matchingCats.length === 0) return null;
+                                  return ( <div key={f.family.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-0 z-0">{f.family.name}</div>{matchingCats.map(c => ( <button key={c.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].categoryId = c.id; newArr[idxInMaster].transferAccountId = undefined; newArr[idxInMaster].type = newArr[idxInMaster].amount < 0 ? 'EXPENSE' : 'INCOME'; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer ${t.categoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>{renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span></button> ))}</div> );
+                              })}
+                          </div>
+                          <div className="flex-1 overflow-y-auto custom-scrollbar bg-white"><div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos Activos</div>{activeGroupedAccounts.map(g => { const availableAccs = g.accounts.filter(a => a.id !== importAccount); if (availableAccs.length === 0) return null; return ( <div key={g.group.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-0 z-0">{g.group.name}</div>{availableAccs.map(a => ( <button key={a.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].type = 'TRANSFER'; newArr[idxInMaster].transferAccountId = a.id; newArr[idxInMaster].categoryId = ''; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 active:bg-emerald-50 active:text-emerald-700 lg:hover:bg-emerald-50 lg:hover:text-emerald-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer ${t.transferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span></button> ))}</div> ); })}</div>
+                      </div>
+                  );
+              })()}
+          </div>
+      )}
+
+      {isCategorySelectorOpen && (
+          <div className="fixed inset-0 z-[250] flex items-start justify-center pt-4 md:pt-10 p-4 bg-slate-900/40 backdrop-blur-sm cursor-pointer" onClick={(e) => { e.stopPropagation(); setIsCategorySelectorOpen(false); }}>
+              <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 w-[450px] max-w-[95vw] flex flex-col overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[85vh] relative cursor-default" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => setIsCategorySelectorOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 transition-colors z-20 cursor-pointer"><X size={18}/></button>
+                  <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 z-10 space-y-2">
+                      <div className="font-black text-[10px] text-slate-400 uppercase tracking-widest text-center">{fType === 'TRANSFER' ? 'Cuentas Activas' : 'Categorías Activas'}</div>
+                      {fType !== 'TRANSFER' && (
+                          <div className="relative">
+                              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"/>
+                              <input type="text" autoFocus placeholder="Buscar..." className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-indigo-500 transition-all placeholder-slate-300" value={categorySearchTerm} onChange={e => setCategorySearchTerm(e.target.value)} onClick={e => e.stopPropagation()} />
+                          </div>
+                      )}
+                  </div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+                      {fType === 'TRANSFER' ? (
+                          activeGroupedAccounts.map(g => {
+                              const availableAccs = g.accounts.filter(a => a.id !== fAcc);
+                              if (availableAccs.length === 0) return null;
+                              return (
+                                  <div key={g.group.id}>
+                                      <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-0 z-0">{g.group.name}</div>
+                                      {availableAccs.map(a => (
+                                          <button key={a.id} onClick={() => { setFTransferDest(a.id); setIsCategorySelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-emerald-50 active:text-emerald-700 lg:hover:bg-emerald-50 lg:hover:text-emerald-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer ${fTransferDest === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>
+                                              ➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span>
+                                          </button>
+                                      ))}
+                                  </div>
+                              );
+                          })
+                      ) : (
+                          activeGroupedCategories.map(f => {
+                              const matchingCats = f.categories.filter(c => !categorySearchTerm || c.name.toLowerCase().includes(categorySearchTerm.toLowerCase()) || f.family.name.toLowerCase().includes(categorySearchTerm.toLowerCase()));
+                              if (matchingCats.length === 0) return null;
+                              return (
+                                  <div key={f.family.id}>
+                                      <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-0 z-0">{f.family.name}</div>
+                                      {matchingCats.map(c => (
+                                          <button key={c.id} onClick={() => { setFCat(c.id); setIsCategorySelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer ${fCat === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>
+                                              {renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span>
+                                          </button>
+                                      ))}
+                                  </div>
+                              );
+                          })
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {isRecSelectorOpen && (
+          <div className="fixed inset-0 z-[250] flex items-start justify-center pt-4 md:pt-10 p-4 bg-slate-900/40 backdrop-blur-sm cursor-pointer" onClick={(e) => { e.stopPropagation(); setIsRecSelectorOpen(false); }}>
+              <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 w-[600px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[85vh] relative cursor-default" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => setIsRecSelectorOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 transition-colors z-20 cursor-pointer"><X size={18}/></button>
+                  <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50">
+                      <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Categorías Activas</div>
+                      {activeGroupedCategories.map(f => (
+                          <div key={f.family.id}>
+                              <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-0 z-0">{f.family.name}</div>
+                              {f.categories.map(c => (
+                                  <button key={c.id} onClick={() => { setRecCategoryId(c.id); setRecTransferAccountId(null); setRecType(f.family.type); setIsRecSelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer ${recCategoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>
+                                      {renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span>
+                                  </button>
+                              ))}
+                          </div>
+                      ))}
+                  </div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+                      <div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos Activos</div>
+                      {activeGroupedAccounts.map(g => {
+                          const availableAccs = g.accounts.filter(a => a.id !== recAccountId);
+                          if (availableAccs.length === 0) return null;
+                          return (
+                              <div key={g.group.id}>
+                                  <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-0 z-0">{g.group.name}</div>
+                                  {availableAccs.map(a => (
+                                      <button key={a.id} onClick={() => { setRecTransferAccountId(a.id); setRecCategoryId(''); setRecType('TRANSFER'); setIsRecSelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-emerald-50 active:text-emerald-700 lg:hover:bg-emerald-50 lg:hover:text-emerald-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer ${recTransferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>
+                                          ➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span>
+                                      </button>
+                                  ))}
+                              </div>
+                          );
+                      })}
+                  </div>
+              </div>
+          </div>
       )}
     </>
   );
