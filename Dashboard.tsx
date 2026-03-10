@@ -11,7 +11,6 @@ interface DashboardProps {
   onUpdateFilter: (f: GlobalFilter) => void;
   onNavigateToTransactions: (filters: any) => void;
   currentBook: BookMetadata;
-  onRefreshData?: () => Promise<void>;
 }
 
 // Formateador estático para evitar recreación en render
@@ -20,7 +19,7 @@ const numberFormatter = new Intl.NumberFormat('de-DE', {
   maximumFractionDigits: 2,
 });
 
-export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, onUpdateData, filter, onUpdateFilter, onNavigateToTransactions, currentBook, onRefreshData }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, onUpdateData, filter, onUpdateFilter, onNavigateToTransactions, currentBook }) => {
   const { transactions, accounts, families, categories, accountGroups, recurrents = [] } = data;
   const [showBalanceDetail, setShowBalanceDetail] = useState(false);
   const [showRecurrentsModal, setShowRecurrentsModal] = useState(false);
@@ -447,9 +446,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     
     setIsModalOpen(false);
     setRecurrenceModalTx(null);
-    if (onRefreshData) {
-        onRefreshData();
-    }
   };
 
   return (

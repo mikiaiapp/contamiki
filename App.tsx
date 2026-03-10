@@ -88,27 +88,6 @@ const App: React.FC = () => {
     }
   }, [isLoggedIn]);
 
-  const handleRefreshData = async () => {
-      if (!isLoggedIn) return;
-      
-      // If there are pending changes, save them first
-      const currentStateStr = JSON.stringify(multiState);
-      if (currentStateStr !== lastSavedState.current) {
-          await performSave(multiState);
-      }
-      
-      try {
-          const fetchedData = await loadData();
-          setMultiState(fetchedData);
-          lastSavedState.current = JSON.stringify(fetchedData);
-      } catch (err: any) {
-          console.error("App: Refresh Error caught", err);
-          if (err.message.includes('401') || err.message.includes('403')) {
-              logout();
-          }
-      }
-  };
-
   const performSave = async (stateToSave: MultiBookState) => {
       setSyncStatus('SAVING');
       setSyncErrorMsg(null);
@@ -316,13 +295,12 @@ const App: React.FC = () => {
           onCreateBook={() => { setEditingBookId(null); setTempBookName(''); setTempBookColor('BLACK'); setIsBookModalOpen(true); }}
           onEditBook={() => { setEditingBookId(currentBookMeta.id); setTempBookName(currentBookMeta.name); setTempBookColor(currentBookMeta.color); setIsBookModalOpen(true); }}
           syncStatus={syncStatus} syncError={syncErrorMsg} onManualSave={() => performSave(multiState)}
-          onRefreshData={handleRefreshData}
       >
-        {currentView === 'RESUMEN' && <Dashboard data={currentAppData} onAddTransaction={handleAddTransaction} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }} currentBook={currentBookMeta} onRefreshData={handleRefreshData} />}
-        {currentView === 'TRANSACTIONS' && <TransactionView data={currentAppData} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={handleUpdateTransaction} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} initialSpecificFilters={pendingSpecificFilters} clearSpecificFilters={() => setPendingSpecificFilters(null)} currentBook={currentBookMeta} onFinished={() => setCurrentView('RESUMEN')} onRefreshData={handleRefreshData} />}
-        {currentView === 'CHARTS' && <ChartsView data={currentAppData} filter={globalFilter} onUpdateFilter={setGlobalFilter} currentBook={currentBookMeta} onRefreshData={handleRefreshData} />}
-        {currentView === 'SETTINGS' && <SettingsView data={currentAppData} books={multiState.booksMetadata} currentBookId={multiState.currentBookId} multiState={multiState} onUpdateData={updateCurrentBookData} onReplaceFullState={handleReplaceFullState} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }} onDeleteBook={handleDeleteBook} onRefreshData={handleRefreshData} />}
-        {currentView === 'AI_INSIGHTS' && <AIInsights data={currentAppData} onRefreshData={handleRefreshData} />}
+        {currentView === 'RESUMEN' && <Dashboard data={currentAppData} onAddTransaction={handleAddTransaction} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }} currentBook={currentBookMeta} />}
+        {currentView === 'TRANSACTIONS' && <TransactionView data={currentAppData} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={handleUpdateTransaction} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} initialSpecificFilters={pendingSpecificFilters} clearSpecificFilters={() => setPendingSpecificFilters(null)} currentBook={currentBookMeta} onFinished={() => setCurrentView('RESUMEN')} />}
+        {currentView === 'CHARTS' && <ChartsView data={currentAppData} filter={globalFilter} onUpdateFilter={setGlobalFilter} currentBook={currentBookMeta} />}
+        {currentView === 'SETTINGS' && <SettingsView data={currentAppData} books={multiState.booksMetadata} currentBookId={multiState.currentBookId} multiState={multiState} onUpdateData={updateCurrentBookData} onReplaceFullState={handleReplaceFullState} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); setCurrentView('TRANSACTIONS'); }} onDeleteBook={handleDeleteBook} />}
+        {currentView === 'AI_INSIGHTS' && <AIInsights data={currentAppData} />}
       </Layout>
 
       {isBookModalOpen && (

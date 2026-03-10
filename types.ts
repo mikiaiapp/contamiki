@@ -126,5 +126,4 @@ export interface SettingsViewProps {
   onReplaceFullState: (newState: MultiBookState) => void;
   onNavigateToTransactions?: (filters: any) => void;
   onDeleteBook?: () => void;
-  onRefreshData?: () => Promise<void>;
 }

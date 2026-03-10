@@ -8,7 +8,6 @@ interface ChartsViewProps {
   filter: GlobalFilter;
   onUpdateFilter: (f: GlobalFilter) => void;
   currentBook: BookMetadata;
-  onRefreshData?: () => Promise<void>;
 }
 
 const COLORS = ['#6366f1', '#10b981', '#f43f5e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
@@ -37,7 +36,7 @@ interface ViewState {
     itemType?: 'INCOME' | 'EXPENSE';
 }
 
-export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook, onRefreshData }) => {
+export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => {
   // Estado de navegación (Drill-down)
   const [viewState, setViewState] = useState<ViewState>({ level: 'ROOT' });
   const [pointDetailTxs, setPointDetailTxs] = useState<{ date: string, txs: Transaction[] } | null>(null);
