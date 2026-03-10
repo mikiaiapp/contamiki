@@ -1092,6 +1092,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   };
 
   return (
+    <>
     <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500" onClick={() => { setActiveMenuTxId(null); setOpenSelectorId(null); }}>
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
         <div className="space-y-4 text-center md:text-left w-full xl:w-auto">
@@ -1278,6 +1279,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
             <div className="flex items-center gap-4"><select className="bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase py-2 px-3 outline-none" value={itemsPerPage} onChange={(e) => setItemsPerPage(parseInt(e.target.value))}><option value={25}>25 por pág</option><option value={50}>50 por pág</option><option value={100}>100 por pág</option><option value={-1}>Ver Todos</option></select><div className="flex items-center gap-2"><button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"><ChevronLeft size={16} /></button><span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Pág {currentPage} / {totalPages}</span><button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"><ChevronRight size={16} /></button></div></div>
         </div>
       )}
+    </div>
 
       {selectedIds.size > 0 && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[150] animate-in slide-in-from-bottom-4 fade-in duration-300">
@@ -1655,6 +1657,6 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       {previewAttachment && (
           <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[300] p-4 animate-in fade-in zoom-in duration-300" onClick={() => setPreviewAttachment(null)}><div className="relative max-w-3xl max-h-[90vh] w-full flex flex-col items-center"><button onClick={() => setPreviewAttachment(null)} className="absolute -top-12 right-0 p-2 text-white/50 hover:text-white"><X size={32}/></button><img src={previewAttachment} className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border-4 border-white/10" onClick={e => e.stopPropagation()} /><a href={previewAttachment} download={`comprobante_${Date.now()}.jpg`} onClick={e => e.stopPropagation()} className="mt-6 px-6 py-3 bg-white text-slate-900 rounded-full font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-transform shadow-xl flex items-center gap-2"><ArrowUpDown size={14} className="rotate-180"/> Descargar Imagen Original</a></div></div>
       )}
-    </div>
+    </>
   );
 };
