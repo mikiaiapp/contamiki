@@ -13,7 +13,6 @@ interface SettingsViewProps {
   onReplaceFullState: (newState: MultiBookState) => void;
   onNavigateToTransactions?: (filters: any) => void;
   onDeleteBook?: () => void;
-  onRefreshData?: () => Promise<void>;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
@@ -52,7 +51,7 @@ const compressLogo = async (file: File): Promise<string> => {
     });
 };
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, currentBookId, multiState, onUpdateData, onReplaceFullState, onNavigateToTransactions, onDeleteBook, onRefreshData }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, currentBookId, multiState, onUpdateData, onReplaceFullState, onNavigateToTransactions, onDeleteBook }) => {
   const [activeTab, setActiveTab] = useState('ACC_GROUPS');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
@@ -359,8 +358,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                     <button 
                         key={i} 
                         onClick={() => { setIcon(l.url); setWebLogos([]); }} 
-                        className="group relative aspect-square bg-[radial-gradient(#f1f5f9_1px,transparent_1px)] [background-size:10px_10px] bg-slate-50 rounded-2xl border-2 border-transparent hover:border-indigo-500 p-2 transition-all flex flex-col items-center justify-center overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-0.5"
-                        title={l.source}
+                        className="group relative aspect-square bg-[radial-gradient(#f1f5f9_1px,transparent_1px)] [background-size:10px_10px] bg-slate-50 rounded-2xl border-2 border-transparent lg:hover:border-indigo-500 p-2 transition-all flex flex-col items-center justify-center overflow-hidden shadow-sm lg:hover:shadow-md lg:hover:-translate-y-0.5"
                     >
                         <img 
                             src={l.url} 
@@ -575,7 +573,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                                 </div>
                             </div>
                             <div className="flex gap-2 opacity-50 group-hover:opacity-100">
-                                <button onClick={() => onUpdateData({recurrents: data.recurrents?.map(x => x.id === r.id ? {...x, active: !x.active} : x)})} className={`p-3 rounded-xl transition-colors ${r.active ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`} title={r.active ? "Pausar" : "Activar"}>
+                                <button onClick={() => onUpdateData({recurrents: data.recurrents?.map(x => x.id === r.id ? {...x, active: !x.active} : x)})} className={`p-3 rounded-xl transition-colors ${r.active ? 'bg-emerald-50 text-emerald-600 lg:hover:bg-emerald-100' : 'bg-slate-100 text-slate-400 lg:hover:bg-slate-200'}`}>
                                     {r.active ? <Pause size={16}/> : <Play size={16}/>}
                                 </button>
                                 <button onClick={() => { setRecId(r.id); setRecDesc(r.description); setRecAmount(r.amount.toString()); setRecFreq(r.frequency); setRecInterval(r.interval); setRecNextDate(r.nextDueDate); setRecEndDate(r.endDate || ''); setRecActive(r.active); setRecAccountId(r.accountId); setRecCategoryId(r.categoryId); setRecTransferAccountId(r.transferAccountId || null); setRecType(r.type); openEditor(); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100">

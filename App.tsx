@@ -259,13 +259,13 @@ const App: React.FC = () => {
               <div className="flex flex-col sm:flex-row gap-4">
                   <button 
                       onClick={() => { setEditingBookId(null); setTempBookName(''); setTempBookColor('BLACK'); setIsBookModalOpen(true); }}
-                      className="bg-white text-slate-900 px-10 py-5 rounded-[2rem] font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-white/5 hover:scale-105 transition-transform"
+                      className="bg-white text-slate-900 px-10 py-5 rounded-[2rem] font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-white/5 active:scale-105 lg:hover:scale-105 transition-transform touch-manipulation"
                   >
                       <Plus size={18} /> Crear Primera Contabilidad
                   </button>
                   <button 
                       onClick={() => { logout(); setIsLoggedIn(false); }}
-                      className="bg-slate-800 text-white px-10 py-5 rounded-[2rem] font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-slate-700 transition-colors"
+                      className="bg-slate-800 text-white px-10 py-5 rounded-[2rem] font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 active:bg-slate-700 lg:hover:bg-slate-700 transition-colors touch-manipulation"
                   >
                       <LogOut size={18} /> Cerrar Sesión
                   </button>

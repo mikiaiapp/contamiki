@@ -11,7 +11,6 @@ interface DashboardProps {
   onUpdateFilter: (f: GlobalFilter) => void;
   onNavigateToTransactions: (filters: any) => void;
   currentBook: BookMetadata;
-  onRefreshData?: () => Promise<void>;
 }
 
 // Formateador estático para evitar recreación en render
@@ -20,7 +19,7 @@ const numberFormatter = new Intl.NumberFormat('de-DE', {
   maximumFractionDigits: 2,
 });
 
-export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, onUpdateData, filter, onUpdateFilter, onNavigateToTransactions, currentBook, onRefreshData }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, onUpdateData, filter, onUpdateFilter, onNavigateToTransactions, currentBook }) => {
   const { transactions, accounts, families, categories, accountGroups, recurrents = [] } = data;
   const [showBalanceDetail, setShowBalanceDetail] = useState(false);
   const [showRecurrentsModal, setShowRecurrentsModal] = useState(false);
@@ -447,9 +446,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     
     setIsModalOpen(false);
     setRecurrenceModalTx(null);
-    if (onRefreshData) {
-        onRefreshData();
-    }
   };
 
   return (
@@ -468,7 +464,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     {pendingRecurrents.length > 0 && (
                         <button 
                             onClick={() => setShowRecurrentsModal(true)}
-                            className="bg-rose-500 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg shadow-rose-200 animate-pulse hover:scale-105 transition-transform"
+                            className="bg-rose-500 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg shadow-rose-200 animate-pulse lg:hover:scale-105 transition-transform active:scale-95 touch-manipulation"
                         >
                             <Bell size={18} />
                             <span className="text-[12px] font-black">{pendingRecurrents.length}</span>
@@ -479,15 +475,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
             
             <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
                 <div className="flex items-center gap-2">
-                    <button onClick={() => navigatePeriod('prev')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={24} /></button>
-                    <button onClick={() => navigatePeriod('next')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={24} /></button>
+                    <button onClick={() => navigatePeriod('prev')} className="p-3 bg-white border border-slate-200 rounded-xl lg:hover:bg-slate-50 shadow-sm active:bg-slate-100 active:scale-90 transition-all touch-manipulation"><ChevronLeft size={24} /></button>
+                    <button onClick={() => navigatePeriod('next')} className="p-3 bg-white border border-slate-200 rounded-xl lg:hover:bg-slate-50 shadow-sm active:bg-slate-100 active:scale-90 transition-all touch-manipulation"><ChevronRight size={24} /></button>
                 </div>
 
                 <div className="bg-slate-100 p-2 rounded-2xl flex flex-wrap gap-1 shadow-inner border border-slate-200/50">
                     {/* TODO */}
                     <button 
                         onClick={() => onUpdateFilter({...filter, timeRange: 'ALL'})} 
-                        className={`px-6 py-3 text-xs sm:text-sm font-black uppercase tracking-widest rounded-xl transition-all ${filter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        className={`px-6 py-3 text-xs sm:text-sm font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 touch-manipulation ${filter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 active:text-slate-600 lg:hover:text-slate-600'}`}
                     >
                         Todo
                     </button>
@@ -499,7 +495,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                 {years.map(y => <option key={y} value={y}>{y}</option>)}
                             </select>
                          ) : (
-                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'YEAR'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>
+                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'YEAR'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 active:text-slate-600 lg:hover:text-slate-600 active:scale-95 touch-manipulation">Año</button>
                          )}
                     </div>
 
@@ -516,7 +512,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                 </select>
                             </div>
                         ) : (
-                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'MONTH'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Mes</button>
+                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'MONTH'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 active:text-slate-600 lg:hover:text-slate-600 active:scale-95 touch-manipulation">Mes</button>
                         )}
                     </div>
 
@@ -535,14 +531,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                 </div>
                             </div>
                         ) : (
-                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'CUSTOM'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Pers.</button>
+                            <button onClick={() => onUpdateFilter({...filter, timeRange: 'CUSTOM'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 active:text-slate-600 lg:hover:text-slate-600 active:scale-95 touch-manipulation">Pers.</button>
                         )}
                     </div>
                 </div>
 
                 <div className="flex gap-2">
                     <div className="relative">
-                        <button onClick={(e) => { e.stopPropagation(); setShowFavoritesList(!showFavoritesList); }} className="w-12 h-12 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl shadow-sm hover:bg-amber-100 flex items-center justify-center transition-all active:scale-95" title="Favoritos"><Heart size={20} fill={showFavoritesList ? "currentColor" : "none"} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setShowFavoritesList(!showFavoritesList); }} className="w-12 h-12 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl shadow-sm lg:hover:bg-amber-100 flex items-center justify-center transition-all active:scale-95 touch-manipulation"><Heart size={20} fill={showFavoritesList ? "currentColor" : "none"} /></button>
                         {showFavoritesList && (
                             <>
                                 <div className="fixed inset-0 z-10 bg-slate-900/20 backdrop-blur-[1px] md:bg-transparent md:backdrop-blur-none" onClick={() => setShowFavoritesList(false)}></div>
@@ -551,8 +547,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                     <div className="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
                                         {data.favorites && data.favorites.length > 0 ? (
                                             data.favorites.map(fav => (
-                                                <button key={fav.id} onClick={() => handleUseFavorite(fav)} className="w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-xl hover:bg-amber-50 text-left transition-colors group">
-                                                    <div className="bg-amber-100 text-amber-600 p-1.5 rounded-lg group-hover:bg-amber-200 transition-colors">
+                                                <button key={fav.id} onClick={() => handleUseFavorite(fav)} className="w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-xl lg:hover:bg-amber-50 text-left transition-colors group active:bg-amber-100 touch-manipulation">
+                                                    <div className="bg-amber-100 text-amber-600 p-1.5 rounded-lg lg:group-hover:bg-amber-200 transition-colors">
                                                         {fav.icon?.startsWith('http') || fav.icon?.startsWith('data:image') ? <img src={fav.icon} className="w-4 h-4 object-contain rounded-sm" referrerPolicy="no-referrer" /> : <span className="text-xs">{fav.icon || '⭐'}</span>}
                                                     </div>
                                                     <div className="flex-1 min-w-0"><div className="text-xs font-bold text-slate-700 truncate">{fav.name}</div><div className="text-[9px] text-slate-400 font-medium truncate">{fav.description}</div></div>
@@ -564,8 +560,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                             </>
                         )}
                     </div>
-                    <button onClick={() => onNavigateToTransactions({ action: 'IMPORT' })} className="w-12 h-12 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl shadow-sm hover:bg-indigo-100 flex items-center justify-center transition-all active:scale-95" title="Importador Inteligente"><Bot size={20} /></button>
-                    <button onClick={() => onNavigateToTransactions({ action: 'NEW' })} className="w-12 h-12 bg-slate-950 text-white rounded-xl shadow-lg hover:bg-slate-800 flex items-center justify-center transition-all active:scale-95" title="Nuevo Movimiento"><Plus size={20} /></button>
+                    <button onClick={() => onNavigateToTransactions({ action: 'IMPORT' })} className="w-12 h-12 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl shadow-sm lg:hover:bg-indigo-100 flex items-center justify-center transition-all active:scale-95 touch-manipulation"><Bot size={20} /></button>
+                    <button onClick={() => onNavigateToTransactions({ action: 'NEW' })} className="w-12 h-12 bg-slate-950 text-white rounded-xl shadow-lg lg:hover:bg-slate-800 flex items-center justify-center transition-all active:scale-95 touch-manipulation"><Plus size={20} /></button>
                 </div>
             </div>
         </div>
@@ -575,11 +571,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-4xl">
         <button 
           onClick={() => setShowBalanceDetail(true)}
-          className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col justify-between min-h-[160px] text-left hover:shadow-xl hover:border-indigo-100 transition-all active:scale-[0.98] group"
+          className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col justify-between min-h-[160px] text-left lg:hover:shadow-xl lg:hover:border-indigo-100 transition-all active:scale-[0.98] active:bg-slate-50 group touch-manipulation"
         >
-            <div className="bg-indigo-50 text-indigo-600 w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform"><Banknote size={26}/></div>
+            <div className="bg-indigo-50 text-indigo-600 w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-sm lg:group-hover:scale-110 transition-transform"><Banknote size={26}/></div>
             <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Patrimonio Global <span className="text-indigo-300 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">Ver detalle</span></p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Patrimonio Global <span className="text-indigo-300 ml-1 opacity-0 lg:group-hover:opacity-100 transition-opacity">Ver detalle</span></p>
                 <p className={`text-3xl font-black tracking-tight ${getAmountColor(dashboardData.stats.balance)}`}>
                     {formatCurrency(dashboardData.stats.balance)}
                 </p>
@@ -607,7 +603,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                   {dashboardData.flows.incomes.map(item => (
-                      <div key={item.family.id} className={`bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all ${item.total === 0 ? 'opacity-60' : ''}`}>
+                      <div key={item.family.id} className={`bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm lg:hover:shadow-lg transition-all ${item.total === 0 ? 'opacity-60' : ''}`}>
                           <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
                               <div className="flex items-center gap-3">
                                   <div className="bg-emerald-50 w-12 h-12 rounded-2xl flex items-center justify-center border border-emerald-100">
@@ -619,12 +615,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                           </div>
                           <div className="space-y-2">
                               {item.categories.map(cat => (
-                                  <div key={cat.category.id} onClick={() => setSelectedCategoryAction(cat.category)} className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-emerald-50 cursor-pointer group transition-colors">
+                                  <div key={cat.category.id} onClick={() => setSelectedCategoryAction(cat.category)} className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl lg:hover:bg-emerald-50 cursor-pointer group transition-colors active:bg-emerald-100 touch-manipulation">
                                       <div className="flex items-center gap-3 overflow-hidden">
-                                          <span className="text-lg group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
+                                          <span className="text-lg lg:group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
                                           <span className="text-sm font-bold text-slate-600 truncate">{cat.category.name}</span>
                                       </div>
-                                      <span className={`text-sm font-black opacity-80 group-hover:opacity-100 ${getAmountColor(cat.total)}`}>
+                                      <span className={`text-sm font-black opacity-80 lg:group-hover:opacity-100 ${getAmountColor(cat.total)}`}>
                                           {formatCurrency(cat.total)}
                                       </span>
                                   </div>
@@ -645,7 +641,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                   {dashboardData.flows.expenses.map(item => (
-                      <div key={item.family.id} className={`bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all ${item.total === 0 ? 'opacity-60' : ''}`}>
+                      <div key={item.family.id} className={`bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm lg:hover:shadow-lg transition-all ${item.total === 0 ? 'opacity-60' : ''}`}>
                           <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
                               <div className="flex items-center gap-3">
                                   <div className="bg-rose-50 w-12 h-12 rounded-2xl flex items-center justify-center border border-rose-100">
@@ -657,12 +653,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                           </div>
                           <div className="space-y-2">
                               {item.categories.map(cat => (
-                                  <div key={cat.category.id} onClick={() => setSelectedCategoryAction(cat.category)} className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl hover:bg-rose-50 cursor-pointer group transition-colors">
+                                  <div key={cat.category.id} onClick={() => setSelectedCategoryAction(cat.category)} className="flex items-center justify-between py-2 px-3 -mx-2 rounded-xl lg:hover:bg-rose-50 cursor-pointer group transition-colors active:bg-rose-100 touch-manipulation">
                                       <div className="flex items-center gap-3 overflow-hidden">
-                                          <span className="text-lg group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
+                                          <span className="text-lg lg:group-hover:scale-110 transition-transform">{renderIcon(cat.category.icon, "w-5 h-5")}</span>
                                           <span className="text-sm font-bold text-slate-600 truncate">{cat.category.name}</span>
                                       </div>
-                                      <span className={`text-sm font-black opacity-80 group-hover:opacity-100 ${getAmountColor(cat.total)}`}>
+                                      <span className={`text-sm font-black opacity-80 lg:group-hover:opacity-100 ${getAmountColor(cat.total)}`}>
                                           {formatCurrency(cat.total)}
                                       </span>
                                   </div>
@@ -678,15 +674,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       {selectedCategoryAction && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 text-center relative border border-white/20">
-                <button onClick={() => setSelectedCategoryAction(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button>
+                <button onClick={() => setSelectedCategoryAction(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full lg:hover:text-rose-500 lg:hover:bg-rose-50 transition-all active:bg-rose-100 active:text-rose-600 touch-manipulation"><X size={20}/></button>
                 <div className="mx-auto w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 mb-6 shadow-sm text-3xl">
                     {renderIcon(selectedCategoryAction.icon, "w-10 h-10")}
                 </div>
                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-8">{selectedCategoryAction.name}</h3>
                 <div className="space-y-4">
-                    <button onClick={() => { setSelectedCategoryAction(null); onNavigateToTransactions({ filterCategory: selectedCategoryAction.id }); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-50 text-slate-700 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"><Search size={18}/> Ver Movimientos</button>
-                    <button onClick={() => { setCategoryChartTarget(selectedCategoryAction); setSelectedCategoryAction(null); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-50 text-slate-700 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"><TrendingUp size={18}/> Ver Evolución</button>
-                    <button onClick={() => { setSelectedCategoryAction(null); onNavigateToTransactions({ action: 'NEW', categoryId: selectedCategoryAction.id }); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 transition-all shadow-xl"><PlusCircle size={18}/> Entrada de Movimiento</button>
+                    <button onClick={() => { setSelectedCategoryAction(null); onNavigateToTransactions({ filterCategory: selectedCategoryAction.id }); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-50 text-slate-700 rounded-2xl font-black uppercase text-[11px] tracking-widest lg:hover:bg-indigo-50 lg:hover:text-indigo-600 transition-all border border-slate-100 active:bg-indigo-100 active:scale-95 touch-manipulation"><Search size={18}/> Ver Movimientos</button>
+                    <button onClick={() => { setCategoryChartTarget(selectedCategoryAction); setSelectedCategoryAction(null); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-50 text-slate-700 rounded-2xl font-black uppercase text-[11px] tracking-widest lg:hover:bg-indigo-50 lg:hover:text-indigo-600 transition-all border border-slate-100 active:bg-indigo-100 active:scale-95 touch-manipulation"><TrendingUp size={18}/> Ver Evolución</button>
+                    <button onClick={() => { setSelectedCategoryAction(null); onNavigateToTransactions({ action: 'NEW', categoryId: selectedCategoryAction.id }); }} className="w-full flex items-center justify-center gap-3 p-4 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest lg:hover:bg-indigo-600 transition-all shadow-xl active:scale-95 touch-manipulation"><PlusCircle size={18}/> Entrada de Movimiento</button>
                 </div>
             </div>
         </div>
@@ -696,7 +692,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       {categoryChartTarget && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-3xl p-8 sm:p-10 relative border border-white/20">
-                <button onClick={() => setCategoryChartTarget(null)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all z-10"><X size={24}/></button>
+                <button onClick={() => setCategoryChartTarget(null)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full lg:hover:text-rose-500 lg:hover:bg-rose-50 transition-all z-10 active:bg-rose-100 active:text-rose-600 touch-manipulation"><X size={24}/></button>
                 
                 <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6 mb-8">
                     <div className="flex items-center gap-4">
@@ -711,8 +707,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
 
                     <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
                         <div className="flex items-center justify-center gap-1 mb-2 sm:mb-0">
-                            <button onClick={() => navigateChartPeriod('prev')} className="p-2 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100 shadow-sm"><ChevronLeft size={18} /></button>
-                            <button onClick={() => navigateChartPeriod('next')} className="p-2 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100 shadow-sm"><ChevronRight size={18} /></button>
+                            <button onClick={() => navigateChartPeriod('prev')} className="p-2 bg-slate-50 border border-slate-100 rounded-xl lg:hover:bg-slate-100 shadow-sm active:bg-slate-200 active:scale-90 transition-all touch-manipulation"><ChevronLeft size={18} /></button>
+                            <button onClick={() => navigateChartPeriod('next')} className="p-2 bg-slate-50 border border-slate-100 rounded-xl lg:hover:bg-slate-100 shadow-sm active:bg-slate-200 active:scale-90 transition-all touch-manipulation"><ChevronRight size={18} /></button>
                         </div>
                         <div className="bg-slate-100 p-1.5 rounded-2xl flex flex-wrap justify-center sm:justify-end gap-1 w-full sm:w-auto">
                             {/* Botón 12 Meses (Interanual) */}
@@ -722,15 +718,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                  const start = new Date(end.getFullYear(), end.getMonth() - 11, 1);
                                  const fmt = (d: Date) => d.toISOString().split('T')[0];
                                  setLocalChartFilter({ timeRange: 'CUSTOM', referenceDate: now, customStart: fmt(start), customEnd: fmt(end) });
-                            }} className={`flex-1 sm:flex-none px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${localChartFilter.timeRange === 'CUSTOM' && !localChartFilter.customStart.startsWith('1900') ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>12 Meses</button>
+                            }} className={`flex-1 sm:flex-none px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap active:scale-95 touch-manipulation ${localChartFilter.timeRange === 'CUSTOM' && !localChartFilter.customStart.startsWith('1900') ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 active:text-slate-600 lg:hover:text-slate-600'}`}>12 Meses</button>
 
-                            <button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'ALL'})} className={`flex-1 sm:flex-none px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${localChartFilter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Todo</button>
+                            <button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'ALL'})} className={`flex-1 sm:flex-none px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap active:scale-95 touch-manipulation ${localChartFilter.timeRange === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 active:text-slate-600 lg:hover:text-slate-600'}`}>Todo</button>
                             
                             <div className={`flex-1 sm:flex-none px-3 py-2 rounded-xl transition-all flex items-center justify-center ${localChartFilter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>
-                                {localChartFilter.timeRange === 'YEAR' ? (<select className="bg-transparent text-[9px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'YEAR', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>) : (<button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'YEAR'})} className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>)}
+                                {localChartFilter.timeRange === 'YEAR' ? (<select className="bg-transparent text-[9px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'YEAR', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>) : (<button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'YEAR'})} className="text-[9px] font-black uppercase tracking-widest text-slate-400 active:text-slate-600 lg:hover:text-slate-600 active:scale-95 touch-manipulation">Año</button>)}
                             </div>
                             <div className={`flex-1 sm:flex-none px-3 py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${localChartFilter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>
-                                {localChartFilter.timeRange === 'MONTH' ? (<div className="flex items-center gap-1"><select className="bg-transparent text-[9px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setMonth(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'MONTH', referenceDate: d}); }}>{months.map((m, i) => <option key={i} value={i}>{m.substring(0,3)}</option>)}</select><span className="text-slate-300 text-[9px] font-black">/</span><select className="bg-transparent text-[9px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'MONTH', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div>) : (<button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'MONTH'})} className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Mes</button>)}
+                                {localChartFilter.timeRange === 'MONTH' ? (<div className="flex items-center gap-1"><select className="bg-transparent text-[9px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setMonth(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'MONTH', referenceDate: d}); }}>{months.map((m, i) => <option key={i} value={i}>{m.substring(0,3)}</option>)}</select><span className="text-slate-300 text-[9px] font-black">/</span><select className="bg-transparent text-[9px] font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer" value={localChartFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localChartFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalChartFilter({...localChartFilter, timeRange: 'MONTH', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div>) : (<button onClick={() => setLocalChartFilter({...localChartFilter, timeRange: 'MONTH'})} className="text-[9px] font-black uppercase tracking-widest text-slate-400 active:text-slate-600 lg:hover:text-slate-600 active:scale-95 touch-manipulation">Mes</button>)}
                             </div>
                         </div>
                     </div>
@@ -800,12 +796,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                               {localChartFilter.timeRange === 'MONTH' ? formatDateDisplay(pointDetailTxs.date) : formatDateTick(pointDetailTxs.date + '-01')}
                           </p>
                       </div>
-                      <button onClick={() => setPointDetailTxs(null)} className="p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button>
+                      <button onClick={() => setPointDetailTxs(null)} className="p-2 bg-slate-50 text-slate-400 rounded-full lg:hover:text-rose-500 lg:hover:bg-rose-50 transition-all active:bg-rose-100 active:text-rose-600 touch-manipulation"><X size={20}/></button>
                   </div>
                   
                   <div className="overflow-y-auto custom-scrollbar flex-1 -mx-2 px-2">
                       {pointDetailTxs.txs.map(t => (
-                          <div key={t.id} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 rounded-xl px-2 transition-colors">
+                          <div key={t.id} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0 lg:hover:bg-slate-50/50 rounded-xl px-2 transition-colors active:bg-slate-100 touch-manipulation">
                               <div className="flex flex-col gap-0.5">
                                   <span className="text-xs font-bold text-slate-700 uppercase">{t.description}</span>
                                   <span className="text-[9px] text-slate-400 font-medium">{formatDateDisplay(t.date)}</span>
@@ -822,7 +818,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl relative max-h-[90vh] flex flex-col border border-white/20 overflow-hidden">
                 <div className="p-8 sm:p-12 pb-6 flex-none bg-white border-b border-slate-50 relative z-10">
-                    <button onClick={() => setShowBalanceDetail(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                    <button onClick={() => setShowBalanceDetail(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full lg:hover:text-rose-500 lg:hover:bg-rose-50 transition-all active:bg-rose-100 active:text-rose-600 touch-manipulation"><X size={24}/></button>
                     <div className="flex items-center gap-4">
                         <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Banknote size={28} /></div>
                         <div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Desglose de Patrimonio</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Situación al {formatDateDisplay(dateBounds.endStr)}</p></div>
@@ -834,7 +830,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                             const isExpanded = expandedGroups.has(groupInfo.group.id);
                             return (
                                 <div key={groupInfo.group.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm transition-all">
-                                    <button onClick={() => { const newSet = new Set(expandedGroups); if (newSet.has(groupInfo.group.id)) newSet.delete(groupInfo.group.id); else newSet.add(groupInfo.group.id); setExpandedGroups(newSet); }} className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors">
+                                    <button onClick={() => { const newSet = new Set(expandedGroups); if (newSet.has(groupInfo.group.id)) newSet.delete(groupInfo.group.id); else newSet.add(groupInfo.group.id); setExpandedGroups(newSet); }} className="w-full flex items-center justify-between p-5 lg:hover:bg-slate-50 transition-colors active:bg-slate-100 touch-manipulation">
                                         <div className="flex items-center gap-4">
                                             <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">{renderIcon(groupInfo.group.icon, "w-6 h-6")}</div>
                                             <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight text-left">{groupInfo.group.name}</h4>
@@ -847,9 +843,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                     {isExpanded && (
                                         <div className="border-t border-slate-50 bg-slate-50/50 p-3 space-y-2 animate-in slide-in-from-top-2 duration-200">
                                             {groupInfo.accounts.map(acc => (
-                                                <div key={acc.id} onClick={() => { setShowBalanceDetail(false); onNavigateToTransactions({ filterAccount: acc.id }); }} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-2xl hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer group/row active:scale-[0.99]">
+                                                <div key={acc.id} onClick={() => { setShowBalanceDetail(false); onNavigateToTransactions({ filterAccount: acc.id }); }} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-2xl lg:hover:border-indigo-200 lg:hover:shadow-md transition-all cursor-pointer group/row active:scale-[0.99] active:bg-slate-50 touch-manipulation">
                                                     <div className="flex items-center gap-3 ml-2">
-                                                        <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden group-hover/row:scale-110 transition-transform">{renderIcon(acc.icon, "w-5 h-5")}</div>
+                                                        <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden lg:group-hover/row:scale-110 transition-transform">{renderIcon(acc.icon, "w-5 h-5")}</div>
                                                         <span className="text-[11px] font-bold text-slate-600 uppercase block">{acc.name}</span>
                                                     </div>
                                                     <div className="flex items-center gap-2 mr-2">
@@ -876,7 +872,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       {showRecurrentsModal && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-xl p-8 sm:p-12 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
-                <button onClick={() => setShowRecurrentsModal(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                <button onClick={() => setShowRecurrentsModal(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full lg:hover:text-rose-500 lg:hover:bg-rose-50 transition-all active:bg-rose-100 active:text-rose-600 touch-manipulation"><X size={24}/></button>
                 <div className="flex items-center gap-4 mb-10"><div className="bg-rose-500 p-4 rounded-3xl text-white shadow-xl shadow-rose-500/20"><Bell size={28} /></div><div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Vencimientos</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Movimientos recurrentes pendientes</p></div></div>
                 <div className="space-y-4">
                     {pendingRecurrents.map(r => {
@@ -889,10 +885,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                                     <span className={`text-base font-black ${getAmountColor(r.amount)}`}>{formatCurrency(r.amount)}</span>
                                 </div>
                                 <div className="grid grid-cols-4 gap-2">
-                                    <button onClick={() => handleProcessRecurrent(r)} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-emerald-300 hover:bg-emerald-50 transition-all group active:scale-95"><Check className="text-slate-400 group-hover:text-emerald-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-emerald-600">Validar</span></button>
-                                    <button onClick={() => { setRecurrenceModalTx({ id: Math.random().toString(36).substring(2, 15), date: r.nextDueDate, description: r.description, amount: r.amount, categoryId: r.categoryId, accountId: r.accountId, type: r.amount < 0 ? 'EXPENSE' : 'INCOME', isValidated: true, isFromRecurrence: r.id }); setIsModalOpen(true); }} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-indigo-300 hover:bg-indigo-50 transition-all group active:scale-95"><Edit3 className="text-slate-400 group-hover:text-indigo-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-indigo-600">Editar</span></button>
-                                    <button onClick={() => { const nextDate = calculateNextDate(r.nextDueDate, r.frequency, r.interval); onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, nextDueDate: nextDate } : item) }); }} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-amber-300 hover:bg-amber-50 transition-all group active:scale-95"><Clock className="text-slate-400 group-hover:text-amber-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-amber-600">Posponer</span></button>
-                                    <button onClick={() => onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, active: false } : item) })} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl hover:border-rose-300 hover:bg-rose-50 transition-all group active:scale-95"><AlertCircle className="text-slate-400 group-hover:text-rose-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 group-hover:text-rose-600">Anular</span></button>
+                                    <button onClick={() => handleProcessRecurrent(r)} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl lg:hover:border-emerald-300 lg:hover:bg-emerald-50 transition-all group active:scale-95 touch-manipulation"><Check className="text-slate-400 lg:group-hover:text-emerald-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 lg:group-hover:text-emerald-600">Validar</span></button>
+                                    <button onClick={() => { setRecurrenceModalTx({ id: Math.random().toString(36).substring(2, 15), date: r.nextDueDate, description: r.description, amount: r.amount, categoryId: r.categoryId, accountId: r.accountId, type: r.amount < 0 ? 'EXPENSE' : 'INCOME', isValidated: true, isFromRecurrence: r.id }); setIsModalOpen(true); }} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl lg:hover:border-indigo-300 lg:hover:bg-indigo-50 transition-all group active:scale-95 touch-manipulation"><Edit3 className="text-slate-400 lg:group-hover:text-indigo-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 lg:group-hover:text-indigo-600">Editar</span></button>
+                                    <button onClick={() => { const nextDate = calculateNextDate(r.nextDueDate, r.frequency, r.interval); onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, nextDueDate: nextDate } : item) }); }} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl lg:hover:border-amber-300 lg:hover:bg-amber-50 transition-all group active:scale-95 touch-manipulation"><Clock className="text-slate-400 lg:group-hover:text-amber-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 lg:group-hover:text-amber-600">Posponer</span></button>
+                                    <button onClick={() => onUpdateData({ recurrents: recurrents.map(item => item.id === r.id ? { ...item, active: false } : item) })} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-white border border-slate-200 rounded-2xl lg:hover:border-rose-300 lg:hover:bg-rose-50 transition-all group active:scale-95 touch-manipulation"><AlertCircle className="text-slate-400 lg:group-hover:text-rose-600" size={18} /><span className="text-[8px] font-black uppercase text-slate-400 lg:group-hover:text-rose-600">Anular</span></button>
                                 </div>
                             </div>
                         );
@@ -905,7 +901,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
       {isModalOpen && recurrenceModalTx && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[250] p-4 animate-in fade-in zoom-in duration-300">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-8 sm:p-12 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
-                <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+                <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full lg:hover:text-rose-500 lg:hover:bg-rose-50 transition-all active:bg-rose-100 active:text-rose-600 touch-manipulation"><X size={24}/></button>
                 <div className="flex items-center gap-4 mb-8">
                     <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Edit3 size={28} /></div>
                     <div><h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">Editar Movimiento</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Modificar detalles antes de validar</p></div>
@@ -942,7 +938,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                         </div>
                     </div>
 
-                    <button onClick={handleSaveEditedRecurrent} className="w-full py-5 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2 mt-4 transition-all active:scale-[0.98]">
+                    <button onClick={handleSaveEditedRecurrent} className="w-full py-5 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest lg:hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-2 mt-4 transition-all active:scale-[0.98] touch-manipulation">
                         <Save size={18} /> Guardar y Validar
                     </button>
                 </div>

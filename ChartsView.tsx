@@ -8,7 +8,6 @@ interface ChartsViewProps {
   filter: GlobalFilter;
   onUpdateFilter: (f: GlobalFilter) => void;
   currentBook: BookMetadata;
-  onRefreshData?: () => Promise<void>;
 }
 
 const COLORS = ['#6366f1', '#10b981', '#f43f5e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
@@ -37,7 +36,7 @@ interface ViewState {
     itemType?: 'INCOME' | 'EXPENSE';
 }
 
-export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook, onRefreshData }) => {
+export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook }) => {
   // Estado de navegación (Drill-down)
   const [viewState, setViewState] = useState<ViewState>({ level: 'ROOT' });
   const [pointDetailTxs, setPointDetailTxs] = useState<{ date: string, txs: Transaction[] } | null>(null);
@@ -300,8 +299,8 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook, onRef
                 </div>
                 <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
                     <div className="flex items-center gap-2">
-                        <button onClick={() => navigatePeriod('prev')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronLeft size={24} /></button>
-                        <button onClick={() => navigatePeriod('next')} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 shadow-sm active:scale-90 transition-all"><ChevronRight size={24} /></button>
+                        <button onClick={() => navigatePeriod('prev')} className="p-3 bg-white border border-slate-200 rounded-xl lg:hover:bg-slate-50 shadow-sm active:bg-slate-100 active:scale-90 transition-all touch-manipulation"><ChevronLeft size={24} /></button>
+                        <button onClick={() => navigatePeriod('next')} className="p-3 bg-white border border-slate-200 rounded-xl lg:hover:bg-slate-50 shadow-sm active:bg-slate-100 active:scale-90 transition-all touch-manipulation"><ChevronRight size={24} /></button>
                     </div>
                     <div className="bg-slate-100 p-2 rounded-2xl flex flex-wrap gap-1 shadow-inner border border-slate-200/50">
                         {/* BOTÓN 12 MESES (Por defecto ahora es Custom, lo simulamos visualmente) */}
@@ -310,10 +309,10 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook, onRef
                              const end = new Date(now.getFullYear(), now.getMonth(), 0);
                              const start = new Date(end.getFullYear(), end.getMonth() - 11, 1);
                              setLocalFilter({ timeRange: 'CUSTOM', referenceDate: now, customStart: start.toISOString().split('T')[0], customEnd: end.toISOString().split('T')[0] });
-                        }} className={`px-4 py-3 text-xs sm:text-sm font-black uppercase tracking-widest rounded-xl transition-all ${localFilter.timeRange === 'CUSTOM' && !localFilter.customStart.startsWith('1900') ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>12 Meses</button>
+                        }} className={`px-4 py-3 text-xs sm:text-sm font-black uppercase tracking-widest rounded-xl transition-all touch-manipulation ${localFilter.timeRange === 'CUSTOM' && !localFilter.customStart.startsWith('1900') ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 active:text-slate-600 lg:hover:text-slate-600'}`}>12 Meses</button>
                         
-                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center ${localFilter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>{localFilter.timeRange === 'YEAR' ? (<select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[60px]" value={localFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalFilter({...localFilter, timeRange: 'YEAR', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>) : (<button onClick={() => setLocalFilter({...localFilter, timeRange: 'YEAR'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Año</button>)}</div>
-                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-1 ${localFilter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>{localFilter.timeRange === 'MONTH' ? (<div className="flex items-center gap-2"><select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[80px]" value={localFilter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(localFilter.referenceDate); d.setMonth(parseInt(e.target.value)); setLocalFilter({...localFilter, timeRange: 'MONTH', referenceDate: d}); }}>{months.map((m, i) => <option key={i} value={i}>{m}</option>)}</select><span className="text-slate-300 text-xs font-black">/</span><select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[70px]" value={localFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalFilter({...localFilter, timeRange: 'MONTH', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div>) : (<button onClick={() => setLocalFilter({...localFilter, timeRange: 'MONTH'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Mes</button>)}</div>
+                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center ${localFilter.timeRange === 'YEAR' ? 'bg-white shadow-sm' : ''}`}>{localFilter.timeRange === 'YEAR' ? (<select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[60px]" value={localFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalFilter({...localFilter, timeRange: 'YEAR', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>) : (<button onClick={() => setLocalFilter({...localFilter, timeRange: 'YEAR'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 active:text-slate-600 lg:hover:text-slate-600 touch-manipulation">Año</button>)}</div>
+                        <div className={`px-5 py-3 rounded-xl transition-all flex items-center gap-1 ${localFilter.timeRange === 'MONTH' ? 'bg-white shadow-sm' : ''}`}>{localFilter.timeRange === 'MONTH' ? (<div className="flex items-center gap-2"><select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[80px]" value={localFilter.referenceDate.getMonth()} onChange={(e) => { const d = new Date(localFilter.referenceDate); d.setMonth(parseInt(e.target.value)); setLocalFilter({...localFilter, timeRange: 'MONTH', referenceDate: d}); }}>{months.map((m, i) => <option key={i} value={i}>{m}</option>)}</select><span className="text-slate-300 text-xs font-black">/</span><select className="bg-transparent text-xs sm:text-sm font-black text-indigo-600 uppercase tracking-widest outline-none cursor-pointer py-1 min-w-[70px]" value={localFilter.referenceDate.getFullYear()} onChange={(e) => { const d = new Date(localFilter.referenceDate); d.setFullYear(parseInt(e.target.value)); setLocalFilter({...localFilter, timeRange: 'MONTH', referenceDate: d}); }}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div>) : (<button onClick={() => setLocalFilter({...localFilter, timeRange: 'MONTH'})} className="px-2 text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400 active:text-slate-600 lg:hover:text-slate-600 touch-manipulation">Mes</button>)}</div>
                     </div>
                 </div>
             </div>
@@ -344,14 +343,14 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook, onRef
             
             {/* HEADER DE NAVEGACIÓN */}
             <div className="flex items-center gap-2 mb-8 border-b border-slate-50 pb-4">
-                <button onClick={() => setViewState({ level: 'ROOT' })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'ROOT' ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:text-slate-600'}`}>
+                <button onClick={() => setViewState({ level: 'ROOT' })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all active:scale-95 touch-manipulation ${viewState.level === 'ROOT' ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 active:text-slate-600 lg:hover:text-slate-600'}`}>
                     <Home size={14}/> <span className="text-[10px] font-black uppercase tracking-widest">Resumen</span>
                 </button>
 
                 {viewState.level !== 'ROOT' && (
                     <>
                         <ChevronRight size={14} className="text-slate-300" />
-                        <button onClick={() => setViewState({ level: 'FAMILY', itemId: viewState.level === 'CATEGORY' ? data.categories.find(c=>c.id===viewState.itemId)?.familyId : viewState.itemId, itemName: viewState.level === 'CATEGORY' ? data.families.find(f=>f.id === data.categories.find(c=>c.id===viewState.itemId)?.familyId)?.name : viewState.itemName, itemType: viewState.itemType })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewState.level === 'FAMILY' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-400 hover:text-indigo-600'}`}>
+                        <button onClick={() => setViewState({ level: 'FAMILY', itemId: viewState.level === 'CATEGORY' ? data.categories.find(c=>c.id===viewState.itemId)?.familyId : viewState.itemId, itemName: viewState.level === 'CATEGORY' ? data.families.find(f=>f.id === data.categories.find(c=>c.id===viewState.itemId)?.familyId)?.name : viewState.itemName, itemType: viewState.itemType })} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all active:scale-95 touch-manipulation ${viewState.level === 'FAMILY' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-400 active:text-indigo-600 lg:hover:text-indigo-600'}`}>
                             {viewState.itemType === 'INCOME' ? <ArrowUpCircle size={14}/> : <ArrowDownCircle size={14}/>}
                             <span className="text-[10px] font-black uppercase tracking-widest">{viewState.level === 'CATEGORY' ? data.families.find(f=>f.id === data.categories.find(c=>c.id===viewState.itemId)?.familyId)?.name : viewState.itemName}</span>
                         </button>
@@ -406,11 +405,11 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook, onRef
                                             <div 
                                                 key={`legend-inc-${index}`} 
                                                 onClick={() => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'INCOME' })} 
-                                                className="flex items-center justify-between gap-3 w-full p-2 rounded-xl hover:bg-slate-50 cursor-pointer group transition-all border border-transparent hover:border-slate-100"
+                                                className="flex items-center justify-between gap-3 w-full p-2 rounded-xl lg:hover:bg-slate-50 cursor-pointer group transition-all border border-transparent lg:hover:border-slate-100 active:bg-slate-100 touch-manipulation"
                                             >
                                                 <div className="flex items-center gap-3 overflow-hidden">
                                                     <div className="w-3 h-3 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }}/>
-                                                    <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[120px] group-hover:text-emerald-600 transition-colors">{entry.name}</span>
+                                                    <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[120px] lg:group-hover:text-emerald-600 transition-colors">{entry.name}</span>
                                                 </div>
                                                 <span className={`text-xs font-black whitespace-nowrap ${getAmountColorClass(entry.realValue)}`}>{formatCurrency(entry.realValue)}</span>
                                             </div>
@@ -454,11 +453,11 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook, onRef
                                             <div 
                                                 key={`legend-exp-${index}`} 
                                                 onClick={() => setViewState({ level: 'FAMILY', itemId: entry.id, itemName: entry.name, itemType: 'EXPENSE' })} 
-                                                className="flex items-center justify-between gap-3 w-full p-2 rounded-xl hover:bg-slate-50 cursor-pointer group transition-all border border-transparent hover:border-slate-100"
+                                                className="flex items-center justify-between gap-3 w-full p-2 rounded-xl lg:hover:bg-slate-50 cursor-pointer group transition-all border border-transparent lg:hover:border-slate-100 active:bg-slate-100 touch-manipulation"
                                             >
                                                 <div className="flex items-center gap-3 overflow-hidden">
                                                     <div className="w-3 h-3 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }}/>
-                                                    <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[120px] group-hover:text-rose-600 transition-colors">{entry.name}</span>
+                                                    <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[120px] lg:group-hover:text-rose-600 transition-colors">{entry.name}</span>
                                                 </div>
                                                 <span className={`text-xs font-black whitespace-nowrap ${getAmountColorClass(entry.realValue)}`}>{formatCurrency(entry.realValue)}</span>
                                             </div>
@@ -507,13 +506,13 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook, onRef
                                     {(chartData as any).data.map((entry: any, index: number) => (
                                         <div 
                                             key={`legend-item-${index}`} 
-                                            className="flex items-center justify-between gap-3 w-full p-2 rounded-xl hover:bg-slate-50 cursor-pointer group transition-all border border-transparent hover:border-slate-100" 
+                                            className="flex items-center justify-between gap-3 w-full p-2 rounded-xl lg:hover:bg-slate-50 cursor-pointer group transition-all border border-transparent lg:hover:border-slate-100 active:bg-slate-100 touch-manipulation" 
                                             onClick={() => setViewState({ level: 'CATEGORY', itemId: entry.id, itemName: entry.name, itemType: viewState.itemType })}
                                         >
                                             <div className="flex items-center gap-3 overflow-hidden">
                                                 <div className="w-3 h-3 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }}/>
                                                 <div className="flex flex-col">
-                                                    <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[120px] group-hover:text-indigo-600 transition-colors">{entry.name}</span>
+                                                    <span className="text-[10px] font-black text-slate-600 uppercase truncate max-w-[120px] lg:group-hover:text-indigo-600 transition-colors">{entry.name}</span>
                                                 </div>
                                             </div>
                                             <span className={`text-xs font-black whitespace-nowrap ${getAmountColorClass(entry.realValue)}`}>
@@ -570,12 +569,12 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ data, currentBook, onRef
                                 {localFilter.timeRange === 'MONTH' ? formatDateDisplay(pointDetailTxs.date) : formatDateLabel(pointDetailTxs.date + '-01')}
                             </p>
                         </div>
-                        <button onClick={() => setPointDetailTxs(null)} className="p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button>
+                        <button onClick={() => setPointDetailTxs(null)} className="p-2 bg-slate-50 text-slate-400 rounded-full lg:hover:text-rose-500 lg:hover:bg-rose-50 transition-all active:bg-rose-100 active:text-rose-600 touch-manipulation"><X size={20}/></button>
                     </div>
                     
                     <div className="overflow-y-auto custom-scrollbar flex-1 -mx-2 px-2">
                         {pointDetailTxs.txs.map(t => (
-                            <div key={t.id} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 rounded-xl px-2 transition-colors">
+                            <div key={t.id} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0 lg:hover:bg-slate-50/50 rounded-xl px-2 transition-colors active:bg-slate-100 touch-manipulation">
                                 <div className="flex flex-col gap-0.5 flex-1 min-w-0 pr-4">
                                     <span className="text-xs font-bold text-slate-700 uppercase truncate" title={t.description}>{t.description}</span>
                                     <span className="text-[9px] text-slate-400 font-medium">{formatDateDisplay(t.date)}</span>

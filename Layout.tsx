@@ -16,7 +16,6 @@ interface LayoutProps {
   syncStatus?: 'SAVED' | 'SAVING' | 'ERROR';
   syncError?: string | null;
   onManualSave?: () => void;
-  onRefreshData?: () => Promise<void>;
 }
 
 const THEME_COLORS: Record<string, string> = {
@@ -29,23 +28,18 @@ const THEME_COLORS: Record<string, string> = {
 };
 
 const THEME_ACCENTS: Record<string, string> = {
-    BLACK: 'text-slate-400 hover:bg-white/10',
-    BLUE: 'text-blue-200 hover:bg-white/10',
-    ROSE: 'text-rose-200 hover:bg-white/10',
-    EMERALD: 'text-emerald-200 hover:bg-white/10',
-    AMBER: 'text-amber-200 hover:bg-white/10',
-    VIOLET: 'text-violet-200 hover:bg-white/10',
+    BLACK: 'text-slate-400 lg:hover:bg-white/10',
+    BLUE: 'text-blue-200 lg:hover:bg-white/10',
+    ROSE: 'text-rose-200 lg:hover:bg-white/10',
+    EMERALD: 'text-emerald-200 lg:hover:bg-white/10',
+    AMBER: 'text-amber-200 lg:hover:bg-white/10',
+    VIOLET: 'text-violet-200 lg:hover:bg-white/10',
 };
 
-export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED', syncError, onManualSave, onRefreshData }) => {
+export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED', syncError, onManualSave }) => {
   const [isBookMenuOpen, setIsBookMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('contamiki_custom_logo'));
-  
-  // Pull to refresh state
-  const [pullStartY, setPullStartY] = useState<number | null>(null);
-  const [pullDistance, setPullDistance] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Modals States
   const [isChangePassModalOpen, setIsChangePassModalOpen] = useState(false);
@@ -118,38 +112,6 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       } else {
           target.src = "https://cdn-icons-png.flaticon.com/512/2910/2910296.png";
       }
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-      const scrollContainer = e.currentTarget;
-      if (scrollContainer && scrollContainer.scrollTop === 0 && !isRefreshing) {
-          setPullStartY(e.touches[0].clientY);
-      }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-      if (pullStartY !== null && !isRefreshing) {
-          const y = e.touches[0].clientY;
-          const dist = y - pullStartY;
-          if (dist > 0) {
-              setPullDistance(Math.min(dist * 0.5, 100)); // Max pull distance
-          }
-      }
-  };
-
-  const handleTouchEnd = async () => {
-      if (pullDistance > 60 && onRefreshData && !isRefreshing) {
-          setIsRefreshing(true);
-          try {
-              await onRefreshData();
-          } finally {
-              setIsRefreshing(false);
-              setPullDistance(0);
-          }
-      } else {
-          setPullDistance(0);
-      }
-      setPullStartY(null);
   };
 
   const handleChangePassword = async () => {
@@ -246,10 +208,10 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       className={`w-full flex items-center gap-4 px-6 py-4 rounded-[1.25rem] transition-all duration-300 group relative ${
         currentView === item.id
           ? 'bg-white text-slate-900 shadow-xl translate-x-1 font-bold'
-          : `${accentClass} text-white/70 hover:text-white`
+          : `${accentClass} text-white/70 lg:hover:text-white`
       } ${isMobile ? 'flex-col gap-1 p-3' : ''}`}
     >
-      <div className={currentView === item.id ? 'scale-110 text-indigo-600' : 'group-hover:scale-110 transition-transform'}>
+      <div className={currentView === item.id ? 'scale-110 text-indigo-600' : 'lg:group-hover:scale-110 transition-transform'}>
         {item.icon}
       </div>
       <span className={`uppercase tracking-[0.2em] ${isMobile ? 'text-[8px]' : 'text-[11px]'} ${currentView === item.id ? 'font-black' : 'font-medium'}`}>{item.label}</span>
@@ -266,7 +228,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
     <div className="relative z-[60]">
         <button 
             onClick={() => setIsBookMenuOpen(!isBookMenuOpen)}
-            className="flex items-center gap-3 px-3 py-2 rounded-2xl hover:bg-black/10 transition-all active:scale-95"
+            className="flex items-center gap-3 px-3 py-2 rounded-2xl lg:hover:bg-black/10 transition-all active:scale-95 touch-manipulation"
         >
             <div className="bg-white/20 p-1.5 rounded-xl backdrop-blur-sm shadow-sm overflow-hidden flex items-center justify-center">
                  <img 
@@ -296,7 +258,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                             <button 
                                 key={book.id}
                                 onClick={() => { onSwitchBook(book.id); setIsBookMenuOpen(false); }}
-                                className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all ${book.id === currentBook.id ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
+                                className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all ${book.id === currentBook.id ? 'bg-indigo-50 text-indigo-700' : 'active:bg-slate-50 lg:hover:bg-slate-50 text-slate-700'} touch-manipulation`}
                             >
                                 <div className="flex items-center gap-3">
                                     <div className={`w-3 h-3 rounded-full ${THEME_COLORS[book.color].replace('bg-', 'bg-')}`}></div>
@@ -312,14 +274,13 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                     <div className="bg-slate-50 p-2 border-t border-slate-100 flex gap-1">
                         <button 
                             onClick={() => { onCreateBook(); setIsBookMenuOpen(false); }}
-                            className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-all"
+                            className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-slate-600 active:border-indigo-300 active:text-indigo-600 lg:hover:border-indigo-300 lg:hover:text-indigo-600 transition-all touch-manipulation"
                         >
                             <Plus size={14} /> Crear
                         </button>
                         <button 
                             onClick={() => { onEditBook(); setIsBookMenuOpen(false); }}
-                            className="px-3 py-3 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-indigo-600 hover:border-indigo-300 transition-all"
-                            title="Editar libro actual"
+                            className="px-3 py-3 bg-white border border-slate-200 rounded-xl text-slate-400 active:text-indigo-600 active:border-indigo-300 lg:hover:text-indigo-600 lg:hover:border-indigo-300 transition-all touch-manipulation"
                         >
                             <Edit2 size={14} />
                         </button>
@@ -338,20 +299,19 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
           return (
              <button 
                 onClick={() => { if(syncError) alert(syncError); else onManualSave?.(); }} 
-                className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/20 text-white rounded-full border border-rose-500/50 hover:bg-rose-500 hover:text-white transition-all active:scale-95 group relative"
-                title={syncError || "Error desconocido. Clic para reintentar."}
+                className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/20 text-white rounded-full border border-rose-500/50 lg:hover:bg-rose-500 lg:hover:text-white transition-all active:scale-95 group relative touch-manipulation"
              >
                 <CloudOff size={14} />
                 <span className="text-[9px] font-black uppercase tracking-wider">Error</span>
                 {syncError && (
-                    <div className="hidden group-hover:block absolute top-full left-0 mt-2 bg-slate-900 text-white text-[10px] p-2 rounded-lg w-48 z-[100] shadow-xl">
+                    <div className="hidden lg:group-hover:block absolute top-full left-0 mt-2 bg-slate-900 text-white text-[10px] p-2 rounded-lg w-48 z-[100] shadow-xl">
                         {syncError}
                     </div>
                 )}
              </button>
           );
       }
-      return <button onClick={onManualSave} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/20 rounded-full text-white/40 hover:text-white transition-all active:scale-95" title="Forzar guardado"><Cloud size={14} /><span className="text-[9px] font-black uppercase tracking-wider">Guardado</span></button>;
+      return <button onClick={onManualSave} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 lg:hover:bg-white/20 rounded-full text-white/40 lg:hover:text-white transition-all active:scale-95 touch-manipulation"><Cloud size={14} /><span className="text-[9px] font-black uppercase tracking-wider">Guardado</span></button>;
   };
 
   return (
@@ -372,7 +332,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         </nav>
 
         <div className="px-6 pb-6 space-y-2">
-          <div className="flex justify-center pb-6 opacity-80 hover:opacity-100 transition-all duration-500">
+          <div className="flex justify-center pb-6 opacity-80 lg:hover:opacity-100 transition-all duration-500 active:opacity-100">
              <img 
                 src={displayLogo} 
                 className="w-40 h-40 rounded-3xl shadow-2xl object-cover border-4 border-white/10 bg-white" 
@@ -387,9 +347,9 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
           <div className="relative">
               <button 
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="w-full flex items-center gap-4 px-6 py-4 rounded-[1.25rem] text-white/70 hover:bg-white/10 hover:text-white transition-all font-bold text-[11px] group relative"
+                  className="w-full flex items-center gap-4 px-6 py-4 rounded-[1.25rem] text-white/70 lg:hover:bg-white/10 lg:hover:text-white transition-all active:bg-white/5 font-bold text-[11px] group relative touch-manipulation"
               >
-                  <div className="bg-white/10 p-2 rounded-full group-hover:scale-110 transition-transform">
+                  <div className="bg-white/10 p-2 rounded-full lg:group-hover:scale-110 transition-transform">
                       <User size={18} />
                   </div>
                   <div className="flex flex-col items-start truncate">
@@ -404,20 +364,20 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                     <div className="fixed inset-0 z-10" onClick={() => setIsUserMenuOpen(false)}></div>
                     <div className="absolute bottom-full left-0 mb-2 w-full bg-white text-slate-900 rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-20 animate-in slide-in-from-bottom-2 fade-in">
                         <div className="p-2 space-y-1">
-                             <button onClick={() => { setIsUserMenuOpen(false); open2FAModal(); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 transition-all text-slate-600">
+                             <button onClick={() => { setIsUserMenuOpen(false); open2FAModal(); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
                                 <ShieldCheck size={16} className="text-emerald-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Seguridad 2FA</span>
                             </button>
-                            <button onClick={() => { setIsUserMenuOpen(false); setIsChangePassModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 transition-all text-slate-600">
+                            <button onClick={() => { setIsUserMenuOpen(false); setIsChangePassModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
                                 <Key size={16} className="text-amber-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cambiar Clave</span>
                             </button>
-                            <button onClick={() => { setIsUserMenuOpen(false); handleTestEmail(); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 transition-all text-slate-600">
+                            <button onClick={() => { setIsUserMenuOpen(false); handleTestEmail(); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
                                 <Mail size={16} className="text-blue-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Probar Email</span>
                             </button>
-                            <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 transition-all text-slate-600">
+                            <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
                                 <LogOut size={16} className="text-indigo-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cerrar Sesión</span>
                             </button>
                             <div className="h-px bg-slate-100 my-1"/>
-                            <button onClick={() => { setIsUserMenuOpen(false); setIsDeleteAccountModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-rose-50 transition-all text-rose-500">
+                            <button onClick={() => { setIsUserMenuOpen(false); setIsDeleteAccountModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-rose-50 transition-all active:bg-rose-100 text-rose-500 touch-manipulation">
                                 <Trash2 size={16}/> <span className="text-[10px] font-black uppercase tracking-widest">Borrar Cuenta</span>
                             </button>
                         </div>
@@ -433,31 +393,15 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         <BookSelector />
         <div className="flex items-center gap-3">
             <SyncIndicator />
-            <button onClick={logout} className="bg-white/10 text-white/70 p-2 rounded-xl border border-white/10">
+            <button onClick={logout} className="bg-white/10 text-white/70 p-2 rounded-xl border border-white/10 active:bg-white/20 touch-manipulation">
               <LogOut size={18} />
             </button>
         </div>
       </header>
 
       {/* CONTENIDO PRINCIPAL */}
-      <main 
-        className="flex-1 overflow-y-auto relative bg-slate-50 custom-scrollbar"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        <div 
-          className="w-full max-w-[1400px] mx-auto px-4 sm:px-8 md:px-12 py-8 md:py-12 lg:py-16 pb-36 lg:pb-16"
-          style={{ transform: `translateY(${pullDistance}px)`, transition: pullDistance === 0 ? 'transform 0.3s ease-out' : 'none' }}
-        >
-          {/* Pull to refresh indicator */}
-          {(pullDistance > 0 || isRefreshing) && (
-              <div className="absolute top-0 left-0 right-0 flex justify-center items-center h-16 -mt-16 overflow-hidden">
-                  <div className={`bg-white rounded-full p-2 shadow-md flex items-center justify-center transition-all ${isRefreshing ? 'animate-spin text-indigo-600' : 'text-slate-400'}`} style={{ transform: `rotate(${pullDistance * 3}deg)` }}>
-                      <RefreshCw size={20} />
-                  </div>
-              </div>
-          )}
+      <main className="flex-1 overflow-y-auto relative bg-slate-50 custom-scrollbar">
+        <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-8 md:px-12 py-8 md:py-12 lg:py-16 pb-36 lg:pb-16">
           {children}
         </div>
       </main>
@@ -468,8 +412,8 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
           <button
             key={item.id}
             onClick={() => setCurrentView(item.id)}
-            className={`flex flex-col items-center gap-1 p-3 transition-all relative ${
-              currentView === item.id ? 'text-indigo-400 scale-110' : 'text-slate-500 hover:text-slate-300'
+            className={`flex flex-col items-center gap-1 p-3 transition-all relative active:bg-white/5 touch-manipulation ${
+              currentView === item.id ? 'text-indigo-400 scale-110' : 'text-slate-500 lg:hover:text-slate-300'
             }`}
           >
             {item.icon}
@@ -487,7 +431,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       {is2FAModalOpen && (
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 text-center relative">
-                  <button onClick={() => setIs2FAModalOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full hover:bg-slate-100"><X size={20}/></button>
+                  <button onClick={() => setIs2FAModalOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full active:bg-slate-100 lg:hover:bg-slate-100 touch-manipulation"><X size={20}/></button>
                   <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-2 flex items-center justify-center gap-2"><ShieldCheck className="text-emerald-500"/> Seguridad 2FA</h3>
                   
                   {twoFactorStep === 'INITIAL' && (
@@ -497,9 +441,9 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                            </div>
                            
                            {twoFactorEnabled ? (
-                               <button onClick={handleDisable2FA} className="w-full py-4 bg-rose-50 text-rose-500 border border-rose-100 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-rose-100 transition-all">Desactivar 2FA</button>
+                               <button onClick={handleDisable2FA} className="w-full py-4 bg-rose-50 text-rose-500 border border-rose-100 rounded-xl font-black uppercase text-[10px] tracking-widest active:bg-rose-100 lg:hover:bg-rose-100 transition-all touch-manipulation">Desactivar 2FA</button>
                            ) : (
-                               <button onClick={start2FASetup} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-600 shadow-xl">Configurar Ahora</button>
+                               <button onClick={start2FASetup} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[10px] tracking-widest active:bg-indigo-600 lg:hover:bg-indigo-600 shadow-xl touch-manipulation">Configurar Ahora</button>
                            )}
                            
                            <p className="text-[10px] text-slate-400">Compatible con Google Authenticator, Microsoft Auth y otros.</p>
@@ -527,7 +471,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
 
                           {setupError && <p className="text-rose-500 text-xs font-bold">{setupError}</p>}
 
-                          <button onClick={verify2FASetup} className="w-full py-4 bg-emerald-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-600 shadow-xl">Verificar y Activar</button>
+                          <button onClick={verify2FASetup} className="w-full py-4 bg-emerald-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest active:bg-emerald-600 lg:hover:bg-emerald-600 shadow-xl touch-manipulation">Verificar y Activar</button>
                       </div>
                   )}
               </div>
@@ -538,14 +482,14 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       {isChangePassModalOpen && (
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 text-center relative">
-                  <button onClick={() => setIsChangePassModalOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full hover:bg-slate-100"><X size={20}/></button>
+                  <button onClick={() => setIsChangePassModalOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full active:bg-slate-100 lg:hover:bg-slate-100 touch-manipulation"><X size={20}/></button>
                   <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-6 flex items-center justify-center gap-2"><Key className="text-amber-500"/> Cambiar Clave</h3>
                   <div className="space-y-4">
                       <input type="password" placeholder="Contraseña Actual" className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" value={currentPass} onChange={e => setCurrentPass(e.target.value)} />
                       <input type="password" placeholder="Nueva Contraseña" className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" value={newPass} onChange={e => setNewPass(e.target.value)} />
                       {passError && <p className="text-rose-500 text-xs font-bold">{passError}</p>}
                       {passSuccess && <p className="text-emerald-500 text-xs font-bold">{passSuccess}</p>}
-                      <button onClick={handleChangePassword} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-600 shadow-xl">Actualizar</button>
+                      <button onClick={handleChangePassword} className="w-full py-4 bg-slate-950 text-white rounded-xl font-black uppercase text-[10px] tracking-widest active:bg-indigo-600 lg:hover:bg-indigo-600 shadow-xl touch-manipulation">Actualizar</button>
                   </div>
               </div>
           </div>
@@ -555,7 +499,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       {isDeleteAccountModalOpen && (
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-sm p-8 text-center relative border-4 border-rose-50">
-                  <button onClick={() => setIsDeleteAccountModalOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-slate-100"><X size={20}/></button>
+                  <button onClick={() => setIsDeleteAccountModalOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full active:text-rose-500 active:bg-slate-100 lg:hover:text-rose-500 lg:hover:bg-slate-100 touch-manipulation"><X size={20}/></button>
                   <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-rose-500"><AlertCircle size={32}/></div>
                   <h3 className="text-xl font-black text-rose-600 uppercase tracking-tighter mb-2">¡Peligro!</h3>
                   <p className="text-slate-500 text-xs font-medium mb-6">Esta acción borrará tu usuario y <strong>TODOS</strong> tus datos financieros. Es irreversible a menos que tengas una copia de seguridad local.</p>

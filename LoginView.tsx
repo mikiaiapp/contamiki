@@ -432,7 +432,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                         <button 
                             type="submit" 
                             disabled={loading || ((mode === 'REGISTER' || mode === 'RESET_PASSWORD' || mode === 'REGISTER_INVITE') && (!isPasswordStrong || !doPasswordsMatch))}
-                            className="w-full bg-slate-950 text-white py-6 rounded-2xl font-black uppercase tracking-[0.3em] text-[10px] hover:bg-indigo-600 transition-all shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-3 mt-4"
+                            className="w-full bg-slate-950 text-white py-6 rounded-2xl font-black uppercase tracking-[0.3em] text-[10px] lg:hover:bg-indigo-600 transition-all shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-3 mt-4 touch-manipulation"
                         >
                             {loading ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -453,12 +453,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     {/* Botones Auxiliares */}
                     <div className="space-y-4">
                         {mode === 'LOGIN' && (
-                             <button onClick={() => resetState('FORGOT')} className="w-full text-center text-[9px] font-black text-slate-400 hover:text-indigo-600 uppercase tracking-widest transition-colors">
+                             <button onClick={() => resetState('FORGOT')} className="w-full text-center text-[9px] font-black text-slate-400 active:text-indigo-600 lg:hover:text-indigo-600 uppercase tracking-widest transition-colors touch-manipulation">
                                 ¿Olvidaste tu contraseña?
                             </button>
                         )}
                         {(mode === 'FORGOT' || mode === 'RESET_PASSWORD' || mode === 'TWO_FACTOR') && (
-                            <button onClick={() => resetState('LOGIN')} className="w-full text-center text-[9px] font-black text-slate-400 hover:text-slate-600 uppercase tracking-widest transition-colors flex items-center justify-center gap-2">
+                            <button onClick={() => resetState('LOGIN')} className="w-full text-center text-[9px] font-black text-slate-400 active:text-slate-600 lg:hover:text-slate-600 uppercase tracking-widest transition-colors flex items-center justify-center gap-2 touch-manipulation">
                                 <ArrowLeft size={12}/> Volver al Login
                             </button>
                         )}
@@ -475,7 +475,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
                             <button 
                                 onClick={handleGuestAccess}
-                                className="w-full py-5 bg-indigo-50 text-indigo-600 rounded-2xl font-black uppercase tracking-widest text-[9px] hover:bg-indigo-100 transition-all flex items-center justify-center gap-2 group"
+                                className="w-full py-5 bg-indigo-50 text-indigo-600 rounded-2xl font-black uppercase tracking-widest text-[9px] lg:hover:bg-indigo-100 transition-all active:bg-indigo-100 flex items-center justify-center gap-2 group touch-manipulation"
                             >
                                 <Sparkles size={16} className="group-hover:animate-pulse" /> 
                                 Entrar en Modo Demo (Local)
