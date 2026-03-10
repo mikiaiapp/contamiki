@@ -273,9 +273,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
               if (initialSpecificFilters.filterAccount) setColFilterExit(initialSpecificFilters.filterAccount);
           }
       }
-      if (clearSpecificFilters) clearSpecificFilters();
+      if (mode === 'FULL' && clearSpecificFilters) clearSpecificFilters();
     }
-  }, [initialSpecificFilters, indices, data.accounts]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSpecificFilters]);
 
   const findSuggestedCategory = (desc: string): string => {
     const text = desc.toLowerCase().trim();
@@ -1151,7 +1152,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
             </div>
              <div className="flex gap-2">
                 <div className="relative">
-                    <button onClick={(e) => { e.stopPropagation(); setShowFavoritesList(!showFavoritesList); }} className="w-12 h-12 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl shadow-sm hover:bg-amber-100 flex items-center justify-center transition-all active:scale-95" title="Favoritos"><Heart size={20} fill={showFavoritesList ? "currentColor" : "none"} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); setShowFavoritesList(!showFavoritesList); }} className="w-12 h-12 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl shadow-sm active:bg-amber-100 lg:hover:bg-amber-100 flex items-center justify-center transition-all active:scale-95" title="Favoritos"><Heart size={20} fill={showFavoritesList ? "currentColor" : "none"} /></button>
                     {showFavoritesList && (
                         <>
                             <div className="fixed inset-0 z-10 bg-transparent" onClick={() => setShowFavoritesList(false)}></div>
@@ -1171,9 +1172,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                         </>
                     )}
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); setImportAccount(data.accounts[0]?.id || ''); setImportStep(1); setIsImportModalOpen(true); }} className="w-12 h-12 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl shadow-sm hover:bg-indigo-100 flex items-center justify-center transition-all active:scale-95" title="Importador Inteligente"><Bot size={20} /></button>
+                <button onClick={(e) => { e.stopPropagation(); setImportAccount(data.accounts[0]?.id || ''); setImportStep(1); setIsImportModalOpen(true); }} className="w-12 h-12 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl shadow-sm active:bg-indigo-100 lg:hover:bg-indigo-100 flex items-center justify-center transition-all active:scale-95" title="Importador Inteligente"><Bot size={20} /></button>
                 <div className="flex gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                    <button onClick={(e) => { e.stopPropagation(); handleExportExcel(); }} className="w-10 h-10 bg-white text-emerald-600 rounded-lg shadow-sm hover:bg-emerald-50 flex items-center justify-center transition-all active:scale-95" title="Exportar Excel">
+                    <button onClick={(e) => { e.stopPropagation(); handleExportExcel(); }} className="w-10 h-10 bg-white text-emerald-600 rounded-lg shadow-sm active:bg-emerald-50 lg:hover:bg-emerald-50 flex items-center justify-center transition-all active:scale-95" title="Exportar Excel">
                         <div className="relative">
                             <FileSpreadsheet size={18} />
                             <span className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[6px] font-black px-0.5 rounded">XLS</span>
@@ -1186,7 +1187,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                         </div>
                     </button>
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); openEditor(); }} className="w-12 h-12 bg-slate-950 text-white rounded-xl shadow-lg hover:bg-slate-800 flex items-center justify-center transition-all active:scale-95" title="Nuevo Movimiento"><Plus size={20} /></button>
+                <button onClick={(e) => { e.stopPropagation(); openEditor(); }} className="w-12 h-12 bg-slate-950 text-white rounded-xl shadow-lg active:bg-slate-800 lg:hover:bg-slate-800 flex items-center justify-center transition-all active:scale-95" title="Nuevo Movimiento"><Plus size={20} /></button>
             </div>
           </div>
         </div>
@@ -1248,37 +1249,37 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
             creditNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></div>;
           } else if (t.type === 'INCOME') {
             debitId = t.accountId; creditId = t.categoryId;
-            debitNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></div>;
-            creditNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name || 'S/C'}</span></div>;
+            debitNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></div>;
+            creditNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name || 'S/C'}</span></div>;
           } else {
             debitId = t.categoryId; creditId = t.accountId;
-            debitNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name}</span></div>;
-            creditNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></div>;
+            debitNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name}</span></div>;
+            creditNode = <div className={`flex items-center gap-1 font-bold line-clamp-2 leading-tight cursor-pointer active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></div>;
           }
           const balance = runningBalances.get(t.id) || 0;
           const displayAmt = getDisplayAmount(t);
           return (
-            <div key={t.id} className={`group bg-white p-2 md:p-4 md:px-6 rounded-2xl border ${isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-100'} hover:shadow-lg transition-all relative`}>
+            <div key={t.id} className={`group bg-white p-2 md:p-4 md:px-6 rounded-2xl border ${isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-100'} active:shadow-lg lg:hover:shadow-lg transition-all relative`}>
                 <div className={gridClasses}>
-                    <div className="flex justify-center"><button onClick={(e) => { e.stopPropagation(); toggleSelection(t.id); }} className={`text-slate-400 ${isSelected ? 'text-indigo-600' : 'hover:text-indigo-600'}`}>{isSelected ? <CheckSquare size={16} /> : <Square size={16} />}</button></div>
+                    <div className="flex justify-center"><button onClick={(e) => { e.stopPropagation(); toggleSelection(t.id); }} className={`text-slate-400 ${isSelected ? 'text-indigo-600' : 'active:text-indigo-600 lg:hover:text-indigo-600'}`}>{isSelected ? <CheckSquare size={16} /> : <Square size={16} />}</button></div>
                     <div className="text-left text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-black text-slate-400 uppercase tracking-tighter leading-none truncate">{formatDateDisplay(t.date)}</div>
                     <div className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] pr-1 sm:pr-0 leading-tight">{debitNode}</div>
-                    <div className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-bold text-slate-800 uppercase line-clamp-2 leading-tight cursor-pointer hover:text-indigo-600 pl-0.5 sm:pl-0" onClick={(e) => {e.stopPropagation(); setColFilterDesc(t.description);}} title={t.description}>{t.description}</div>
-                    <div className="flex justify-center">{t.attachment ? ( <button onClick={(e) => { e.stopPropagation(); setPreviewAttachment(t.attachment || null); }} className="p-1 hover:bg-indigo-50 rounded-full text-indigo-500 transition-colors"><Paperclip size={12} className="md:size-4"/></button> ) : <div className="w-1 md:w-2" />}</div>
+                    <div className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-bold text-slate-800 uppercase line-clamp-2 leading-tight cursor-pointer active:text-indigo-600 lg:hover:text-indigo-600 pl-0.5 sm:pl-0" onClick={(e) => {e.stopPropagation(); setColFilterDesc(t.description);}} title={t.description}>{t.description}</div>
+                    <div className="flex justify-center">{t.attachment ? ( <button onClick={(e) => { e.stopPropagation(); setPreviewAttachment(t.attachment || null); }} className="p-1 active:bg-indigo-50 lg:hover:bg-indigo-50 rounded-full text-indigo-500 transition-colors"><Paperclip size={12} className="md:size-4"/></button> ) : <div className="w-1 md:w-2" />}</div>
                     <div className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] pr-1 sm:pr-0 leading-tight">{creditNode}</div>
                     <div className={`text-right text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-black font-mono tracking-tighter truncate ${getAmountColor(displayAmt, t.type)} pl-0.5 sm:pl-0`}>{formatCurrency(displayAmt)}</div>
                     <div className={`hidden sm:block text-right text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-black font-mono tracking-tighter truncate ${activeFilterId ? (balance >= 0 ? 'text-slate-400' : 'text-rose-400') : 'opacity-0'}`}>{activeFilterId ? formatCurrency(balance) : ''}</div>
-                    <div className="flex justify-center relative"><button onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(activeMenuTxId === t.id ? null : t.id); }} className="p-1.5 md:p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><MoreVertical size={16} /></button>
+                    <div className="flex justify-center relative"><button onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(activeMenuTxId === t.id ? null : t.id); }} className="p-1.5 md:p-2 text-slate-300 active:text-indigo-600 active:bg-indigo-50 lg:hover:text-indigo-600 lg:hover:bg-indigo-50 rounded-lg transition-colors"><MoreVertical size={16} /></button>
                         {activeMenuTxId === t.id && (
                             <>
                                 <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(null); }}></div>
                                 <div className="absolute top-8 right-0 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 min-w-[180px] p-2 flex flex-col gap-1 animate-in fade-in zoom-in duration-200 origin-top-right" onClick={e => e.stopPropagation()}>
-                                <button onClick={() => { setActiveMenuTxId(null); openEditor(t); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Edit3 size={14} className="text-indigo-600"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Editar</span></button>
-                                <button onClick={() => handleDuplicate(t)} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Copy size={14} className="text-slate-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Duplicar</span></button>
-                                <button onClick={() => { setActiveMenuTxId(null); openRecurrenceModal(t); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Repeat size={14} className="text-emerald-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Hacer Recurrente</span></button>
-                                <button onClick={() => { setActiveMenuTxId(null); setFavoriteModalTx(t); setFavName(t.description); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Heart size={14} className="text-amber-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Guardar Favorito</span></button>
+                                <button onClick={() => { setActiveMenuTxId(null); openEditor(t); }} className="flex items-center gap-3 px-3 py-2.5 active:bg-slate-50 lg:hover:bg-slate-50 rounded-xl text-left transition-colors"><Edit3 size={14} className="text-indigo-600"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Editar</span></button>
+                                <button onClick={() => handleDuplicate(t)} className="flex items-center gap-3 px-3 py-2.5 active:bg-slate-50 lg:hover:bg-slate-50 rounded-xl text-left transition-colors"><Copy size={14} className="text-slate-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Duplicar</span></button>
+                                <button onClick={() => { setActiveMenuTxId(null); openRecurrenceModal(t); }} className="flex items-center gap-3 px-3 py-2.5 active:bg-slate-50 lg:hover:bg-slate-50 rounded-xl text-left transition-colors"><Repeat size={14} className="text-emerald-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Hacer Recurrente</span></button>
+                                <button onClick={() => { setActiveMenuTxId(null); setFavoriteModalTx(t); setFavName(t.description); }} className="flex items-center gap-3 px-3 py-2.5 active:bg-slate-50 lg:hover:bg-slate-50 rounded-xl text-left transition-colors"><Heart size={14} className="text-amber-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Guardar Favorito</span></button>
                                 <div className="h-px bg-slate-100 my-1"/>
-                                <button onClick={() => { setActiveMenuTxId(null); setDeleteConfirmId(t.id); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-rose-50 rounded-xl text-left transition-colors text-rose-500"><Trash2 size={14} /> <span className="text-[10px] font-bold uppercase">Borrar</span></button>
+                                <button onClick={() => { setActiveMenuTxId(null); setDeleteConfirmId(t.id); }} className="flex items-center gap-3 px-3 py-2.5 active:bg-rose-50 lg:hover:bg-rose-50 rounded-xl text-left transition-colors text-rose-500"><Trash2 size={14} /> <span className="text-[10px] font-bold uppercase">Borrar</span></button>
                             </div>
                             </>
                         )}
@@ -1307,7 +1308,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {isBulkEditModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/5 flex items-center justify-center z-[200] p-4 animate-in fade-in duration-200" onClick={() => setIsBulkEditModalOpen(false)}>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in duration-200" onClick={() => setIsBulkEditModalOpen(false)}>
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 space-y-6" onClick={e => e.stopPropagation()}><div className="flex justify-between items-center"><h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">{bulkEditTarget === 'DELETE' ? <Trash2 className="text-rose-500"/> : <LayoutList className="text-indigo-600"/>}{bulkEditTarget === 'DELETE' ? 'Borrado Masivo' : 'Edición en Bloque'}</h3><button onClick={() => setIsBulkEditModalOpen(false)} className="p-2 bg-slate-100 rounded-full hover:bg-rose-100 hover:text-rose-500"><X size={18} /></button></div>
                   {bulkEditTarget === 'DELETE' ? ( <p className="text-sm font-medium text-slate-600">Estás a punto de eliminar permanentemente <span className="font-black text-slate-900">{selectedIds.size}</span> movimientos. ¿Estás seguro?</p> ) : (
                       <div className="space-y-4"><p className="text-xs text-slate-500">Se actualizarán <span className="font-bold">{selectedIds.size}</span> elementos.</p>
@@ -1325,7 +1326,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     )}
 
       {isImportModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/5 flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500" onClick={closeImportModal}>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in duration-500" onClick={closeImportModal}>
           <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-slate-200" onClick={e => e.stopPropagation()}>
             <button onClick={closeImportModal} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
             <div className="flex items-center gap-4 mb-8">
@@ -1495,7 +1496,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/5 flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300" onClick={closeModal}>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in zoom-in duration-300" onClick={closeModal}>
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-slate-200 max-h-[95vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
                   <button onClick={closeModal} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
                   <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Edit3 className="text-indigo-600"/> {editingTx ? 'Editar Movimiento' : 'Nuevo Movimiento'}</h3>
@@ -1560,7 +1561,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {recurrenceModalTx && (
-        <div className="fixed inset-0 bg-slate-900/5 flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300" onClick={() => setRecurrenceModalTx(null)}>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in zoom-in duration-300" onClick={() => setRecurrenceModalTx(null)}>
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-6 relative border border-slate-200 max-h-[95vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
                   <button onClick={() => setRecurrenceModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 transition-colors"><X size={20}/></button>
                   <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2 mb-6"><CalendarClock className="text-indigo-600" size={24}/> Crear Recurrencia</h3>
@@ -1668,7 +1669,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {favoriteModalTx && (
-        <div className="fixed inset-0 bg-slate-900/5 flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300" onClick={() => setFavoriteModalTx(null)}>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-start justify-center pt-4 md:pt-10 z-[200] p-4 animate-in fade-in zoom-in duration-300" onClick={() => setFavoriteModalTx(null)}>
               <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 text-center relative border border-slate-200" onClick={e => e.stopPropagation()}><button onClick={() => setFavoriteModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button><div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-amber-500"><Heart size={32}/></div><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Guardar Favorito</h3>
                   <div className="space-y-4"><div className="space-y-2 text-left"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre del Botón</label><input type="text" placeholder="Ej: Café Diario" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-amber-400 transition-colors" value={favName} onChange={e => setFavName(e.target.value)} autoFocus /></div><button onClick={handleSaveFavorite} className="w-full py-4 bg-amber-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-600 shadow-xl">Guardar Plantilla</button></div>
               </div>
