@@ -16,6 +16,7 @@ interface LayoutProps {
   syncStatus?: 'SAVED' | 'SAVING' | 'ERROR';
   syncError?: string | null;
   onManualSave?: () => void;
+  onRefresh?: () => Promise<void>;
 }
 
 const THEME_COLORS: Record<string, string> = {
@@ -36,10 +37,59 @@ const THEME_ACCENTS: Record<string, string> = {
     VIOLET: 'text-violet-200 lg:hover:bg-white/10',
 };
 
-export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED', syncError, onManualSave }) => {
+export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED', syncError, onManualSave, onRefresh }) => {
   const [isBookMenuOpen, setIsBookMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('contamiki_custom_logo'));
+  
+  // Pull to refresh state
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const mainRef = React.useRef<HTMLElement>(null);
+  const touchStartY = React.useRef(0);
+  const isPulling = React.useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (mainRef.current && mainRef.current.scrollTop <= 0) {
+      touchStartY.current = e.touches[0].clientY;
+      isPulling.current = true;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isPulling.current) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY.current;
+    
+    if (diff > 0) {
+      // Resistance factor
+      const distance = Math.min(diff * 0.4, 80);
+      setPullDistance(distance);
+      
+      // Prevent scrolling if pulling significantly
+      if (distance > 10 && e.cancelable) {
+        // e.preventDefault(); // This can cause issues in some browsers if not passive
+      }
+    } else {
+      isPulling.current = false;
+      setPullDistance(0);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isPulling.current) return;
+    isPulling.current = false;
+    
+    if (pullDistance > 50 && onRefresh) {
+      setIsRefreshing(true);
+      onRefresh().finally(() => {
+        setIsRefreshing(false);
+        setPullDistance(0);
+      });
+    } else {
+      setPullDistance(0);
+    }
+  };
   
   // Modals States
   const [isChangePassModalOpen, setIsChangePassModalOpen] = useState(false);
@@ -400,7 +450,30 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       </header>
 
       {/* CONTENIDO PRINCIPAL */}
-      <main className="flex-1 overflow-y-auto relative bg-slate-50 custom-scrollbar">
+      <main 
+        ref={mainRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="flex-1 overflow-y-auto relative bg-slate-50 custom-scrollbar"
+      >
+        {/* Pull to Refresh Indicator */}
+        <div 
+          className="absolute top-0 left-0 right-0 flex justify-center pointer-events-none transition-all duration-200 z-[60]"
+          style={{ 
+            transform: `translateY(${pullDistance - 40}px)`,
+            opacity: pullDistance > 10 ? 1 : 0
+          }}
+        >
+          <div className="bg-white rounded-full p-2 shadow-xl border border-slate-100 flex items-center justify-center">
+            <RefreshCw 
+              size={20} 
+              className={`text-indigo-500 ${isRefreshing || syncStatus === 'SAVING' ? 'animate-spin' : ''}`}
+              style={{ transform: !isRefreshing && syncStatus !== 'SAVING' ? `rotate(${pullDistance * 4}deg)` : undefined }}
+            />
+          </div>
+        </div>
+
         <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-8 md:px-12 py-8 md:py-12 lg:py-16 pb-36 lg:pb-16">
           {children}
         </div>
