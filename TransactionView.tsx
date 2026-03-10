@@ -88,7 +88,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const [fAcc, setFAcc] = useState('');
   const [fCat, setFCat] = useState('');
   const [fTransferDest, setFTransferDest] = useState('');
-  const [isCategorySelectorOpen, setIsCategorySelectorOpen] = useState(false);
+  const [selectorTarget, setSelectorTarget] = useState<'ACC' | 'CAT' | null>(null);
   const [categorySearchTerm, setCategorySearchTerm] = useState('');
   const [fAttachment, setFAttachment] = useState<string | undefined>(undefined);
   const [isCompressing, setIsCompressing] = useState(false);
@@ -881,16 +881,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   }, [colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, indices]);
 
   const clearAllFilters = () => { setColFilterEntry('ALL'); setColFilterDesc(''); setColFilterClip('ALL'); setColFilterExit('ALL'); setColFilterAmountOp('ALL'); setColFilterAmountVal1(''); };
-  const resetForm = () => { setEditingTx(null); setFType('EXPENSE'); setFAmount(''); setFDesc(''); setFDate(new Date().toISOString().split('T')[0]); setFAcc(data.accounts[0]?.id || ''); setFCat(''); setFTransferDest(''); setFAttachment(undefined); setIsCategorySelectorOpen(false); setCategorySearchTerm(''); };
+  const resetForm = () => { setEditingTx(null); setFType('EXPENSE'); setFAmount(''); setFDesc(''); setFDate(new Date().toISOString().split('T')[0]); setFAcc(data.accounts[0]?.id || ''); setFCat(''); setFTransferDest(''); setFAttachment(undefined); setSelectorTarget(null); setCategorySearchTerm(''); };
   
   const openEditor = (t?: Transaction) => { 
       if (t) { setEditingTx(t); setFType(t.type); setFAmount(Math.abs(t.amount).toString()); setFDesc(t.description); setFDate(t.date); setFAcc(t.accountId); setFCat(t.categoryId); setFTransferDest(t.transferAccountId || ''); setFAttachment(t.attachment); } else { resetForm(); }
-      setIsCategorySelectorOpen(false); setCategorySearchTerm('');
+      setSelectorTarget(null); setCategorySearchTerm('');
       setIsModalOpen(true); 
   };
 
   const handleDuplicate = (t: Transaction) => {
-      setEditingTx(null); setFType(t.type); setFAmount(Math.abs(t.amount).toString()); setFDesc(t.description); setFDate(new Date().toISOString().split('T')[0]); setFAcc(t.accountId); setFCat(t.categoryId); setFTransferDest(t.transferAccountId || ''); setFAttachment(t.attachment); setActiveMenuTxId(null); setIsCategorySelectorOpen(false); setCategorySearchTerm(''); setIsModalOpen(true);
+      setEditingTx(null); setFType(t.type); setFAmount(Math.abs(t.amount).toString()); setFDesc(t.description); setFDate(new Date().toISOString().split('T')[0]); setFAcc(t.accountId); setFCat(t.categoryId); setFTransferDest(t.transferAccountId || ''); setFAttachment(t.attachment); setActiveMenuTxId(null); setSelectorTarget(null); setCategorySearchTerm(''); setIsModalOpen(true);
   };
 
   const handleSaveRecurrent = () => {
@@ -1475,8 +1475,50 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                   {formError && <div className="mb-6 p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-600 text-xs font-bold animate-in fade-in slide-in-from-top-2">{formError}</div>}
                   <div className="space-y-6"><div className="bg-slate-100 p-1.5 rounded-2xl flex shadow-inner"><button onClick={() => setFType('EXPENSE')} className={`flex-1 py-4 text-[10px] font-black uppercase rounded-xl transition-all ${fType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-500' : 'text-slate-400 active:text-slate-600 lg:hover:text-slate-600'}`}>Gasto</button><button onClick={() => setFType('INCOME')} className={`flex-1 py-4 text-[10px] font-black uppercase rounded-xl transition-all ${fType === 'INCOME' ? 'bg-white shadow-sm text-emerald-500' : 'text-slate-400 active:text-slate-600 lg:hover:text-slate-600'}`}>Ingreso</button><button onClick={() => { setFType('TRANSFER'); if(!fDesc) setFDesc('Traspaso'); }} className={`flex-1 py-4 text-[10px] font-black uppercase rounded-xl transition-all ${fType === 'TRANSFER' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 active:text-slate-600 lg:hover:text-slate-600'}`}>Traspaso</button></div>
                       <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe</label><div className="relative"><span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 font-black">€</span><input type="number" step="0.01" inputMode="decimal" placeholder="0.00" className="w-full pl-10 pr-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-xl outline-none focus:border-indigo-500 transition-all touch-action-manipulation" value={fAmount} onChange={e => setFAmount(e.target.value)} /></div></div>
-                      <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDate} onChange={e => setFDate(e.target.value)} /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">{fType === 'TRANSFER' ? 'Desde' : 'Cuenta'}</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fAcc} onChange={e => setFAcc(e.target.value)}>{groupedAccounts.map(g => (<optgroup key={g.group.id} label={g.group.name}>{g.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</optgroup>))}</select></div></div>
-                      {fType === 'TRANSFER' ? ( <div className="space-y-2 animate-in slide-in-from-top-2 relative"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Hacia Cuenta Destino</label><button onClick={() => setIsCategorySelectorOpen(!isCategorySelectorOpen)} className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-left flex items-center justify-between cursor-pointer touch-action-manipulation"><span>{fTransferDest ? indices.acc.get(fTransferDest)?.name || 'Cuenta...' : 'Selecciona destino...'}</span><ChevronDown size={16} className="opacity-50"/></button></div> ) : ( <div className="space-y-2 animate-in slide-in-from-top-2 relative"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label><button onClick={() => setIsCategorySelectorOpen(!isCategorySelectorOpen)} className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-left flex items-center justify-between cursor-pointer touch-action-manipulation"><span>{fCat ? indices.cat.get(fCat)?.name || 'Categoría...' : 'Selecciona categoría...'}</span><ChevronDown size={16} className="opacity-50"/></button></div> )}
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                              <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha</label>
+                              <input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDate} onChange={e => setFDate(e.target.value)} />
+                          </div>
+                          <div className="space-y-2">
+                              <label className="text-[10px] font-black text-slate-400 uppercase ml-1">{fType === 'TRANSFER' ? 'Desde' : 'Cuenta'}</label>
+                              <button 
+                                  onClick={() => setSelectorTarget('ACC')} 
+                                  className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-left flex items-center justify-between cursor-pointer touch-action-manipulation"
+                              >
+                                  <span className="truncate flex items-center gap-2">
+                                      {renderIcon(indices.acc.get(fAcc)?.icon || '🏦', "w-5 h-5")}
+                                      <span>{indices.acc.get(fAcc)?.name || 'Cuenta...'}</span>
+                                  </span>
+                                  <ChevronDown size={16} className="opacity-50"/>
+                              </button>
+                          </div>
+                      </div>
+
+                      <div className="space-y-2 animate-in slide-in-from-top-2 relative">
+                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">
+                              {fType === 'TRANSFER' ? 'Hacia Cuenta Destino' : 'Categoría / Destino'}
+                          </label>
+                          <button 
+                              onClick={() => setSelectorTarget('CAT')} 
+                              className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-left flex items-center justify-between cursor-pointer touch-action-manipulation"
+                          >
+                              <span className="truncate flex items-center gap-2">
+                                  {fType === 'TRANSFER' && fTransferDest ? (
+                                      <>
+                                          {renderIcon(indices.acc.get(fTransferDest)?.icon || '🏦', "w-5 h-5")}
+                                          <span>{indices.acc.get(fTransferDest)?.name || 'Cuenta...'}</span>
+                                      </>
+                                  ) : (
+                                      <>
+                                          {renderIcon(indices.cat.get(fCat)?.icon || '🏷️', "w-5 h-5")}
+                                          <span>{fCat ? indices.cat.get(fCat)?.name || 'Categoría...' : 'Selecciona categoría o destino...'}</span>
+                                      </>
+                                  )}
+                              </span>
+                              <ChevronDown size={16} className="opacity-50"/>
+                          </button>
+                      </div>
 
                       <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Concepto</label><input type="text" placeholder="Ej: Compra semanal..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDesc} onChange={e => { setFDesc(e.target.value); if(!editingTx && !fCat && fType !== 'TRANSFER') { const sugg = findSuggestedCategory(e.target.value); if(sugg) setFCat(sugg); } }} /></div>
                       <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Comprobante (Opcional)</label><div className="flex items-center gap-3"><button onClick={() => fileInputRef.current?.click()} className="flex-1 py-4 bg-white border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 active:border-indigo-400 lg:hover:border-indigo-400 active:text-indigo-500 lg:hover:text-indigo-500 transition-all font-bold uppercase text-[10px] flex justify-center items-center gap-2" disabled={isCompressing}>{isCompressing ? <span className="animate-spin">⏳</span> : <Paperclip size={16}/>}{fAttachment ? 'Cambiar Archivo' : 'Adjuntar Imagen'}</button>{fAttachment && ( <button onClick={() => setFAttachment(undefined)} className="p-4 bg-rose-50 text-rose-500 rounded-2xl active:bg-rose-100 lg:hover:bg-rose-100"><Trash2 size={18}/></button> )}</div><input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />{fAttachment && <p className="text-[10px] text-emerald-500 font-bold flex items-center gap-1"><Check size={12}/> Archivo listo para guardar</p>}</div>
@@ -1610,51 +1652,88 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           </div>
       )}
 
-      {isCategorySelectorOpen && (
-          <div className="fixed inset-0 z-[250] flex items-start justify-center pt-4 md:pt-10 p-4 bg-slate-900/40 backdrop-blur-sm cursor-pointer" onClick={(e) => { e.stopPropagation(); setIsCategorySelectorOpen(false); }}>
-              <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 w-[450px] max-w-[95vw] flex flex-col overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[85vh] relative cursor-default" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => setIsCategorySelectorOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 transition-colors z-20 cursor-pointer touch-action-manipulation"><X size={18}/></button>
-                  <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 z-10 space-y-2">
-                      <div className="font-black text-[10px] text-slate-400 uppercase tracking-widest text-center">{fType === 'TRANSFER' ? 'Cuentas Activas' : 'Categorías Activas'}</div>
-                      {fType !== 'TRANSFER' && (
+      {selectorTarget && (
+          <div className="fixed inset-0 z-[250] flex items-start justify-center pt-4 md:pt-10 p-4 bg-slate-900/40 backdrop-blur-sm cursor-pointer" onClick={(e) => { e.stopPropagation(); setSelectorTarget(null); }}>
+              <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 w-[600px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[85vh] relative cursor-default" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => setSelectorTarget(null)} className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 transition-colors z-20 cursor-pointer touch-action-manipulation"><X size={18}/></button>
+                  
+                  <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50">
+                      <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 z-10 space-y-2">
+                          <div className="font-black text-[10px] text-slate-400 uppercase tracking-widest text-center">Categorías Activas</div>
                           <div className="relative">
                               <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"/>
-                              <input type="text" placeholder="Buscar..." className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[16px] sm:text-[10px] font-bold outline-none focus:border-indigo-500 transition-all placeholder-slate-300 touch-action-manipulation" value={categorySearchTerm} onChange={e => setCategorySearchTerm(e.target.value)} onClick={e => e.stopPropagation()} inputMode="text" autoComplete="off" />
+                              <input 
+                                  type="text" 
+                                  placeholder="Buscar..." 
+                                  className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[16px] sm:text-[10px] font-bold outline-none focus:border-indigo-500 transition-all placeholder-slate-300 touch-action-manipulation" 
+                                  value={categorySearchTerm} 
+                                  onChange={e => setCategorySearchTerm(e.target.value)} 
+                                  onClick={e => e.stopPropagation()} 
+                                  inputMode="text" 
+                                  autoComplete="off" 
+                              />
                           </div>
-                      )}
+                      </div>
+                      {activeGroupedCategories.map(f => {
+                          const matchingCats = f.categories.filter(c => !categorySearchTerm || c.name.toLowerCase().includes(categorySearchTerm.toLowerCase()) || f.family.name.toLowerCase().includes(categorySearchTerm.toLowerCase()));
+                          if (matchingCats.length === 0) return null;
+                          return (
+                              <div key={f.family.id}>
+                                  <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-0 z-0">{f.family.name}</div>
+                                  {matchingCats.map(c => (
+                                      <button 
+                                          key={c.id} 
+                                          onClick={() => { 
+                                              if (selectorTarget === 'ACC') {
+                                                  setFAcc(c.id); // This is technically wrong if it's an account field, but we'll handle it below
+                                              } else {
+                                                  setFCat(c.id); 
+                                                  setFTransferDest(''); 
+                                                  setFType(f.family.type);
+                                              }
+                                              setSelectorTarget(null); 
+                                          }} 
+                                          className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer touch-action-manipulation ${(selectorTarget === 'CAT' ? fCat : fAcc) === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}
+                                          disabled={selectorTarget === 'ACC'} // Cannot pick category for the account field
+                                      >
+                                          {renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span>
+                                          {selectorTarget === 'ACC' && <span className="text-[8px] text-rose-400 ml-auto">(Solo Cuentas)</span>}
+                                      </button>
+                                  ))}
+                              </div>
+                          );
+                      })}
                   </div>
+
                   <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
-                      {fType === 'TRANSFER' ? (
-                          activeGroupedAccounts.map(g => {
-                              const availableAccs = g.accounts.filter(a => a.id !== fAcc);
-                              if (availableAccs.length === 0) return null;
-                              return (
-                                  <div key={g.group.id}>
-                                      <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-0 z-0">{g.group.name}</div>
-                                      {availableAccs.map(a => (
-                                          <button key={a.id} onClick={() => { setFTransferDest(a.id); setIsCategorySelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-emerald-50 active:text-emerald-700 lg:hover:bg-emerald-50 lg:hover:text-emerald-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer touch-action-manipulation ${fTransferDest === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>
-                                              ➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span>
-                                          </button>
-                                      ))}
-                                  </div>
-                              );
-                          })
-                      ) : (
-                          activeGroupedCategories.map(f => {
-                              const matchingCats = f.categories.filter(c => !categorySearchTerm || c.name.toLowerCase().includes(categorySearchTerm.toLowerCase()) || f.family.name.toLowerCase().includes(categorySearchTerm.toLowerCase()));
-                              if (matchingCats.length === 0) return null;
-                              return (
-                                  <div key={f.family.id}>
-                                      <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-0 z-0">{f.family.name}</div>
-                                      {matchingCats.map(c => (
-                                          <button key={c.id} onClick={() => { setFCat(c.id); setIsCategorySelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer touch-action-manipulation ${fCat === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>
-                                              {renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span>
-                                          </button>
-                                      ))}
-                                  </div>
-                              );
-                          })
-                      )}
+                      <div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos / Cuentas</div>
+                      {activeGroupedAccounts.map(g => {
+                          const availableAccs = g.accounts.filter(a => selectorTarget === 'ACC' || a.id !== fAcc);
+                          if (availableAccs.length === 0) return null;
+                          return (
+                              <div key={g.group.id}>
+                                  <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-0 z-0">{g.group.name}</div>
+                                  {availableAccs.map(a => (
+                                      <button 
+                                          key={a.id} 
+                                          onClick={() => { 
+                                              if (selectorTarget === 'ACC') {
+                                                  setFAcc(a.id);
+                                              } else {
+                                                  setFTransferDest(a.id); 
+                                                  setFCat(''); 
+                                                  setFType('TRANSFER');
+                                              }
+                                              setSelectorTarget(null); 
+                                          }} 
+                                          className={`w-full text-left px-4 py-3 active:bg-emerald-50 active:text-emerald-700 lg:hover:bg-emerald-50 lg:hover:text-emerald-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer touch-action-manipulation ${(selectorTarget === 'CAT' ? fTransferDest : fAcc) === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}
+                                      >
+                                          ➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span>
+                                      </button>
+                                  ))}
+                              </div>
+                          );
+                      })}
                   </div>
               </div>
           </div>
