@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/jpeg" href="/contamiki.jpg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>ContaMiki | Finanzas Inteligentes</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      body { font-family: 'Inter', sans-serif; background-color: #020617; margin: 0; padding: 0; }
+      html, body { font-family: 'Inter', sans-serif; background-color: #020617; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; cursor: pointer; }
       #app-loader { transition: opacity 0.5s ease; position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #020617; color: white; z-index: 9999; }
       .loader-spin { width: 64px; height: 64px; border: 4px solid rgba(99, 102, 241, 0.1); border-top-color: #6366f1; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 2rem; }
       @keyframes spin { to { transform: rotate(360deg); } }
@@ -17,6 +17,10 @@
       .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
       .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.2); border-radius: 10px; }
       .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.4); }
+      
+      /* Fix for iOS zoom and touch delay */
+      input, select, textarea { font-size: 16px !important; }
+      button, a, input, select, [role="button"], .cursor-pointer { touch-action: manipulation; }
     </style>
 </head>
   <body class="antialiased overflow-x-hidden" ontouchstart="">
