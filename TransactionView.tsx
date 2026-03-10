@@ -89,7 +89,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const [fCat, setFCat] = useState('');
   const [fTransferDest, setFTransferDest] = useState('');
   const [selectorTarget, setSelectorTarget] = useState<'ACC' | 'CAT' | null>(null);
-  const [categorySearchTerm, setCategorySearchTerm] = useState('');
+  const [modalSearchTerm, setModalSearchTerm] = useState('');
   const [fAttachment, setFAttachment] = useState<string | undefined>(undefined);
   const [isCompressing, setIsCompressing] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -881,16 +881,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   }, [colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, indices]);
 
   const clearAllFilters = () => { setColFilterEntry('ALL'); setColFilterDesc(''); setColFilterClip('ALL'); setColFilterExit('ALL'); setColFilterAmountOp('ALL'); setColFilterAmountVal1(''); };
-  const resetForm = () => { setEditingTx(null); setFType('EXPENSE'); setFAmount(''); setFDesc(''); setFDate(new Date().toISOString().split('T')[0]); setFAcc(data.accounts[0]?.id || ''); setFCat(''); setFTransferDest(''); setFAttachment(undefined); setSelectorTarget(null); setCategorySearchTerm(''); };
+  const resetForm = () => { setEditingTx(null); setFType('EXPENSE'); setFAmount(''); setFDesc(''); setFDate(new Date().toISOString().split('T')[0]); setFAcc(data.accounts[0]?.id || ''); setFCat(''); setFTransferDest(''); setFAttachment(undefined); setSelectorTarget(null); setModalSearchTerm(''); };
   
   const openEditor = (t?: Transaction) => { 
       if (t) { setEditingTx(t); setFType(t.type); setFAmount(Math.abs(t.amount).toString()); setFDesc(t.description); setFDate(t.date); setFAcc(t.accountId); setFCat(t.categoryId); setFTransferDest(t.transferAccountId || ''); setFAttachment(t.attachment); } else { resetForm(); }
-      setSelectorTarget(null); setCategorySearchTerm('');
+      setSelectorTarget(null); setModalSearchTerm('');
       setIsModalOpen(true); 
   };
 
   const handleDuplicate = (t: Transaction) => {
-      setEditingTx(null); setFType(t.type); setFAmount(Math.abs(t.amount).toString()); setFDesc(t.description); setFDate(new Date().toISOString().split('T')[0]); setFAcc(t.accountId); setFCat(t.categoryId); setFTransferDest(t.transferAccountId || ''); setFAttachment(t.attachment); setActiveMenuTxId(null); setSelectorTarget(null); setCategorySearchTerm(''); setIsModalOpen(true);
+      setEditingTx(null); setFType(t.type); setFAmount(Math.abs(t.amount).toString()); setFDesc(t.description); setFDate(new Date().toISOString().split('T')[0]); setFAcc(t.accountId); setFCat(t.categoryId); setFTransferDest(t.transferAccountId || ''); setFAttachment(t.attachment); setActiveMenuTxId(null); setSelectorTarget(null); setModalSearchTerm(''); setIsModalOpen(true);
   };
 
   const handleSaveRecurrent = () => {
@@ -1653,29 +1653,32 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {selectorTarget && (
-          <div className="fixed inset-0 z-[250] flex items-start justify-center pt-4 md:pt-10 p-4 bg-slate-900/40 backdrop-blur-sm cursor-pointer" onClick={(e) => { e.stopPropagation(); setSelectorTarget(null); }}>
-              <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 w-[600px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[85vh] relative cursor-default" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => setSelectorTarget(null)} className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 transition-colors z-20 cursor-pointer touch-action-manipulation"><X size={18}/></button>
+          <div className="fixed inset-0 z-[250] flex items-start justify-center pt-4 md:pt-10 p-4 bg-slate-900/40 backdrop-blur-sm cursor-pointer" onClick={(e) => { e.stopPropagation(); setSelectorTarget(null); setModalSearchTerm(''); }}>
+              <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 w-[450px] max-w-[95vw] flex flex-col overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[85vh] relative cursor-default" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => { setSelectorTarget(null); setModalSearchTerm(''); }} className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-400 rounded-full active:text-rose-50 lg:hover:text-rose-500 transition-colors z-20 cursor-pointer touch-action-manipulation"><X size={18}/></button>
                   
-                  <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50">
-                      <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 z-10 space-y-2">
-                          <div className="font-black text-[10px] text-slate-400 uppercase tracking-widest text-center">Categorías Activas</div>
-                          <div className="relative">
-                              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"/>
-                              <input 
-                                  type="text" 
-                                  placeholder="Buscar..." 
-                                  className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[16px] sm:text-[10px] font-bold outline-none focus:border-indigo-500 transition-all placeholder-slate-300 touch-action-manipulation" 
-                                  value={categorySearchTerm} 
-                                  onChange={e => setCategorySearchTerm(e.target.value)} 
-                                  onClick={e => e.stopPropagation()} 
-                                  inputMode="text" 
-                                  autoComplete="off" 
-                              />
-                          </div>
+                  <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 z-10 space-y-2">
+                      <div className="font-black text-[10px] text-slate-400 uppercase tracking-widest text-center">
+                          {selectorTarget === 'ACC' ? 'Seleccionar Cuenta' : (fType === 'TRANSFER' ? 'Cuenta Destino' : 'Seleccionar Categoría')}
                       </div>
-                      {activeGroupedCategories.map(f => {
-                          const matchingCats = f.categories.filter(c => !categorySearchTerm || c.name.toLowerCase().includes(categorySearchTerm.toLowerCase()) || f.family.name.toLowerCase().includes(categorySearchTerm.toLowerCase()));
+                      <div className="relative">
+                          <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"/>
+                          <input 
+                              type="text" 
+                              placeholder="Buscar..." 
+                              className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[16px] sm:text-[10px] font-bold outline-none focus:border-indigo-500 transition-all placeholder-slate-300 touch-action-manipulation" 
+                              value={modalSearchTerm} 
+                              onChange={e => setModalSearchTerm(e.target.value)} 
+                              onClick={e => e.stopPropagation()} 
+                              inputMode="text" 
+                              autoComplete="off" 
+                          />
+                      </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+                      {((selectorTarget === 'CAT' && fType !== 'TRANSFER') ? activeGroupedCategories : []).map(f => {
+                          const matchingCats = f.categories.filter(c => !modalSearchTerm || c.name.toLowerCase().includes(modalSearchTerm.toLowerCase()) || f.family.name.toLowerCase().includes(modalSearchTerm.toLowerCase()));
                           if (matchingCats.length === 0) return null;
                           return (
                               <div key={f.family.id}>
@@ -1684,31 +1687,27 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                       <button 
                                           key={c.id} 
                                           onClick={() => { 
-                                              if (selectorTarget === 'ACC') {
-                                                  setFAcc(c.id); // This is technically wrong if it's an account field, but we'll handle it below
-                                              } else {
-                                                  setFCat(c.id); 
-                                                  setFTransferDest(''); 
-                                                  setFType(f.family.type);
-                                              }
+                                              setFCat(c.id); 
+                                              setFTransferDest(''); 
+                                              setFType(f.family.type);
                                               setSelectorTarget(null); 
+                                              setModalSearchTerm('');
                                           }} 
-                                          className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer touch-action-manipulation ${(selectorTarget === 'CAT' ? fCat : fAcc) === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}
-                                          disabled={selectorTarget === 'ACC'} // Cannot pick category for the account field
+                                          className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer touch-action-manipulation ${fCat === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}
                                       >
                                           {renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span>
-                                          {selectorTarget === 'ACC' && <span className="text-[8px] text-rose-400 ml-auto">(Solo Cuentas)</span>}
                                       </button>
                                   ))}
                               </div>
                           );
                       })}
-                  </div>
 
-                  <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
-                      <div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos / Cuentas</div>
-                      {activeGroupedAccounts.map(g => {
-                          const availableAccs = g.accounts.filter(a => selectorTarget === 'ACC' || a.id !== fAcc);
+                      {((selectorTarget === 'ACC' || (selectorTarget === 'CAT' && fType === 'TRANSFER')) ? activeGroupedAccounts : []).map(g => {
+                          const availableAccs = g.accounts.filter(a => {
+                              const isNotSource = selectorTarget === 'ACC' || a.id !== fAcc;
+                              const matchesSearch = !modalSearchTerm || a.name.toLowerCase().includes(modalSearchTerm.toLowerCase()) || g.group.name.toLowerCase().includes(modalSearchTerm.toLowerCase());
+                              return isNotSource && matchesSearch;
+                          });
                           if (availableAccs.length === 0) return null;
                           return (
                               <div key={g.group.id}>
@@ -1725,10 +1724,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                                   setFType('TRANSFER');
                                               }
                                               setSelectorTarget(null); 
+                                              setModalSearchTerm('');
                                           }} 
                                           className={`w-full text-left px-4 py-3 active:bg-emerald-50 active:text-emerald-700 lg:hover:bg-emerald-50 lg:hover:text-emerald-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 cursor-pointer touch-action-manipulation ${(selectorTarget === 'CAT' ? fTransferDest : fAcc) === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}
                                       >
-                                          ➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span>
+                                          {selectorTarget === 'CAT' ? '➡ ' : ''}{renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span>
                                       </button>
                                   ))}
                               </div>
