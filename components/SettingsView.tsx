@@ -13,6 +13,7 @@ interface SettingsViewProps {
   onReplaceFullState: (newState: MultiBookState) => void;
   onNavigateToTransactions?: (filters: any) => void;
   onDeleteBook?: () => void;
+  onRefreshData?: () => Promise<void>;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
@@ -51,7 +52,7 @@ const compressLogo = async (file: File): Promise<string> => {
     });
 };
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, currentBookId, multiState, onUpdateData, onReplaceFullState, onNavigateToTransactions, onDeleteBook }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, currentBookId, multiState, onUpdateData, onReplaceFullState, onNavigateToTransactions, onDeleteBook, onRefreshData }) => {
   const [activeTab, setActiveTab] = useState('ACC_GROUPS');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   

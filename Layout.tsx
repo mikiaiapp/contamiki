@@ -16,6 +16,7 @@ interface LayoutProps {
   syncStatus?: 'SAVED' | 'SAVING' | 'ERROR';
   syncError?: string | null;
   onManualSave?: () => void;
+  onRefreshData?: () => Promise<void>;
 }
 
 const THEME_COLORS: Record<string, string> = {
@@ -36,10 +37,15 @@ const THEME_ACCENTS: Record<string, string> = {
     VIOLET: 'text-violet-200 hover:bg-white/10',
 };
 
-export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED', syncError, onManualSave }) => {
+export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, data, books, currentBook, onSwitchBook, onCreateBook, onEditBook, syncStatus = 'SAVED', syncError, onManualSave, onRefreshData }) => {
   const [isBookMenuOpen, setIsBookMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [customLogo, setCustomLogo] = useState<string | null>(localStorage.getItem('contamiki_custom_logo'));
+  
+  // Pull to refresh state
+  const [pullStartY, setPullStartY] = useState<number | null>(null);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Modals States
   const [isChangePassModalOpen, setIsChangePassModalOpen] = useState(false);
@@ -112,6 +118,38 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       } else {
           target.src = "https://cdn-icons-png.flaticon.com/512/2910/2910296.png";
       }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+      const scrollContainer = e.currentTarget;
+      if (scrollContainer && scrollContainer.scrollTop === 0 && !isRefreshing) {
+          setPullStartY(e.touches[0].clientY);
+      }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+      if (pullStartY !== null && !isRefreshing) {
+          const y = e.touches[0].clientY;
+          const dist = y - pullStartY;
+          if (dist > 0) {
+              setPullDistance(Math.min(dist * 0.5, 100)); // Max pull distance
+          }
+      }
+  };
+
+  const handleTouchEnd = async () => {
+      if (pullDistance > 60 && onRefreshData && !isRefreshing) {
+          setIsRefreshing(true);
+          try {
+              await onRefreshData();
+          } finally {
+              setIsRefreshing(false);
+              setPullDistance(0);
+          }
+      } else {
+          setPullDistance(0);
+      }
+      setPullStartY(null);
   };
 
   const handleChangePassword = async () => {
@@ -402,8 +440,24 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       </header>
 
       {/* CONTENIDO PRINCIPAL */}
-      <main className="flex-1 overflow-y-auto relative bg-slate-50 custom-scrollbar">
-        <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-8 md:px-12 py-8 md:py-12 lg:py-16 pb-36 lg:pb-16">
+      <main 
+        className="flex-1 overflow-y-auto relative bg-slate-50 custom-scrollbar"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div 
+          className="w-full max-w-[1400px] mx-auto px-4 sm:px-8 md:px-12 py-8 md:py-12 lg:py-16 pb-36 lg:pb-16"
+          style={{ transform: `translateY(${pullDistance}px)`, transition: pullDistance === 0 ? 'transform 0.3s ease-out' : 'none' }}
+        >
+          {/* Pull to refresh indicator */}
+          {(pullDistance > 0 || isRefreshing) && (
+              <div className="absolute top-0 left-0 right-0 flex justify-center items-center h-16 -mt-16 overflow-hidden">
+                  <div className={`bg-white rounded-full p-2 shadow-md flex items-center justify-center transition-all ${isRefreshing ? 'animate-spin text-indigo-600' : 'text-slate-400'}`} style={{ transform: `rotate(${pullDistance * 3}deg)` }}>
+                      <RefreshCw size={20} />
+                  </div>
+              </div>
+          )}
           {children}
         </div>
       </main>

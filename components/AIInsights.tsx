@@ -7,9 +7,10 @@ import { Sparkles, RefreshCcw, BrainCircuit, TrendingUp, Lightbulb, PieChart, Sh
 
 interface AIInsightsProps {
   data: AppState;
+  onRefreshData?: () => Promise<void>;
 }
 
-export const AIInsights: React.FC<AIInsightsProps> = ({ data }) => {
+export const AIInsights: React.FC<AIInsightsProps> = ({ data, onRefreshData }) => {
   const [advice, setAdvice] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
