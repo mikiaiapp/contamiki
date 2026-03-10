@@ -17,6 +17,7 @@ interface TransactionViewProps {
   clearSpecificFilters?: () => void;
   currentBook: BookMetadata;
   onFinished?: () => void;
+  mode?: 'FULL' | 'MODAL_ONLY';
 }
 
 type SortField = 'DATE' | 'DESCRIPTION' | 'AMOUNT' | 'ACCOUNT' | 'CATEGORY' | 'ATTACHMENT';
@@ -74,7 +75,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   initialSpecificFilters, 
   clearSpecificFilters,
   currentBook,
-  onFinished
+  onFinished,
+  mode = 'FULL'
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
@@ -576,7 +578,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         return;
     }
     
-    if (validTransactions.length === 0) { setIsImportModalOpen(false); return; }
+    if (validTransactions.length === 0) { closeImportModal(); return; }
 
     const newTxs: Transaction[] = validTransactions.map(p => {
       let amt = Math.abs(p.amount);
@@ -601,7 +603,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         setSelectedImportIds(new Set());
         alert(`Se han importado ${validTransactions.length} movimientos correctamente.\n\nQuedan ${pendingTransactions.length} movimientos sin asignar o bloqueados como duplicados.`);
     } else {
-        setIsImportModalOpen(false);
+        closeImportModal();
         setProposedTransactions([]);
         setSelectedImportIds(new Set());
         resetForm();
@@ -944,6 +946,23 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       setFavoriteModalTx(null); setFavName('');
   };
 
+  const closeModal = () => {
+      setIsModalOpen(false);
+      resetForm();
+      if (initialSpecificFilters?.action === 'NEW' && onFinished) {
+          clearSpecificFilters?.();
+          onFinished();
+      }
+  };
+
+  const closeImportModal = () => {
+      setIsImportModalOpen(false);
+      if (initialSpecificFilters?.action === 'IMPORT' && onFinished) {
+          clearSpecificFilters?.();
+          onFinished();
+      }
+  };
+
   const handleSave = () => { 
       if (!fAmount || !fDesc || !fAcc || (fType !== 'TRANSFER' && !fCat)) return; 
       let amt = Math.abs(parseFloat(fAmount)); 
@@ -964,12 +983,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       }; 
       if (editingTx) onUpdateTransaction(tx); 
       else onAddTransaction(tx); 
-      setIsModalOpen(false); 
-      resetForm(); 
-      if (initialSpecificFilters?.action === 'NEW' && onFinished) {
-          clearSpecificFilters?.();
-          onFinished();
-      }
+      closeModal();
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1093,7 +1107,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   return (
     <>
-    <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500" onClick={() => { setActiveMenuTxId(null); setOpenSelectorId(null); }}>
+    {mode === 'FULL' && (
+      <>
+      <div className="space-y-6 md:space-y-10 pb-24 animate-in fade-in duration-500">
       <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-8 print:hidden">
         <div className="space-y-4 text-center md:text-left w-full xl:w-auto">
           <div className="flex items-center justify-center md:justify-start gap-6">
@@ -1138,7 +1154,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     <button onClick={(e) => { e.stopPropagation(); setShowFavoritesList(!showFavoritesList); }} className="w-12 h-12 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl shadow-sm hover:bg-amber-100 flex items-center justify-center transition-all active:scale-95" title="Favoritos"><Heart size={20} fill={showFavoritesList ? "currentColor" : "none"} /></button>
                     {showFavoritesList && (
                         <>
-                            <div className="fixed inset-0 z-10 bg-slate-900/20 backdrop-blur-[1px] md:bg-transparent md:backdrop-blur-none" onClick={() => setShowFavoritesList(false)}></div>
+                            <div className="fixed inset-0 z-10 bg-transparent" onClick={() => setShowFavoritesList(false)}></div>
                             <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:absolute md:top-full md:right-0 md:left-auto md:translate-x-0 md:translate-y-0 md:mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 w-[85vw] max-w-xs md:w-64 p-2 z-20 animate-in fade-in zoom-in duration-200 origin-center md:origin-top-right">
                                 <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center md:text-left">Plantillas Rápidas</div>
                                 <div className="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
@@ -1254,7 +1270,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     <div className={`hidden sm:block text-right text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-black font-mono tracking-tighter truncate ${activeFilterId ? (balance >= 0 ? 'text-slate-400' : 'text-rose-400') : 'opacity-0'}`}>{activeFilterId ? formatCurrency(balance) : ''}</div>
                     <div className="flex justify-center relative"><button onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(activeMenuTxId === t.id ? null : t.id); }} className="p-1.5 md:p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><MoreVertical size={16} /></button>
                         {activeMenuTxId === t.id && (
-                            <div className="absolute top-8 right-0 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 min-w-[180px] p-2 flex flex-col gap-1 animate-in fade-in zoom-in duration-200 origin-top-right" onClick={e => e.stopPropagation()}>
+                            <>
+                                <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setActiveMenuTxId(null); }}></div>
+                                <div className="absolute top-8 right-0 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 min-w-[180px] p-2 flex flex-col gap-1 animate-in fade-in zoom-in duration-200 origin-top-right" onClick={e => e.stopPropagation()}>
                                 <button onClick={() => { setActiveMenuTxId(null); openEditor(t); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Edit3 size={14} className="text-indigo-600"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Editar</span></button>
                                 <button onClick={() => handleDuplicate(t)} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Copy size={14} className="text-slate-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Duplicar</span></button>
                                 <button onClick={() => { setActiveMenuTxId(null); openRecurrenceModal(t); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 rounded-xl text-left transition-colors"><Repeat size={14} className="text-emerald-500"/> <span className="text-[10px] font-bold text-slate-600 uppercase">Hacer Recurrente</span></button>
@@ -1262,6 +1280,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                 <div className="h-px bg-slate-100 my-1"/>
                                 <button onClick={() => { setActiveMenuTxId(null); setDeleteConfirmId(t.id); }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-rose-50 rounded-xl text-left transition-colors text-rose-500"><Trash2 size={14} /> <span className="text-[10px] font-bold uppercase">Borrar</span></button>
                             </div>
+                            </>
                         )}
                     </div>
                 </div>
@@ -1288,8 +1307,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {isBulkEditModalOpen && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-in fade-in duration-200">
-              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 space-y-6"><div className="flex justify-between items-center"><h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">{bulkEditTarget === 'DELETE' ? <Trash2 className="text-rose-500"/> : <LayoutList className="text-indigo-600"/>}{bulkEditTarget === 'DELETE' ? 'Borrado Masivo' : 'Edición en Bloque'}</h3><button onClick={() => setIsBulkEditModalOpen(false)} className="p-2 bg-slate-100 rounded-full hover:bg-rose-100 hover:text-rose-500"><X size={18} /></button></div>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-center justify-center z-[200] p-4 animate-in fade-in duration-200" onClick={() => setIsBulkEditModalOpen(false)}>
+              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 space-y-6" onClick={e => e.stopPropagation()}><div className="flex justify-between items-center"><h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">{bulkEditTarget === 'DELETE' ? <Trash2 className="text-rose-500"/> : <LayoutList className="text-indigo-600"/>}{bulkEditTarget === 'DELETE' ? 'Borrado Masivo' : 'Edición en Bloque'}</h3><button onClick={() => setIsBulkEditModalOpen(false)} className="p-2 bg-slate-100 rounded-full hover:bg-rose-100 hover:text-rose-500"><X size={18} /></button></div>
                   {bulkEditTarget === 'DELETE' ? ( <p className="text-sm font-medium text-slate-600">Estás a punto de eliminar permanentemente <span className="font-black text-slate-900">{selectedIds.size}</span> movimientos. ¿Estás seguro?</p> ) : (
                       <div className="space-y-4"><p className="text-xs text-slate-500">Se actualizarán <span className="font-bold">{selectedIds.size}</span> elementos.</p>
                           <div className="flex bg-slate-100 p-1.5 rounded-xl"><button onClick={() => setBulkEditTarget('DATE')} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${bulkEditTarget === 'DATE' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Fecha</button><button onClick={() => setBulkEditTarget('ACCOUNT')} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${bulkEditTarget === 'ACCOUNT' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Cuenta</button><button onClick={() => setBulkEditTarget('CATEGORY')} className={`flex-1 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${bulkEditTarget === 'CATEGORY' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Categoría</button></div>
@@ -1302,11 +1321,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
               </div>
           </div>
       )}
+      </>
+    )}
 
       {isImportModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500" onClick={() => setIsImportModalOpen(false)}>
-          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-white/20" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setIsImportModalOpen(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-center justify-center z-[200] p-4 animate-in fade-in duration-500" onClick={closeImportModal}>
+          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl p-8 sm:p-12 relative max-h-[95vh] overflow-y-auto custom-scrollbar border border-slate-200" onClick={e => e.stopPropagation()}>
+            <button onClick={closeImportModal} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500"><X size={24}/></button>
             <div className="flex items-center gap-4 mb-8">
                 <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-xl shadow-indigo-600/20"><Bot size={28} /></div>
                 <div><h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Importación Inteligente</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Carga masiva con categorización automática</p></div>
@@ -1407,7 +1428,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                                         <span className="truncate">{t.type === 'TRANSFER' && t.transferAccountId ? `➡ ${indices.acc.get(t.transferAccountId)?.name || 'Cuenta...'}` : (indices.cat.get(t.categoryId)?.name || 'Sin Asignar')}</span><ChevronDown size={12} className="opacity-50"/>
                                                     </button>
                                                     {openSelectorId === t.id && (
-                                                        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-[2px]" onClick={(e) => { e.stopPropagation(); setOpenSelectorId(null); }}>
+                                                        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-transparent" onClick={(e) => { e.stopPropagation(); setOpenSelectorId(null); }}>
                                                             <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[550px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[60vh]" onClick={e => e.stopPropagation()}>
                                                                 <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50">
                                                                     <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 z-10 space-y-2">
@@ -1428,10 +1449,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                                                     {activeGroupedCategories.map(f => {
                                                                         const matchingCats = f.categories.filter(c => !selectorSearchTerm || c.name.toLowerCase().includes(selectorSearchTerm.toLowerCase()) || f.family.name.toLowerCase().includes(selectorSearchTerm.toLowerCase()));
                                                                         if (matchingCats.length === 0) return null;
-                                                                        return ( <div key={f.family.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-[88px] z-0">{f.family.name}</div>{matchingCats.map(c => ( <button key={c.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].categoryId = c.id; newArr[idxInMaster].transferAccountId = undefined; newArr[idxInMaster].type = newArr[idxInMaster].amount < 0 ? 'EXPENSE' : 'INCOME'; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 hover:bg-white hover:text-indigo-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${t.categoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>{renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span></button> ))}</div> );
+                                                                        return ( <div key={f.family.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-[88px] z-0">{f.family.name}</div>{matchingCats.map(c => ( <button key={c.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].categoryId = c.id; newArr[idxInMaster].transferAccountId = undefined; newArr[idxInMaster].type = newArr[idxInMaster].amount < 0 ? 'EXPENSE' : 'INCOME'; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${t.categoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>{renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span></button> ))}</div> );
                                                                     })}
                                                                 </div>
-                                                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white"><div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos Activos</div>{activeGroupedAccounts.map(g => { const availableAccs = g.accounts.filter(a => a.id !== importAccount); if (availableAccs.length === 0) return null; return ( <div key={g.group.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>{availableAccs.map(a => ( <button key={a.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].type = 'TRANSFER'; newArr[idxInMaster].transferAccountId = a.id; newArr[idxInMaster].categoryId = ''; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 hover:bg-slate-50 hover:text-emerald-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${t.transferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span></button> ))}</div> ); })}</div>
+                                                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white"><div className="p-3 sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Traspasos Activos</div>{activeGroupedAccounts.map(g => { const availableAccs = g.accounts.filter(a => a.id !== importAccount); if (availableAccs.length === 0) return null; return ( <div key={g.group.id}><div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>{availableAccs.map(a => ( <button key={a.id} onClick={() => { const newArr = [...proposedTransactions]; newArr[idxInMaster].type = 'TRANSFER'; newArr[idxInMaster].transferAccountId = a.id; newArr[idxInMaster].categoryId = ''; setProposedTransactions(newArr); setOpenSelectorId(null); }} className={`w-full text-left px-4 py-3 active:bg-emerald-50 active:text-emerald-700 lg:hover:bg-emerald-50 lg:hover:text-emerald-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${t.transferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span></button> ))}</div> ); })}</div>
                                                             </div>
                                                         </div>
                                                     )}
@@ -1474,16 +1495,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {isModalOpen && (
-          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
-              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-white/20 max-h-[95vh] overflow-y-auto custom-scrollbar">
-                  <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300" onClick={closeModal}>
+              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg p-10 relative border border-slate-200 max-h-[95vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
+                  <button onClick={closeModal} className="absolute top-8 right-8 p-3 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={24}/></button>
                   <h3 className="text-2xl font-black text-slate-900 uppercase flex items-center gap-3 mb-8"><Edit3 className="text-indigo-600"/> {editingTx ? 'Editar Movimiento' : 'Nuevo Movimiento'}</h3>
                   <div className="space-y-6"><div className="bg-slate-100 p-1.5 rounded-2xl flex shadow-inner"><button onClick={() => setFType('EXPENSE')} className={`flex-1 py-4 text-[10px] font-black uppercase rounded-xl transition-all ${fType === 'EXPENSE' ? 'bg-white shadow-sm text-rose-500' : 'text-slate-400 hover:text-slate-600'}`}>Gasto</button><button onClick={() => setFType('INCOME')} className={`flex-1 py-4 text-[10px] font-black uppercase rounded-xl transition-all ${fType === 'INCOME' ? 'bg-white shadow-sm text-emerald-500' : 'text-slate-400 hover:text-slate-600'}`}>Ingreso</button><button onClick={() => { setFType('TRANSFER'); if(!fDesc) setFDesc('Traspaso'); }} className={`flex-1 py-4 text-[10px] font-black uppercase rounded-xl transition-all ${fType === 'TRANSFER' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>Traspaso</button></div>
                       <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Importe</label><div className="relative"><span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 font-black">€</span><input type="number" step="0.01" inputMode="decimal" placeholder="0.00" className="w-full pl-10 pr-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-xl outline-none focus:border-indigo-500 transition-all" value={fAmount} onChange={e => setFAmount(e.target.value)} autoFocus /></div></div>
                       <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Fecha</label><input type="date" className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDate} onChange={e => setFDate(e.target.value)} /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">{fType === 'TRANSFER' ? 'Desde' : 'Cuenta'}</label><select className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fAcc} onChange={e => setFAcc(e.target.value)}>{groupedAccounts.map(g => (<optgroup key={g.group.id} label={g.group.name}>{g.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</optgroup>))}</select></div></div>
                       {fType === 'TRANSFER' ? ( <div className="space-y-2 animate-in slide-in-from-top-2 relative"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Hacia Cuenta Destino</label><button onClick={() => setIsCategorySelectorOpen(!isCategorySelectorOpen)} className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-left flex items-center justify-between"><span>{fTransferDest ? indices.acc.get(fTransferDest)?.name || 'Cuenta...' : 'Selecciona destino...'}</span><ChevronDown size={16} className="opacity-50"/></button></div> ) : ( <div className="space-y-2 animate-in slide-in-from-top-2 relative"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoría</label><button onClick={() => setIsCategorySelectorOpen(!isCategorySelectorOpen)} className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all text-left flex items-center justify-between"><span>{fCat ? indices.cat.get(fCat)?.name || 'Categoría...' : 'Selecciona categoría...'}</span><ChevronDown size={16} className="opacity-50"/></button></div> )}
                       {isCategorySelectorOpen && (
-                          <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-[2px]" onClick={(e) => { e.stopPropagation(); setIsCategorySelectorOpen(false); }}>
+                          <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-transparent" onClick={(e) => { e.stopPropagation(); setIsCategorySelectorOpen(false); }}>
                               <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[400px] max-w-[95vw] flex flex-col overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[60vh]" onClick={e => e.stopPropagation()}>
                                   <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 z-10 space-y-2">
                                       <div className="font-black text-[10px] text-slate-400 uppercase tracking-widest text-center">{fType === 'TRANSFER' ? 'Cuentas Activas' : 'Categorías Activas'}</div>
@@ -1503,7 +1524,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                                   <div key={g.group.id}>
                                                       <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-0 z-0">{g.group.name}</div>
                                                       {availableAccs.map(a => (
-                                                          <button key={a.id} onClick={() => { setFTransferDest(a.id); setIsCategorySelectorOpen(false); }} className={`w-full text-left px-4 py-3 hover:bg-slate-50 hover:text-emerald-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${fTransferDest === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>
+                                                          <button key={a.id} onClick={() => { setFTransferDest(a.id); setIsCategorySelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-emerald-50 active:text-emerald-700 lg:hover:bg-emerald-50 lg:hover:text-emerald-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${fTransferDest === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>
                                                               ➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span>
                                                           </button>
                                                       ))}
@@ -1518,7 +1539,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                                   <div key={f.family.id}>
                                                       <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-0 z-0">{f.family.name}</div>
                                                       {matchingCats.map(c => (
-                                                          <button key={c.id} onClick={() => { setFCat(c.id); setIsCategorySelectorOpen(false); }} className={`w-full text-left px-4 py-3 hover:bg-white hover:text-indigo-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${fCat === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>
+                                                          <button key={c.id} onClick={() => { setFCat(c.id); setIsCategorySelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${fCat === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>
                                                               {renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span>
                                                           </button>
                                                       ))}
@@ -1539,8 +1560,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {recurrenceModalTx && (
-          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
-              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-6 relative border border-white/20 max-h-[95vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 bg-slate-900/5 flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300" onClick={() => setRecurrenceModalTx(null)}>
+              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl p-6 relative border border-slate-200 max-h-[95vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
                   <button onClick={() => setRecurrenceModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 transition-colors"><X size={20}/></button>
                   <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-2 mb-6"><CalendarClock className="text-indigo-600" size={24}/> Crear Recurrencia</h3>
                   
@@ -1579,7 +1600,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                               <ChevronDown size={14} className="opacity-50"/>
                           </button>
                           {isRecSelectorOpen && (
-                              <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-[2px]" onClick={(e) => { e.stopPropagation(); setIsRecSelectorOpen(false); }}>
+                              <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-transparent" onClick={(e) => { e.stopPropagation(); setIsRecSelectorOpen(false); }}>
                                   <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[550px] max-w-[95vw] flex overflow-hidden text-left animate-in fade-in zoom-in-95 duration-200 max-h-[60vh]" onClick={e => e.stopPropagation()}>
                                       <div className="flex-1 border-r border-slate-100 overflow-y-auto custom-scrollbar bg-slate-50/50">
                                           <div className="p-3 sticky top-0 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-widest z-10 text-center">Categorías Activas</div>
@@ -1587,7 +1608,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                               <div key={f.family.id}>
                                                   <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-100/50 sticky top-9 z-0">{f.family.name}</div>
                                                   {f.categories.map(c => (
-                                                      <button key={c.id} onClick={() => { setRecCategoryId(c.id); setRecTransferAccountId(null); setRecType(f.family.type); setIsRecSelectorOpen(false); }} className={`w-full text-left px-4 py-3 hover:bg-white hover:text-indigo-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${recCategoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>
+                                                      <button key={c.id} onClick={() => { setRecCategoryId(c.id); setRecTransferAccountId(null); setRecType(f.family.type); setIsRecSelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-indigo-50 active:text-indigo-700 lg:hover:bg-indigo-50 lg:hover:text-indigo-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${recCategoryId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>
                                                           {renderIcon(c.icon, "w-5 h-5")} <span>{c.name}</span>
                                                       </button>
                                                   ))}
@@ -1603,7 +1624,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                                   <div key={g.group.id}>
                                                       <div className="px-4 py-2 text-[9px] font-black text-slate-400 uppercase bg-slate-50 sticky top-9 z-0">{g.group.name}</div>
                                                       {availableAccs.map(a => (
-                                                          <button key={a.id} onClick={() => { setRecTransferAccountId(a.id); setRecCategoryId(''); setRecType('TRANSFER'); setIsRecSelectorOpen(false); }} className={`w-full text-left px-4 py-3 hover:bg-slate-50 hover:text-emerald-600 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${recTransferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>
+                                                          <button key={a.id} onClick={() => { setRecTransferAccountId(a.id); setRecCategoryId(''); setRecType('TRANSFER'); setIsRecSelectorOpen(false); }} className={`w-full text-left px-4 py-3 active:bg-emerald-50 active:text-emerald-700 lg:hover:bg-emerald-50 lg:hover:text-emerald-700 text-[11px] font-bold text-slate-600 truncate border-b border-slate-50 transition-colors flex items-center gap-3 ${recTransferAccountId === a.id ? 'bg-emerald-50 text-emerald-700' : ''}`}>
                                                               ➡ {renderIcon(a.icon, "w-5 h-5")} <span>{a.name}</span>
                                                           </button>
                                                       ))}
@@ -1647,8 +1668,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {favoriteModalTx && (
-          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300">
-              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 text-center relative border border-white/20"><button onClick={() => setFavoriteModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button><div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-amber-500"><Heart size={32}/></div><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Guardar Favorito</h3>
+        <div className="fixed inset-0 bg-slate-900/5 flex items-center justify-center z-[200] p-4 animate-in fade-in zoom-in duration-300" onClick={() => setFavoriteModalTx(null)}>
+              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-sm p-8 text-center relative border border-slate-200" onClick={e => e.stopPropagation()}><button onClick={() => setFavoriteModalTx(null)} className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 rounded-full hover:text-rose-500 hover:bg-rose-50 transition-all"><X size={20}/></button><div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-amber-500"><Heart size={32}/></div><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Guardar Favorito</h3>
                   <div className="space-y-4"><div className="space-y-2 text-left"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nombre del Botón</label><input type="text" placeholder="Ej: Café Diario" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-amber-400 transition-colors" value={favName} onChange={e => setFavName(e.target.value)} autoFocus /></div><button onClick={handleSaveFavorite} className="w-full py-4 bg-amber-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-600 shadow-xl">Guardar Plantilla</button></div>
               </div>
           </div>
