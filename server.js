@@ -148,6 +148,13 @@ const DEFAULT_APP_STATE = {
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
+// Servir tailwind.cdn.js localmente (sin depender de CDN externo)
+app.get('/tailwind.cdn.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 día de caché
+    res.sendFile(path.join(__dirname, 'tailwind.cdn.js'));
+});
+
 // Servir bundle.js explícitamente
 app.get('/bundle.js', (req, res) => {
     console.log(`[SERVER] Serving bundle.js to ${req.ip}`);
