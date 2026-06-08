@@ -1636,6 +1636,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                           onClick={e => e.stopPropagation()}
                                           inputMode="text"
                                           autoComplete="off"
+                                          autoFocus
                                       />
                                   </div>
                               </div>
@@ -1672,6 +1673,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                               onClick={e => e.stopPropagation()} 
                               inputMode="text" 
                               autoComplete="off" 
+                              autoFocus
                           />
                       </div>
                   </div>
