@@ -440,10 +440,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
         const description = descVal ? descVal.toString().trim() : 'Sin concepto';
 
-        const isDuplicate = existingInAcc.some(t => 
-            t.date === formattedDate && 
-            Math.abs(t.amount - amount) < 0.005
-        );
+        const isDuplicate = existingInAcc.some(t => {
+            const tEffAmount = t.type === 'TRANSFER' 
+                ? (t.accountId === importAccount ? -t.amount : t.amount) 
+                : t.amount;
+            return t.date === formattedDate && Math.abs(tEffAmount - amount) < 0.005;
+        });
 
         props.push({
             id: generateId(),
@@ -585,16 +587,30 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     const newTxs: Transaction[] = validTransactions.map(p => {
       let amt = Math.abs(p.amount);
       if (p.type === 'EXPENSE') amt = -amt;
+      
+      let accId = p.accountId;
+      let transAccId = p.type === 'TRANSFER' ? p.transferAccountId : undefined;
+      
+      if (p.type === 'TRANSFER') {
+        if (p.amount >= 0) {
+          accId = p.transferAccountId || '';
+          transAccId = p.accountId;
+        } else {
+          accId = p.accountId;
+          transAccId = p.transferAccountId;
+        }
+      }
+
       return {
         id: generateId(),
         date: p.date,
         amount: amt,
         description: p.description,
-        accountId: p.accountId, 
+        accountId: accId, 
         type: p.type,
         categoryId: p.categoryId,
         familyId: indices.cat.get(p.categoryId)?.familyId || '',
-        transferAccountId: p.type === 'TRANSFER' ? p.transferAccountId : undefined,
+        transferAccountId: transAccId,
         attachment: p.attachment
       };
     });
@@ -1383,7 +1399,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                     </div>
                                     <div>
                                         <div className="font-bold text-slate-700 text-xs truncate max-w-[200px]">{t.description}</div>
-                                        <div className={`text-[10px] font-black ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
+                                        <div className={`text-[10px] font-black ${t.amount > 0 ? 'text-emerald-600 font-bold' : t.amount < 0 ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>{formatCurrency(t.amount)}</div>
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
@@ -1424,10 +1440,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                                                     {formatDateDisplay(t.date)}
                                                 </div>
                                                 <input type="text" className="col-span-6 text-xs font-bold text-slate-800 bg-slate-50/50 active:bg-white lg:hover:bg-white border-b border-slate-200 focus:border-indigo-500 rounded px-2 py-1 outline-none transition-all placeholder-slate-300 touch-action-manipulation" value={t.description} onChange={(e) => { const newArr = [...proposedTransactions]; newArr[idxInMaster].description = e.target.value; const newCat = findSuggestedCategory(e.target.value); if (newCat) { newArr[idxInMaster].categoryId = newCat; newArr[idxInMaster].transferAccountId = undefined; } setProposedTransactions(newArr); }} />
-                                                <div className={`col-span-3 text-xs font-black text-right whitespace-nowrap ${getAmountColor(t.amount, t.type)}`}>{formatCurrency(t.amount)}</div>
+                                                <div className={`col-span-3 text-xs font-black text-right whitespace-nowrap ${t.amount > 0 ? 'text-emerald-600 font-bold' : t.amount < 0 ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>{formatCurrency(t.amount)}</div>
                                                 <div className="col-span-5 relative">
                                                     <button onClick={(e) => { e.stopPropagation(); if(openSelectorId === t.id) setOpenSelectorId(null); else { setOpenSelectorId(t.id); setSelectorSearchTerm(''); } }} className={`w-full border rounded-lg text-[11px] font-bold py-1.5 px-2 outline-none transition-colors flex items-center justify-between gap-2 cursor-pointer ${isAssigned ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 active:border-slate-300 lg:hover:border-slate-300'}`}>
-                                                        <span className="truncate">{t.type === 'TRANSFER' && t.transferAccountId ? `➡ ${indices.acc.get(t.transferAccountId)?.name || 'Cuenta...'}` : (indices.cat.get(t.categoryId)?.name || 'Sin Asignar')}</span><ChevronDown size={12} className="opacity-50"/>
+                                                        <span className="truncate">{t.type === 'TRANSFER' && t.transferAccountId ? `${t.amount < 0 ? '➡' : '⬅'} ${indices.acc.get(t.transferAccountId)?.name || 'Cuenta...'}` : (indices.cat.get(t.categoryId)?.name || 'Sin Asignar')}</span><ChevronDown size={12} className="opacity-50"/>
                                                     </button>
                                                 </div>
                                             </div>
