@@ -1006,7 +1006,20 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       const file = e.target.files?.[0];
       if (file) {
           setIsCompressing(true);
-          try { const compressed = await compressImage(file); setFAttachment(compressed); } catch (err) { console.error("Compression error", err); } finally { setIsCompressing(false); }
+          try {
+              if (file.type === 'application/pdf') {
+                  const reader = new FileReader();
+                  reader.onload = () => setFAttachment(reader.result as string);
+                  reader.readAsDataURL(file);
+              } else {
+                  const compressed = await compressImage(file);
+                  setFAttachment(compressed);
+              }
+          } catch (err) {
+              console.error("Compression error", err);
+          } finally {
+              setIsCompressing(false);
+          }
       }
   };
 
@@ -1625,7 +1638,23 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       {previewAttachment && (
-          <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[300] p-4 animate-in fade-in zoom-in duration-300 cursor-pointer" onClick={() => setPreviewAttachment(null)}><div className="relative max-w-3xl max-h-[90vh] w-full flex flex-col items-center" onClick={e => e.stopPropagation()}><button onClick={() => setPreviewAttachment(null)} className="absolute -top-12 right-0 p-2 text-white/50 active:text-white lg:hover:text-white cursor-pointer touch-action-manipulation"><X size={32}/></button><img src={previewAttachment} className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border-4 border-white/10" /><a href={previewAttachment} download={`comprobante_${Date.now()}.jpg`} className="mt-6 px-6 py-3 bg-white text-slate-900 rounded-full font-black uppercase text-[10px] tracking-widest active:scale-105 lg:hover:scale-105 transition-transform shadow-xl flex items-center gap-2 touch-action-manipulation"><ArrowUpDown size={14} className="rotate-180"/> Descargar Imagen Original</a></div></div>
+          <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[300] p-4 animate-in fade-in zoom-in duration-300 cursor-pointer" onClick={() => setPreviewAttachment(null)}>
+              <div className="relative max-w-4xl max-h-[90vh] w-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => setPreviewAttachment(null)} className="absolute -top-12 right-0 p-2 text-white/50 active:text-white lg:hover:text-white cursor-pointer touch-action-manipulation"><X size={32}/></button>
+                  {previewAttachment.startsWith('data:application/pdf') || previewAttachment.includes('application/pdf') ? (
+                      <iframe src={previewAttachment} className="w-full h-[80vh] rounded-2xl shadow-2xl border-4 border-white/10 bg-white" title="Comprobante PDF" />
+                  ) : (
+                      <img src={previewAttachment} className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border-4 border-white/10" alt="Comprobante" />
+                  )}
+                  <a 
+                      href={previewAttachment} 
+                      download={previewAttachment.startsWith('data:application/pdf') || previewAttachment.includes('application/pdf') ? `ticket_${Date.now()}.pdf` : `comprobante_${Date.now()}.jpg`} 
+                      className="mt-4 px-6 py-3 bg-white text-slate-900 rounded-full font-black uppercase text-[10px] tracking-widest active:scale-105 lg:hover:scale-105 transition-transform shadow-xl flex items-center gap-2 touch-action-manipulation"
+                  >
+                      <ArrowUpDown size={14} className="rotate-180"/> {previewAttachment.startsWith('data:application/pdf') || previewAttachment.includes('application/pdf') ? 'Descargar Ticket PDF' : 'Descargar Imagen Original'}
+                  </a>
+              </div>
+          </div>
       )}
 
       {/* Global Selectors moved to top level to fix stacking and positioning issues */}
