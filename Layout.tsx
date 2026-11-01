@@ -128,6 +128,12 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
     return data.recurrents?.filter(r => r.active && r.nextDueDate <= today).length || 0;
   }, [data.recurrents]);
 
+  const pendingCategorizationCount = useMemo(() => {
+    return (data.transactions || []).filter(t => 
+      t.type !== 'TRANSFER' && (!t.categoryId || t.categoryId === '' || t.isPendingCategorization)
+    ).length;
+  }, [data.transactions]);
+
   const bgClass = THEME_COLORS[currentBook.color] || THEME_COLORS.BLACK;
   const accentClass = THEME_ACCENTS[currentBook.color] || THEME_ACCENTS.BLACK;
 
@@ -144,7 +150,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
 
   const mainNavItems: { id: View; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'RESUMEN', label: 'Resumen', icon: <LayoutDashboard size={22} />, badge: pendingRecurrentsCount },
-    { id: 'TRANSACTIONS', label: 'Movimientos', icon: <Receipt size={22} /> },
+    { id: 'TRANSACTIONS', label: 'Movimientos', icon: <Receipt size={22} />, badge: pendingCategorizationCount },
     { id: 'CHARTS', label: 'Gráficos', icon: <PieChart size={22} /> },
     { id: 'SETTINGS', label: 'Ajustes', icon: <Settings size={22} /> },
   ];

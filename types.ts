@@ -47,6 +47,7 @@ export interface Transaction {
   attachment?: string;
   isFromRecurrence?: string; 
   isValidated?: boolean;
+  isPendingCategorization?: boolean;
 }
 
 export interface RecurrentMovement {

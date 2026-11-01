@@ -175,7 +175,8 @@ export class SyncEngine {
 
         const userState = await readFullUserState(username);
         let totalNewTxs = 0;
-        const newTxsSummary = [];
+        const categorizedTxsSummary = [];
+        const pendingTxsSummary = [];
 
         // 1. Fetch transactions for each mapped account
         const today = new Date().toISOString().split('T')[0];
@@ -207,19 +208,48 @@ export class SyncEngine {
             for (const bTx of bankTxs) {
                 const bookingDate = bTx.booking_date || bTx.value_date || today;
                 const rawAmt = parseFloat(bTx.transaction_amount?.amount || bTx.amount || 0);
-                const desc = bTx.remittance_information_unstructured || bTx.creditor_name || bTx.debtor_name || bTx.details || 'Movimiento bancario';
+                
+                // Extracción exhaustiva de la descripción bancaria (Enable Banking / ASPSP)
+                let desc = '';
+                if (Array.isArray(bTx.remittance_information) && bTx.remittance_information.length > 0) {
+                    desc = bTx.remittance_information.filter(Boolean).join(' ').trim();
+                } else if (typeof bTx.remittance_information === 'string' && bTx.remittance_information.trim()) {
+                    desc = bTx.remittance_information.trim();
+                } else if (bTx.remittance_information_unstructured) {
+                    desc = bTx.remittance_information_unstructured.trim();
+                }
 
-                // Deduplicación inteligente: misma cuenta, misma fecha y mismo importe exacto
+                if (!desc) {
+                    desc = bTx.creditor_name || bTx.debtor_name || bTx.additional_information || bTx.details || bTx.description || bTx.entry_reference || 'Movimiento bancario';
+                }
+
+                // Deduplicación inteligente: contempla apunte directo O contrapartida de traspaso (TRANSFER)
                 const isDuplicate = existingTxs.some(t => {
-                    const sameAcc = t.accountId === mapped.mappedAccountId;
-                    const sameDate = t.date === bookingDate;
-                    const sameAmt = Math.abs(Number(t.amount) - rawAmt) < 0.005;
-                    return sameAcc && sameDate && sameAmt;
+                    const isDirectAcc = t.accountId === mapped.mappedAccountId;
+                    const isTransferAcc = (t.type === 'TRANSFER' && t.transferAccountId === mapped.mappedAccountId);
+                    if (!isDirectAcc && !isTransferAcc) return false;
+
+                    const tDate = new Date(t.date).getTime();
+                    const bDate = new Date(bookingDate).getTime();
+                    const diffDays = Math.abs((tDate - bDate) / (1000 * 3600 * 24));
+                    if (diffDays > 1.5) return false;
+
+                    const tAmt = Number(t.amount);
+                    if (isDirectAcc) {
+                        if (Math.abs(tAmt - rawAmt) < 0.005) return true;
+                        if (Math.abs(Math.abs(tAmt) - Math.abs(rawAmt)) < 0.005 && diffDays <= 1) return true;
+                    } else if (isTransferAcc) {
+                        if (Math.abs(Math.abs(tAmt) - Math.abs(rawAmt)) < 0.005) return true;
+                    }
+                    return false;
                 });
 
                 if (!isDuplicate) {
                     // Categorización automática por aprendizaje histórico
                     const suggestion = this.findCategorySuggestion(desc, existingTxs, categories);
+                    const hasCategory = Boolean(suggestion.categoryId);
+                    const matchedCat = hasCategory ? categories.find(c => c.id === suggestion.categoryId) : null;
+
                     const newTx = {
                         id: `tx_${Math.random().toString(36).substring(2, 12)}`,
                         date: bookingDate,
@@ -229,13 +259,28 @@ export class SyncEngine {
                         type: rawAmt < 0 ? 'EXPENSE' : 'INCOME',
                         categoryId: suggestion.categoryId || '',
                         familyId: suggestion.familyId || '',
-                        isValidated: false,
+                        isValidated: hasCategory,
+                        isPendingCategorization: !hasCategory,
                         isFromBankSync: true
                     };
 
                     existingTxs.push(newTx);
                     totalNewTxs++;
-                    newTxsSummary.push(`${newTx.date} | ${newTx.amount > 0 ? '+' : ''}${newTx.amount.toFixed(2)} € | ${newTx.description}`);
+
+                    if (hasCategory && matchedCat) {
+                        categorizedTxsSummary.push({
+                            date: newTx.date,
+                            amount: newTx.amount,
+                            desc: newTx.description,
+                            catName: matchedCat.name
+                        });
+                    } else {
+                        pendingTxsSummary.push({
+                            date: newTx.date,
+                            amount: newTx.amount,
+                            desc: newTx.description
+                        });
+                    }
                 }
             }
 
@@ -263,18 +308,33 @@ export class SyncEngine {
 
         // 4. Enviar notificación multicanal si hubo actividad
         if (totalNewTxs > 0 || totalMatched > 0 || totalPending > 0) {
-            const lines = [...newTxsSummary];
+            const lines = [];
+
+            if (categorizedTxsSummary.length > 0) {
+                lines.push(`<b>✅ Categorizados automáticamente (${categorizedTxsSummary.length}):</b>`);
+                for (const item of categorizedTxsSummary) {
+                    lines.push(`• ${item.date} | ${item.amount > 0 ? '+' : ''}${item.amount.toFixed(2)} € | ${item.desc} ➔ <b>${item.catName}</b>`);
+                }
+            }
+
+            if (pendingTxsSummary.length > 0) {
+                lines.push(`<b>⚠️ Pendientes de categorizar (${pendingTxsSummary.length}):</b>`);
+                for (const item of pendingTxsSummary) {
+                    lines.push(`• ${item.date} | ${item.amount > 0 ? '+' : ''}${item.amount.toFixed(2)} € | ${item.desc} ➔ <i>🔴 Pendiente</i>`);
+                }
+            }
+
             if (totalMatched > 0) {
-                lines.push(`📎 ${totalMatched} factura(s) emparejada(s) automáticamente.`);
+                lines.push(`📎 <b>${totalMatched} factura(s) emparejada(s)</b> automáticamente.`);
             }
             if (totalPending > 0) {
-                lines.push(`⏳ ${totalPending} ticket(s) en buzón esperando cargo bancario.`);
+                lines.push(`⏳ <b>${totalPending} ticket(s) en buzón</b> esperando cargo bancario.`);
             }
 
             await this.notificationService.notifyUser(username, {
-                title: 'Resumen matutino bancario',
-                summary: `Se han sincronizado ${totalNewTxs} nuevo(s) movimiento(s) bancario(s).`,
-                stats: `Cuentas sincronizadas: ${mappedAccounts.length}`,
+                title: 'Resumen bancario matutino',
+                summary: `Se han procesado ${totalNewTxs} nuevo(s) movimiento(s) bancario(s).`,
+                stats: `Cuentas sincronizadas: ${mappedAccounts.length} | Categorizados: ${categorizedTxsSummary.length} | Pendientes: ${pendingTxsSummary.length}`,
                 lines
             });
         }
@@ -284,6 +344,8 @@ export class SyncEngine {
             newTxs: totalNewTxs,
             matchedTickets: totalMatched,
             pendingTickets: totalPending,
+            categorizedCount: categorizedTxsSummary.length,
+            pendingCategorizationCount: pendingTxsSummary.length,
             syncedAccountsCount: mappedAccounts.length
         };
     }

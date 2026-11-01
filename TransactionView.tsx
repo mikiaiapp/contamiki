@@ -96,6 +96,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeMenuTxId, setActiveMenuTxId] = useState<string | null>(null);
+  const [filterPendingOnly, setFilterPendingOnly] = useState<boolean>(Boolean(initialSpecificFilters?.filterPending));
   
   const [recDesc, setRecDesc] = useState('');
   const [recAmount, setRecAmount] = useState('');
@@ -263,6 +264,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
          setImportStep(1);
          setIsImportModalOpen(true);
       } else {
+          if (initialSpecificFilters.filterPending) {
+              setFilterPendingOnly(true);
+          }
           if (initialSpecificFilters.filterCategory) {
               setColFilterEntry(initialSpecificFilters.filterCategory);
               setColFilterExit(initialSpecificFilters.filterCategory);
@@ -813,9 +817,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         if (colFilterAmountOp === 'LT' && val >= v1) return false;
         if (colFilterAmountOp === 'EQ' && Math.abs(val - v1) > 0.01) return false;
       }
+      if (filterPendingOnly) {
+        const isPending = t.type !== 'TRANSFER' && (!t.categoryId || t.categoryId === '' || t.isPendingCategorization);
+        if (!isPending) return false;
+      }
       return true;
     });
-  }, [timeFilteredList, colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, colFilterAmountVal1]);
+  }, [timeFilteredList, colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, colFilterAmountVal1, filterPendingOnly]);
 
   const sortedTransactions = useMemo(() => {
     return [...filteredList].sort((a, b) => {
@@ -893,6 +901,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     if (colFilterDesc) chips.push({ id: 'desc', label: `Texto: "${colFilterDesc}"`, onRemove: () => setColFilterDesc('') });
     if (colFilterClip !== 'ALL') chips.push({ id: 'clip', label: `Clip: ${colFilterClip}`, onRemove: () => setColFilterClip('ALL') });
     if (colFilterAmountOp !== 'ALL') chips.push({ id: 'amount', label: `Imp: ${colFilterAmountOp}`, onRemove: () => setColFilterAmountOp('ALL') });
+    if (filterPendingOnly) chips.push({ id: 'pendingOnly', label: 'Por Categorizar', onRemove: () => setFilterPendingOnly(false) });
     return chips;
   }, [colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, indices]);
 
@@ -1059,6 +1068,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
   const gridClasses = "grid grid-cols-[22px_45px_1fr_1.2fr_12px_1fr_55px_0px_20px] sm:grid-cols-[25px_65px_1fr_1.4fr_20px_1fr_65px_60px_25px] md:grid-cols-[25px_75px_1fr_1.4fr_25px_1fr_75px_75px_30px] gap-1.5 sm:gap-2 md:gap-2 items-center";
 
+  const pendingCategorizationCount = useMemo(() => {
+    return (data.transactions || []).filter(t => 
+      t.type !== 'TRANSFER' && (!t.categoryId || t.categoryId === '' || t.isPendingCategorization)
+    ).length;
+  }, [data.transactions]);
+
   const duplicateProps = useMemo(() => proposedTransactions.filter(p => p.isDuplicate), [proposedTransactions]);
   const normalProps = useMemo(() => proposedTransactions.filter(p => !p.isDuplicate), [proposedTransactions]);
 
@@ -1145,7 +1160,22 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
               <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-3xl shadow-sm border border-slate-100 p-1.5 shrink-0 overflow-hidden">
                   <img src={displayLogo} className="w-full h-full object-cover rounded-2xl" onError={(e) => e.currentTarget.src = "/contamiki.jpg"} />
               </div>
-              <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">Diario.</h2>
+                {pendingCategorizationCount > 0 && (
+                  <button 
+                    onClick={() => setFilterPendingOnly(!filterPendingOnly)}
+                    className={`${
+                      filterPendingOnly ? 'bg-rose-700 ring-4 ring-rose-200' : 'bg-rose-500'
+                    } text-white px-3.5 py-1.5 md:px-4 md:py-2 rounded-2xl flex items-center gap-2 shadow-lg shadow-rose-200 animate-pulse transition-all active:scale-95 cursor-pointer`}
+                    title={filterPendingOnly ? "Mostrando pendientes (clic para ver todos)" : "Filtrar movimientos pendientes de categorizar"}
+                  >
+                    <AlertTriangle size={16} />
+                    <span className="text-xs font-black">{pendingCategorizationCount}</span>
+                    <span className="hidden sm:inline text-xs font-bold">por categorizar</span>
+                  </button>
+                )}
+              </div>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
             <div className="flex items-center gap-1">
@@ -1278,10 +1308,34 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           } else if (t.type === 'INCOME') {
             debitId = t.accountId; creditId = t.categoryId;
             debitNode = <button className={`flex items-center gap-1 font-bold text-left line-clamp-2 leading-tight active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></button>;
-            creditNode = <button className={`flex items-center gap-1 font-bold text-left line-clamp-2 leading-tight active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name || 'S/C'}</span></button>;
+            const isUncategorized = t.type !== 'TRANSFER' && (!t.categoryId || t.categoryId === '' || t.isPendingCategorization);
+            creditNode = isUncategorized ? (
+              <button 
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 font-bold text-[10px] hover:bg-rose-100 transition-colors shadow-xs active:scale-95 cursor-pointer"
+                onClick={(e) => { e.stopPropagation(); openEditor(t); }}
+                title="Movimiento pendiente de categorizar. Clic para asignar categoría."
+              >
+                <AlertTriangle size={11} className="text-rose-500 shrink-0"/>
+                <span className="truncate">Pendiente</span>
+              </button>
+            ) : (
+              <button className={`flex items-center gap-1 font-bold text-left line-clamp-2 leading-tight active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name || 'S/C'}</span></button>
+            );
           } else {
             debitId = t.categoryId; creditId = t.accountId;
-            debitNode = <button className={`flex items-center gap-1 font-bold text-left line-clamp-2 leading-tight active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name}</span></button>;
+            const isUncategorized = t.type !== 'TRANSFER' && (!t.categoryId || t.categoryId === '' || t.isPendingCategorization);
+            debitNode = isUncategorized ? (
+              <button 
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 font-bold text-[10px] hover:bg-rose-100 transition-colors shadow-xs active:scale-95 cursor-pointer"
+                onClick={(e) => { e.stopPropagation(); openEditor(t); }}
+                title="Movimiento pendiente de categorizar. Clic para asignar categoría."
+              >
+                <AlertTriangle size={11} className="text-rose-500 shrink-0"/>
+                <span className="truncate">Pendiente</span>
+              </button>
+            ) : (
+              <button className={`flex items-center gap-1 font-bold text-left line-clamp-2 leading-tight active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterEntry(debitId);}}>{renderIcon(cat?.icon || '🏷️')} <span className="line-clamp-2">{cat?.name || 'S/C'}</span></button>
+            );
             creditNode = <button className={`flex items-center gap-1 font-bold text-left line-clamp-2 leading-tight active:underline lg:hover:underline ${typeColorClass}`} onClick={(e) => {e.stopPropagation(); setColFilterExit(creditId);}}>{renderIcon(srcAcc?.icon || '🏦')} <span className="line-clamp-2">{srcAcc?.name}</span></button>;
           }
           const balance = runningBalances.get(t.id) || 0;

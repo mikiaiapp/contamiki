@@ -123,6 +123,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
     return recurrents.filter(r => r.active && r.nextDueDate <= today);
   }, [recurrents]);
 
+  const pendingCategorizationCount = useMemo(() => {
+    return (transactions || []).filter(t => 
+      t.type !== 'TRANSFER' && (!t.categoryId || t.categoryId === '' || t.isPendingCategorization)
+    ).length;
+  }, [transactions]);
+
   // --- CAPA 2: LÍMITES TEMPORALES ---
   const dateBounds = useMemo(() => {
     const y = filter.referenceDate.getFullYear();
@@ -465,9 +471,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                         <button 
                             onClick={() => setShowRecurrentsModal(true)}
                             className="bg-rose-500 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg shadow-rose-200 animate-pulse lg:hover:scale-105 transition-transform active:scale-95 touch-manipulation"
+                            title="Movimientos recurrentes pendientes"
                         >
                             <Bell size={18} />
                             <span className="text-[12px] font-black">{pendingRecurrents.length}</span>
+                        </button>
+                    )}
+                    {pendingCategorizationCount > 0 && (
+                        <button 
+                            onClick={() => onNavigateToTransactions({ filterPending: true })}
+                            className="bg-rose-500 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg shadow-rose-200 animate-pulse lg:hover:scale-105 transition-transform active:scale-95 touch-manipulation"
+                            title="Movimientos pendientes de categorizar"
+                        >
+                            <AlertCircle size={18} />
+                            <span className="text-[12px] font-black">{pendingCategorizationCount} por categorizar</span>
                         </button>
                     )}
                 </div>
