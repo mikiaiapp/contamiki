@@ -26,9 +26,11 @@
 | **Privacidad de tus datos** | ❌ En servidores de terceros | ✅ Local | ✅ **100% tuyo (Self-Hosted en Docker)** |
 | **Sincronización bancaria** | ⚠️ Solo su propio banco | ❌ Manual | ✅ **Automática multientidad (PSD2)** |
 | **Buzón y archivo de tickets** | ❌ Rara vez disponible | ❌ Complejo de enlazar | ✅ **Adjunto PDF/Foto con visor nativo** |
+| **Apuntes recurrentes** | ⚠️ Básico o limitado | ❌ Fórmulas manuales | ✅ **Automatización de cobros y pagos periódicos** |
+| **Apuntes favoritos** | ❌ No disponible | ❌ Duplicación manual | ✅ **Plantillas rápidas con 1 solo toque** |
 | **Multi-Contabilidad (Hogar, Negocio...)** | ❌ No disponible | ⚠️ Archivos separados | ✅ **Cambio de contabilidad con un solo clic** |
 | **Colaboración familiar** | ❌ Un solo usuario | ⚠️ Conflictos de edición | ✅ **Multi-usuario con roles y 2FA** |
-| **Coste recurrente** | ❌ Suscripciones mensuales | ✅ Gratuito | ✅ **Gratis, libre y sin cuotas** |
+| **Sin cuotas ni suscripciones** | ❌ Suscripciones mensuales | ✅ Gratuito | ✅ **Gratis, libre y 100% tuyo** |
 
 ---
 
@@ -39,7 +41,7 @@ flowchart LR
     A["🏦 Bancos Españoles / PSD2"] -->|Sincronización 06:00 AM| D["🧠 Motor ContaMiki"]
     B["📲 Atajo iOS / Buzón de Tickets"] -->|Subida PDF & Foto| D
     C["📑 Extractos Excel / CSV"] -->|Importador Inteligente| D
-    E["✍️ Apuntes Manuales & Favoritos"] --> D
+    E["✍️ Apuntes Manuales, Favoritos & Recurrentes"] --> D
     
     D --> F["🏷️ Auto-Categorización por IA"]
     D --> G["📎 Emparejamiento de Tickets"]
@@ -52,7 +54,7 @@ ContaMiki no se limita a anotar gastos sueltos: te ofrece un modelo contable de 
 - **Cuentas Bancarias y Monederos:**  
   Configura todas tus cuentas corrientes, cuentas de ahorro remuneradas, efectivo en cartera, depósitos o tarjetas. Cada cuenta cuenta con su divisa, icono personalizado y saldo consolidado en tiempo real.
 - **Familias (Nivel Macro):**  
-  Grandes bloques presupuestarios para entender tu estructura de costes de un vistazo (ej. *Hogar*, *Alimentación*, *Transporte*, *Ocio & Viajes*, *Salud*, *Nóminas*, *Inversiones*).
+  Grandes bloques presupuestarios para entender tu estructura de gastos e ingresos de un vistazo (ej. *Hogar*, *Alimentación*, *Transporte*, *Ocio & Viajes*, *Salud*, *Nóminas*, *Inversiones*).
 - **Categorías (Nivel Quirúrgico):**  
   Dentro de cada familia, define categorías precisas (ej. dentro de *Alimentación*: *Mercadona*, *Carnicería*, *Restaurantes*, *Cafeterías*). Así sabrás con exactitud matemática a dónde va cada euro.
 
@@ -61,10 +63,10 @@ ContaMiki no se limita a anotar gastos sueltos: te ofrece un modelo contable de 
 ### 2. ✍️ Entrada de Apuntes Manual y Accesos Rápidos
 Registrar un movimiento en el día a día es una experiencia inmediata y agradable:
 - **Entrada Ultra-Rápida:** Formularios optimizados para móvil y ordenador con selector rápido de fecha, cuenta de cargo/abono, importe e imputación de categoría.
-- **⭐ Movimientos Favoritos:**  
-  ¿Compras el pan a diario o tomas café en el mismo bar? Guarda tus gastos más repetitivos como favoritos para generarlos con **un solo toque** en pantalla sin volver a rellenar nada.
-- **🔁 Movimientos Periódicos y Recurrentes:**  
-  Automatiza tus cuotas fijas: alquiler, hipoteca, nóminas, suscripciones (Netflix, Spotify), recibos de luz, seguros o cuotas de comunidad. Define la periodicidad (mensual, quincenal, trimestral, anual) y ContaMiki los mantendrá al día.
+- **⭐ Apuntes Favoritos:**  
+  ¿Compras el pan a diario o tomas café en el mismo bar? Guarda tus gastos e ingresos más repetitivos como apuntes favoritos para generarlos con **un solo toque** en pantalla desde el diario o el resumen, sin volver a rellenar nada.
+- **🔁 Apuntes Recurrentes y Periódicos:**  
+  Automatiza tus cobros y pagos fijos: alquiler, hipoteca, nóminas, suscripciones (Netflix, Spotify), recibos de luz, seguros o cuotas de comunidad. Define la periodicidad (mensual, quincenal, trimestral, anual) con avisos de pendientes y validación en un clic.
 - **Transferencias entre cuentas:**  
   Registra traspasos de fondos entre tus propias cuentas con trazabilidad perfecta de origen y destino.
 - **Conciliación y Validación:**  
