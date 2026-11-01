@@ -19,10 +19,42 @@ export class BankService {
         }
     }
 
+    getConfigFile() {
+        return path.join(this.dataDir, 'bank_config.json');
+    }
+
+    readConfig() {
+        try {
+            const cfgPath = this.getConfigFile();
+            if (fs.existsSync(cfgPath)) {
+                return JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+            }
+        } catch {}
+        return {
+            appId: this.appId || 'a4b70785-ab0e-4c8f-b5da-4688b87f7dcf'
+        };
+    }
+
+    async saveConfig({ appId, pemContent }) {
+        const cfg = this.readConfig();
+        if (appId && appId.trim()) {
+            cfg.appId = appId.trim();
+            this.appId = cfg.appId;
+        }
+        if (pemContent && pemContent.trim()) {
+            fs.writeFileSync(this.keyPath, pemContent.trim(), 'utf8');
+        }
+        cfg.updatedAt = new Date().toISOString();
+        fs.writeFileSync(this.getConfigFile(), JSON.stringify(cfg, null, 2), 'utf8');
+        return await this.getStatus();
+    }
+
     /**
      * Generates a signed RS256 JWT for Enable Banking API
      */
     getJWT() {
+        const cfg = this.readConfig();
+        const activeAppId = cfg.appId || this.appId;
         if (!fs.existsSync(this.keyPath)) {
             throw new Error(`Enable Banking key file not found at: ${this.keyPath}`);
         }
@@ -36,7 +68,7 @@ export class BankService {
         };
         return jwt.sign(payload, privateKey, {
             algorithm: 'RS256',
-            header: { kid: this.appId }
+            header: { kid: activeAppId }
         });
     }
 
@@ -71,19 +103,38 @@ export class BankService {
      */
     async getStatus() {
         const keyExists = fs.existsSync(this.keyPath);
+        const cfg = this.readConfig();
+        const activeAppId = cfg.appId || this.appId;
+        let keySize = 0;
+        if (keyExists) {
+            try { keySize = fs.statSync(this.keyPath).size; } catch {}
+        }
+
         if (!keyExists) {
-            return { configured: false, error: 'Archivo enablebanking.pem no encontrado en /app/data/' };
+            return {
+                configured: false,
+                appId: activeAppId,
+                keyExists: false,
+                keySize: 0,
+                error: 'Archivo enablebanking.pem no encontrado en /app/data/'
+            };
         }
         try {
             const appData = await this.apiRequest('/application');
             return {
                 configured: true,
+                appId: activeAppId,
+                keyExists: true,
+                keySize,
                 appActive: !!appData.active,
                 appData
             };
         } catch (err) {
             return {
                 configured: true,
+                appId: activeAppId,
+                keyExists: true,
+                keySize,
                 appActive: false,
                 error: err.message
             };

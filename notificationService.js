@@ -140,7 +140,7 @@ export class NotificationService {
                 const userNotifFile = path.join(notifDir, `${username.replace(/[^a-zA-Z0-9]/g, '_')}.json`);
                 let userNotifs = [];
                 if (fs.existsSync(userNotifFile)) {
-                    try { userNotifs = JSON.parse(fs.readFileSync(userNotifFile, 'utf8')); } catch {}
+                    try { userNotifs = JSON.parse(fs.readFileSync(userNotifFile, 'utf8')); } catch { }
                 }
                 userNotifs.unshift({
                     id: `notif_${Date.now()}`,

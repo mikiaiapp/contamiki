@@ -1429,6 +1429,19 @@ app.get('/api/bank/aspsps', authenticateToken, async (req, res) => {
     }
 });
 
+app.post('/api/bank/credentials', authenticateToken, async (req, res) => {
+    try {
+        const { appId, pemContent } = req.body;
+        if (!appId && !pemContent) {
+            return res.status(400).json({ error: "Application ID o clave PEM requerido" });
+        }
+        const status = await bankService.saveConfig({ appId, pemContent });
+        res.json({ success: true, status });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/bank/auth-url', authenticateToken, async (req, res) => {
     try {
         const { aspspName } = req.body;
@@ -1546,19 +1559,42 @@ app.get('/api/tickets/inbox', authenticateToken, async (req, res) => {
     }
 });
 
+app.get('/api/tickets/inbox/shortcut', (req, res) => {
+    const shortcutPath = path.join(__dirname, 'Subir_a_ContaMiki.shortcut');
+    if (fs.existsSync(shortcutPath)) {
+        res.setHeader('Content-Type', 'application/x-apple-aspen-config');
+        res.setHeader('Content-Disposition', 'attachment; filename="Subir_a_ContaMiki.shortcut"');
+        return res.sendFile(shortcutPath);
+    }
+    res.status(404).send('Shortcut not found');
+});
+
 app.post('/api/tickets/inbox/upload', async (req, res) => {
     try {
-        const { filename, base64Data } = req.body;
-        if (!filename || !base64Data) {
-            return res.status(400).json({ error: "filename and base64Data required" });
+        let filename = req.query.filename || (req.body && req.body.filename);
+        let fileBuffer = null;
+
+        if (req.body && req.body.base64Data) {
+            const cleanBase64 = req.body.base64Data.replace(/^data:.*?;base64,/, '');
+            fileBuffer = Buffer.from(cleanBase64, 'base64');
+        } else if (Buffer.isBuffer(req.body)) {
+            fileBuffer = req.body;
         }
+
+        if (!filename) {
+            filename = `ticket_${Date.now()}.pdf`;
+        }
+        if (!fileBuffer || fileBuffer.length === 0) {
+            return res.status(400).json({ error: "Datos del archivo no recibidos" });
+        }
+
         const safeName = filename.replace(/[^a-zA-Z0-9._ -]/g, '_');
         const targetPath = path.join(TICKETS_INBOX_DIR, safeName);
-        const cleanBase64 = base64Data.replace(/^data:.*?;base64,/, '');
-        await fs.promises.writeFile(targetPath, Buffer.from(cleanBase64, 'base64'));
-        console.log(`[TICKETS INBOX] Archivo subido: ${safeName}`);
-        res.json({ success: true, filename: safeName });
+        await fs.promises.writeFile(targetPath, fileBuffer);
+        console.log(`[TICKETS INBOX] Archivo subido: ${safeName} (${fileBuffer.length} bytes)`);
+        res.json({ success: true, filename: safeName, size: fileBuffer.length });
     } catch (err) {
+        console.error('[TICKETS INBOX ERROR]', err);
         res.status(500).json({ error: err.message });
     }
 });

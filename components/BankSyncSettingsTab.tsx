@@ -1,6 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppState, BookMetadata } from '../types';
-import { Building2, RefreshCw, CheckCircle2, AlertCircle, Send, Bell, Clock, FolderArchive, ArrowUpRight, Check, Trash2, ShieldCheck, Mail, Bot } from 'lucide-react';
+import { 
+  Building2, RefreshCw, CheckCircle2, AlertCircle, Clock, 
+  FolderArchive, ArrowUpRight, Check, Trash2, ShieldCheck, 
+  Mail, Bot, Key, Upload, Download, FileText, Smartphone, 
+  HelpCircle, Sparkles, X, Info
+} from 'lucide-react';
 
 interface BankSyncSettingsTabProps {
   data: AppState;
@@ -26,10 +31,27 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
   const [telegramTestStatus, setTelegramTestStatus] = useState<string>('');
+  
+  // Modals
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [bankSearch, setBankSearch] = useState('');
+  const [isCredsModalOpen, setIsCredsModalOpen] = useState(false);
+  const [isShortcutModalOpen, setIsShortcutModalOpen] = useState(false);
+
+  // Credentials form state
+  const [appIdInput, setAppIdInput] = useState('a4b70785-ab0e-4c8f-b5da-4688b87f7dcf');
+  const [pemTextInput, setPemTextInput] = useState('');
+  const [isSavingCreds, setIsSavingCreds] = useState(false);
+  const [credsMessage, setCredsMessage] = useState('');
+
+  // Notifications form state
   const [isSavingNotifs, setIsSavingNotifs] = useState(false);
   const [saveNotifsMessage, setSaveNotifsMessage] = useState('');
+
+  // Ticket upload state
+  const [isUploadingTicket, setIsUploadingTicket] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -44,7 +66,9 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
       ]);
 
       if (statusRes.ok) {
-        setStatus(await statusRes.json());
+        const s = await statusRes.json();
+        setStatus(s);
+        if (s.appId) setAppIdInput(s.appId);
       }
       if (notifRes.ok) {
         setNotifSettings(await notifRes.json());
@@ -132,6 +156,90 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
       await loadData();
     } catch (err) {
       console.error('Error deleting connection:', err);
+    }
+  };
+
+  const handleSaveCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingCreds(true);
+    setCredsMessage('');
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/bank/credentials', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          appId: appIdInput,
+          pemContent: pemTextInput || undefined
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCredsMessage('✅ Credenciales guardadas y verificadas con Enable Banking');
+        setPemTextInput('');
+        await loadData();
+        setTimeout(() => {
+          setIsCredsModalOpen(false);
+          setCredsMessage('');
+        }, 1500);
+      } else {
+        setCredsMessage(`❌ Error: ${data.error || 'No se pudo validar con Enable Banking'}`);
+      }
+    } catch (err: any) {
+      setCredsMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setIsSavingCreds(false);
+    }
+  };
+
+  const handlePemFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setPemTextInput(event.target?.result as string);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleTicketUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingTicket(true);
+    setUploadMessage('');
+    try {
+      const token = localStorage.getItem('token');
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64Data = event.target?.result as string;
+        const res = await fetch('/api/tickets/inbox/upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            filename: file.name,
+            base64Data
+          })
+        });
+        const d = await res.json();
+        if (res.ok && d.success) {
+          setUploadMessage(`✅ ${file.name} subido al buzón`);
+          await loadData();
+          setTimeout(() => setUploadMessage(''), 4000);
+        } else {
+          setUploadMessage(`❌ Error: ${d.error}`);
+        }
+        setIsUploadingTicket(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setUploadMessage(`❌ Error: ${err.message}`);
+      setIsUploadingTicket(false);
     }
   };
 
@@ -238,8 +346,8 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
 
       {/* Grid: Estado Open Banking & Buzón de Tickets */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Card: Conexión API */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+        {/* Card: Conexión API & Credenciales */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
@@ -250,30 +358,54 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                 <p className="text-[11px] text-slate-400 font-medium">Clave RSA y Application ID</p>
               </div>
             </div>
-            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 border border-emerald-200 text-[10px] font-black uppercase rounded-lg">
-              Operativo
+            <span className={`px-2.5 py-1 text-[10px] font-black uppercase rounded-lg border ${
+              status?.appActive 
+                ? 'bg-emerald-50 text-emerald-600 border-emerald-200' 
+                : 'bg-amber-50 text-amber-700 border-amber-200'
+            }`}>
+              {status?.appActive ? 'Operativo' : 'Configurado'}
             </span>
           </div>
 
           <div className="space-y-2 text-xs">
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
               <span className="text-slate-500 font-bold text-[10px] uppercase">Application ID</span>
-              <span className="font-mono text-slate-800 text-[11px] select-all">a4b70785-ab0e-4c8f-b5da-4688b87f7dcf</span>
+              <span className="font-mono text-slate-800 text-[11px] select-all truncate max-w-[200px]">
+                {status?.appId || appIdInput}
+              </span>
             </div>
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
               <span className="text-slate-500 font-bold text-[10px] uppercase">Clave Privada RSA</span>
-              <span className="text-emerald-600 font-bold text-[11px] flex items-center gap-1">
-                <Check size={12}/> enablebanking.pem cargado
+              <span className={`font-bold text-[11px] flex items-center gap-1 ${
+                status?.keyExists ? 'text-emerald-600' : 'text-rose-500'
+              }`}>
+                {status?.keyExists ? (
+                  <>
+                    <Check size={12}/> enablebanking.pem cargado ({status.keySize ? `${status.keySize} B` : 'OK'})
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle size={12}/> Archivo .pem no cargado
+                  </>
+                )}
               </span>
             </div>
           </div>
 
-          <button
-            onClick={() => setIsBankModalOpen(true)}
-            className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
-          >
-            <Building2 size={14}/> Vincular nuevo Banco (CaixaBank, Santander, etc.)
-          </button>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <button
+              onClick={() => setIsCredsModalOpen(true)}
+              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Key size={13}/> Ajustar Credenciales
+            </button>
+            <button
+              onClick={() => setIsBankModalOpen(true)}
+              className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <Building2 size={13}/> Vincular Banco
+            </button>
+          </div>
         </div>
 
         {/* Card: Buzón de Tickets */}
@@ -285,7 +417,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
               </div>
               <div>
                 <h4 className="font-black text-slate-900 uppercase text-xs tracking-wider">Buzón de Tickets Inbox</h4>
-                <p className="text-[11px] text-slate-400 font-medium">Archivos pendientes de conciliar</p>
+                <p className="text-[11px] text-slate-400 font-medium">Facturas y tickets pendientes de conciliar</p>
               </div>
             </div>
             <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-black rounded-lg">
@@ -293,16 +425,40 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
             </span>
           </div>
 
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 text-xs text-slate-600">
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 text-xs text-slate-600">
             <p className="text-[11px] leading-relaxed">
-              Deja facturas o tickets en PDF o foto en esta carpeta compartida de tu red o envíalos desde el botón Compartir de iOS:
+              Guarda facturas o tickets (PDF o foto) en tu red local o envíalos desde tu iPhone / iPad:
             </p>
-            <div className="p-2.5 bg-white rounded-xl border border-slate-200 font-mono text-[10px] text-slate-800 select-all break-all">
+            <div className="p-2 bg-white rounded-xl border border-slate-200 font-mono text-[10px] text-slate-800 select-all break-all">
               \\192.168.1.2\docker\contamiki\data\tickets_inbox\
             </div>
-            <p className="text-[10px] text-slate-400">
-              Al coincidir fecha e importe con un cargo bancario, el ticket se adjunta a la transacción y se elimina automáticamente del buzón.
-            </p>
+            {uploadMessage && (
+              <p className="text-[11px] font-bold text-emerald-600">{uploadMessage}</p>
+            )}
+          </div>
+
+          {/* Action buttons for tickets */}
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleTicketUpload} 
+              accept=".pdf,image/*" 
+              className="hidden" 
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingTicket}
+              className="py-2.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Upload size={13}/> {isUploadingTicket ? 'Subiendo...' : 'Subir Ticket'}
+            </button>
+            <button
+              onClick={() => setIsShortcutModalOpen(true)}
+              className="py-2.5 px-3 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Smartphone size={13}/> Atajo iOS
+            </button>
           </div>
         </div>
       </div>
@@ -311,8 +467,8 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
       <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200/80 shadow-sm space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">Cuentas Bancarias Vinculadas</h4>
-            <p className="text-xs text-slate-400">Asigna cada cuenta bancaria o tarjeta a una cuenta de tu libro contable</p>
+            <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">Cuentas Bancarias & Tarjetas Vinculadas</h4>
+            <p className="text-xs text-slate-400">Asigna cada cuenta corriente o tarjeta a una cuenta de tu libro contable</p>
           </div>
         </div>
 
@@ -375,7 +531,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
             <span className="text-3xl">🏦</span>
             <p className="text-xs text-slate-500 font-bold">No hay cuentas bancarias vinculadas todavía.</p>
             <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
-              Pulsa en el botón superior para vincular tu banco oficial mediante la pasarela segura de Enable Banking.
+              Pulsa en el botón «Vincular Banco» superior para autorizar tu entidad oficial mediante la pasarela segura de Enable Banking.
             </p>
           </div>
         )}
@@ -385,7 +541,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
       <form onSubmit={handleSaveNotifications} className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200/80 shadow-sm space-y-6">
         <div>
           <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">Notificaciones & Tarea Matutina</h4>
-          <p className="text-xs text-slate-400">Elige por qué canales quieres recibir el resumen matutino diario y a qué hora</p>
+          <p className="text-xs text-slate-400">Elige por qué canales quieres recibir el resumen diario y a qué hora</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -518,6 +674,149 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
           </button>
         </div>
       </form>
+
+      {/* Modal: Configurar Credenciales Enable Banking */}
+      {isCredsModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Key size={16}/>
+                </div>
+                <h3 className="font-black text-slate-900 text-base uppercase">Credenciales Open Banking</h3>
+              </div>
+              <button onClick={() => setIsCredsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18}/>
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Configura tu Application ID y la clave privada RSA generada en <a href="https://enablebanking.com" target="_blank" rel="noreferrer" className="text-indigo-600 underline font-bold">enablebanking.com</a>. Quedarán almacenadas en la base de datos de la app sin necesidad de reiniciar Docker.
+            </p>
+
+            <form onSubmit={handleSaveCredentials} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Application ID</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="ej. a4b70785-ab0e-4c8f-b5da-4688b87f7dcf"
+                  value={appIdInput}
+                  onChange={(e) => setAppIdInput(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] font-black uppercase text-slate-500">Clave Privada RSA (enablebanking.pem)</label>
+                  <label className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 cursor-pointer flex items-center gap-1">
+                    <Upload size={10}/> Cargar archivo .pem
+                    <input type="file" accept=".pem,.key,.txt" onChange={handlePemFileUpload} className="hidden" />
+                  </label>
+                </div>
+                <textarea
+                  rows={4}
+                  placeholder={status?.keyExists ? "••••• Clave cargada actualmente. Pega una nueva solo si deseas reemplazarla •••••" : "-----BEGIN RSA PRIVATE KEY-----\n..."}
+                  value={pemTextInput}
+                  onChange={(e) => setPemTextInput(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-mono outline-none focus:border-indigo-500 custom-scrollbar"
+                />
+              </div>
+
+              {credsMessage && (
+                <p className="text-xs font-bold text-slate-800">{credsMessage}</p>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCredsModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCreds}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-md active:scale-95"
+                >
+                  {isSavingCreds ? 'Guardando y Verificando...' : 'Guardar y Verificar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Guía & Descarga Atajo iOS */}
+      {isShortcutModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 space-y-5 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                  <Smartphone size={16}/>
+                </div>
+                <h3 className="font-black text-slate-900 text-base uppercase">Atajo para iPhone / iPad</h3>
+              </div>
+              <button onClick={() => setIsShortcutModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18}/>
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs text-slate-600 leading-relaxed">
+              <div className="p-4 bg-sky-50 rounded-2xl border border-sky-100 space-y-3">
+                <div className="flex items-center gap-2 font-bold text-sky-900">
+                  <Download size={14}/> Método 1: Descarga Directa
+                </div>
+                <p className="text-[11px] text-sky-800">
+                  Descarga el atajo oficial ya empaquetado para añadirlo con un toque:
+                </p>
+                <a
+                  href="/api/tickets/inbox/shortcut"
+                  download="Subir_a_ContaMiki.shortcut"
+                  className="inline-flex items-center justify-center gap-2 w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold uppercase text-[11px] transition-all shadow-sm"
+                >
+                  <Download size={13}/> Descargar «Subir a ContaMiki.shortcut»
+                </a>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+                <div className="flex items-center gap-2 font-bold text-slate-900">
+                  <Sparkles size={14} className="text-amber-500"/> Método 2: Crear en 30 segundos (Recomendado para iOS 17+)
+                </div>
+                <p className="text-[11px]">
+                  Si iOS te avisa de que el archivo descargado no está firmado por Apple, puedes crearlo en 3 pasos en la app <strong>Atajos</strong> de tu iPhone/iPad:
+                </p>
+                <ol className="list-decimal pl-4 space-y-2 text-[11px]">
+                  <li>Abre la app <strong>Atajos</strong> y pulsa el botón <strong>+</strong>.</li>
+                  <li>
+                    Pulsa en la <strong>(i)</strong> de información inferior y activa <strong>«Mostrar al compartir»</strong> (acepta Imágenes y Archivos).
+                  </li>
+                  <li>Añade la acción <strong>«Codificar con Base64»</strong> (sobre la Entrada del atajo).</li>
+                  <li>
+                    Añade la acción <strong>«Obtener contenido de URL»</strong>:
+                    <ul className="list-disc pl-4 mt-1 space-y-1 text-slate-500 font-mono text-[10px]">
+                      <li>URL: <span className="text-indigo-600 font-bold">https://conta.mafede.i234.me/api/tickets/inbox/upload</span></li>
+                      <li>Método: <span className="font-bold">POST</span></li>
+                      <li>Cuerpo: <span className="font-bold">JSON</span></li>
+                      <li>Campo 1: <span className="font-bold">filename</span> ➔ Nombre (de la entrada)</li>
+                      <li>Campo 2: <span className="font-bold">base64Data</span> ➔ Codificado con Base64</li>
+                    </ul>
+                  </li>
+                  <li>(Opcional) Añade la acción <strong>«Mostrar notificación»</strong> con el texto: <em>Ticket subido a ContaMiki ✅</em></li>
+                </ol>
+              </div>
+
+              <p className="text-[11px] text-slate-400 italic">
+                A partir de ese momento, cada vez que abras una factura en PDF o hagas foto a un ticket, pulsas <strong>Compartir</strong> ➔ <strong>Subir a ContaMiki</strong> y quedará registrado al instante.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal: Selección de Banco */}
       {isBankModalOpen && (
