@@ -312,7 +312,7 @@ const App: React.FC = () => {
       >
         {currentView === 'RESUMEN' && (
           <>
-            <Dashboard data={currentAppData} onAddTransaction={handleAddTransaction} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); if (spec.action !== 'NEW' && spec.action !== 'IMPORT') setCurrentView('TRANSACTIONS'); }} currentBook={currentBookMeta} />
+            <Dashboard data={currentAppData} onAddTransaction={handleAddTransaction} onUpdateData={updateCurrentBookData} onRefreshData={refreshData} filter={globalFilter} onUpdateFilter={setGlobalFilter} onNavigateToTransactions={(spec) => { setPendingSpecificFilters(spec); if (spec.action !== 'NEW' && spec.action !== 'IMPORT') setCurrentView('TRANSACTIONS'); }} currentBook={currentBookMeta} />
             {pendingSpecificFilters && (pendingSpecificFilters.action === 'NEW' || pendingSpecificFilters.action === 'IMPORT') && (
               <TransactionView mode="MODAL_ONLY" data={currentAppData} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={handleUpdateTransaction} onUpdateData={updateCurrentBookData} filter={globalFilter} onUpdateFilter={setGlobalFilter} initialSpecificFilters={pendingSpecificFilters} clearSpecificFilters={() => setPendingSpecificFilters(null)} currentBook={currentBookMeta} onFinished={() => setPendingSpecificFilters(null)} />
             )}
