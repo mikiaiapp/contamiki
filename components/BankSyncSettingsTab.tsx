@@ -684,7 +684,8 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                   telegram: { ...notifSettings.telegram, enabled: e.target.checked }
                 })}
                 className="w-4 h-4 rounded text-indigo-600"
-              />
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
