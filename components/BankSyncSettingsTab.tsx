@@ -4,7 +4,7 @@ import {
   Building2, RefreshCw, CheckCircle2, AlertCircle, Clock, 
   FolderArchive, ArrowUpRight, Check, Trash2, ShieldCheck, 
   Mail, Bot, Key, Upload, Download, FileText, Smartphone, 
-  HelpCircle, Sparkles, X, Info
+  HelpCircle, Sparkles, X, Info, ExternalLink, Copy, ChevronDown, ChevronUp, BookOpen
 } from 'lucide-react';
 
 interface BankSyncSettingsTabProps {
@@ -43,6 +43,8 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
   const [pemTextInput, setPemTextInput] = useState('');
   const [isSavingCreds, setIsSavingCreds] = useState(false);
   const [credsMessage, setCredsMessage] = useState('');
+  const [showStepGuide, setShowStepGuide] = useState(true);
+  const [copiedRedirect, setCopiedRedirect] = useState(false);
 
   // Notifications form state
   const [isSavingNotifs, setIsSavingNotifs] = useState(false);
@@ -678,26 +680,136 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
       {/* Modal: Configurar Credenciales Enable Banking */}
       {isCredsModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 space-y-5 shadow-2xl">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 md:p-8 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                   <Key size={16}/>
                 </div>
-                <h3 className="font-black text-slate-900 text-base uppercase">Credenciales Open Banking</h3>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base uppercase">Credenciales Open Banking (PSD2)</h3>
+                  <p className="text-[10px] text-slate-400 font-medium">Sincronización bancaria automatizada para ContaMiki</p>
+                </div>
               </div>
               <button onClick={() => setIsCredsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={18}/>
               </button>
             </div>
 
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Configura tu Application ID y la clave privada RSA generada en <a href="https://enablebanking.com" target="_blank" rel="noreferrer" className="text-indigo-600 underline font-bold">enablebanking.com</a>. Quedarán almacenadas en la base de datos de la app sin necesidad de reiniciar Docker.
-            </p>
+            {/* Banner de Registro Enable Banking */}
+            <div className="bg-gradient-to-r from-indigo-500/10 via-sky-500/10 to-indigo-500/10 border border-indigo-100 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <span className="text-[10px] font-black uppercase text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
+                  Plataforma Oficial
+                </span>
+                <p className="text-xs font-bold text-slate-800">
+                  ¿Necesitas darte de alta? Enable Banking es gratuito para uso personal.
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  Sustituye la antigua API de GoCardless con acceso directo a bancos españoles (CaixaBank, Santander, BBVA, etc.)
+                </p>
+              </div>
+              <a
+                href="https://enablebanking.com/cp/applications"
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+              >
+                <ExternalLink size={13}/> Panel Enable Banking ↗
+              </a>
+            </div>
 
-            <form onSubmit={handleSaveCredentials} className="space-y-4">
+            {/* Guía Paso a Paso Desplegable */}
+            <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-slate-50/50">
+              <button
+                type="button"
+                onClick={() => setShowStepGuide(!showStepGuide)}
+                className="w-full p-3.5 flex items-center justify-between text-left hover:bg-slate-100/60 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <BookOpen size={15} className="text-indigo-600"/>
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+                    Guía Paso a Paso: Cómo darte de alta y activar tu app
+                  </span>
+                </div>
+                {showStepGuide ? <ChevronUp size={16} className="text-slate-400"/> : <ChevronDown size={16} className="text-slate-400"/>}
+              </button>
+
+              {showStepGuide && (
+                <div className="p-4 pt-1 border-t border-slate-200/60 space-y-3.5 text-xs text-slate-600 leading-relaxed">
+                  <div className="flex items-start gap-3">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                    <div>
+                      <strong className="text-slate-900">Regístrate gratis:</strong> Accede a <a href="https://enablebanking.com" target="_blank" rel="noreferrer" className="text-indigo-600 underline font-semibold">enablebanking.com</a> y crea tu cuenta de usuario.
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                    <div>
+                      <strong className="text-slate-900">Crear Aplicación:</strong> En el menú superior entra en <strong>API applications</strong> y pulsa <strong>Add a new application</strong>.
+                      <ul className="list-disc pl-4 mt-1 space-y-1 text-[11px] text-slate-500">
+                        <li>Selecciona entorno <strong>Production</strong>.</li>
+                        <li>En el método de clave, elige <em>«Generate in the browser (using SubtleCrypto) and export private key»</em>. Se descargará el archivo <strong>enablebanking.pem</strong> en tu equipo. ¡Guárdalo con cuidado!</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                    <div className="space-y-1.5 w-full">
+                      <strong className="text-slate-900">Datos y URLs de Redirección:</strong>
+                      <div className="p-2.5 bg-white rounded-xl border border-slate-200 space-y-1 text-[11px]">
+                        <div><span className="text-slate-400">Application name:</span> <strong className="text-slate-800">ContaMiki</strong></div>
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-slate-400 font-mono text-[10px]">Allowed redirect URLs:</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const urls = `${window.location.origin}/api/bank/callback\n${window.location.origin}/`;
+                              navigator.clipboard.writeText(urls);
+                              setCopiedRedirect(true);
+                              setTimeout(() => setCopiedRedirect(false), 2500);
+                            }}
+                            className="text-[10px] text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1"
+                          >
+                            <Copy size={11}/> {copiedRedirect ? '¡Copiadas al portapapeles!' : 'Copiar URLs recomendadas'}
+                          </button>
+                        </div>
+                        <pre className="p-1.5 bg-slate-50 rounded text-[10px] font-mono text-slate-700 select-all">{`${window.location.origin}/api/bank/callback\n${window.location.origin}/`}</pre>
+                        <div className="text-[10px] text-slate-400">Privacy & Terms URLs: puedes poner la dirección de tu ContaMiki ({window.location.origin})</div>
+                      </div>
+                      <p className="text-[11px]">Pulsa en el botón verde <strong>Register</strong> al final de la página.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                    <div>
+                      <strong className="text-slate-900">Activar la Aplicación (Paso Clave):</strong>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Al crearla, verás tu <strong>Application ID</strong> (kid) y la etiqueta <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold">Inactive</span>. Para activarla en producción, en el cuadro inferior busca tu banco (CaixaBank, Santander, Bankinter...) en el desplegable y pulsa en <strong>«Link»</strong> para autorizar tu primera cuenta personal. La app pasará a estado <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-bold">Active</span> de inmediato.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">5</span>
+                    <div>
+                      <strong className="text-slate-900">Guardar credenciales en ContaMiki:</strong>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Copia el <strong>Application ID</strong> y sube o pega el archivo <strong>enablebanking.pem</strong> en el formulario inferior.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Formulario de Configuración */}
+            <form onSubmit={handleSaveCredentials} className="space-y-4 pt-1">
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Application ID</label>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Application ID (kid)</label>
                 <input
                   type="text"
                   required
@@ -717,8 +829,8 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                   </label>
                 </div>
                 <textarea
-                  rows={4}
-                  placeholder={status?.keyExists ? "••••• Clave cargada actualmente. Pega una nueva solo si deseas reemplazarla •••••" : "-----BEGIN RSA PRIVATE KEY-----\n..."}
+                  rows={3}
+                  placeholder={status?.keyExists ? "••••• Clave RSA cargada actualmente en el servidor. Pega o sube una nueva solo si deseas reemplazarla •••••" : "-----BEGIN RSA PRIVATE KEY-----\n..."}
                   value={pemTextInput}
                   onChange={(e) => setPemTextInput(e.target.value)}
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-mono outline-none focus:border-indigo-500 custom-scrollbar"
