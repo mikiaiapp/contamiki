@@ -1,6 +1,7 @@
 
 import express from 'express';
 import { promises as fs } from 'fs';
+import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
@@ -1547,10 +1548,10 @@ app.post('/api/notifications/test-telegram', authenticateToken, async (req, res)
 
 app.get('/api/tickets/inbox', authenticateToken, async (req, res) => {
     try {
-        const files = await fs.promises.readdir(TICKETS_INBOX_DIR);
+        const files = await fs.readdir(TICKETS_INBOX_DIR);
         const fileList = [];
         for (const f of files) {
-            const stat = await fs.promises.stat(path.join(TICKETS_INBOX_DIR, f));
+            const stat = await fs.stat(path.join(TICKETS_INBOX_DIR, f));
             fileList.push({ name: f, size: stat.size, date: stat.mtime });
         }
         res.json({ files: fileList });
@@ -1561,10 +1562,10 @@ app.get('/api/tickets/inbox', authenticateToken, async (req, res) => {
 
 app.get(['/api/tickets/inbox/shortcut', '/Subir_a_ContaMiki.shortcut'], (req, res) => {
     let shortcutPath = path.join(__dirname, 'Subir_a_ContaMiki.shortcut');
-    if (!fs.existsSync(shortcutPath)) {
+    if (!fsSync.existsSync(shortcutPath)) {
         shortcutPath = path.join(DATA_DIR, 'Subir_a_ContaMiki.shortcut');
     }
-    if (fs.existsSync(shortcutPath)) {
+    if (fsSync.existsSync(shortcutPath)) {
         res.setHeader('Content-Type', 'application/x-apple-aspen-config');
         res.setHeader('Content-Disposition', 'attachment; filename="Subir_a_ContaMiki.shortcut"');
         return res.sendFile(shortcutPath);
@@ -1593,7 +1594,7 @@ app.post('/api/tickets/inbox/upload', async (req, res) => {
 
         const safeName = filename.replace(/[^a-zA-Z0-9._ -]/g, '_');
         const targetPath = path.join(TICKETS_INBOX_DIR, safeName);
-        await fs.promises.writeFile(targetPath, fileBuffer);
+        await fs.writeFile(targetPath, fileBuffer);
         console.log(`[TICKETS INBOX] Archivo subido: ${safeName} (${fileBuffer.length} bytes)`);
         res.json({ success: true, filename: safeName, size: fileBuffer.length });
     } catch (err) {
