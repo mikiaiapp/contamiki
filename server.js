@@ -9,6 +9,9 @@ import crypto from 'crypto';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import dotenv from 'dotenv';
+import { BankService } from './bankService.js';
+import { NotificationService } from './notificationService.js';
+import { SyncEngine } from './syncEngine.js';
 
 const envConfig = dotenv.config();
 if (envConfig.error) {
@@ -109,6 +112,27 @@ const GLOBAL_USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SYSTEM_LOGO_FILE = path.join(DATA_DIR, 'system_logo.png');
 
 console.log(`ContaMiki Server: Storage path set to: ${DATA_DIR}`);
+
+const TICKETS_INBOX_DIR = path.join(DATA_DIR, 'tickets_inbox');
+try { await fs.mkdir(TICKETS_INBOX_DIR, { recursive: true }); } catch {}
+
+const bankService = new BankService({
+    appId: await getSecret('ENABLE_BANKING_APP_ID') || 'a4b70785-ab0e-4c8f-b5da-4688b87f7dcf',
+    keyPath: await getSecret('ENABLE_BANKING_KEY_PATH') || path.join(DATA_DIR, 'enablebanking.pem'),
+    appUrl: APP_URL,
+    dataDir: DATA_DIR
+});
+
+const notificationService = new NotificationService({
+    dataDir: DATA_DIR,
+    sendEmailFn: sendEmail
+});
+
+const syncEngine = new SyncEngine({
+    bankService,
+    notificationService,
+    ticketsInboxDir: TICKETS_INBOX_DIR
+});
 
 // DATOS POR DEFECTO (Para inicializar nuevos usuarios con Logo)
 const DEFAULT_APP_STATE = {
@@ -1379,6 +1403,183 @@ app.get("/api/health", (req, res) => {
 app.get('/api/config', authenticateToken, (req, res) => {
     res.json({ apiKey: process.env.API_KEY || '' });
 });
+
+// --- OPEN BANKING & TICKETS INBOX API ---
+
+app.get('/api/bank/status', authenticateToken, async (req, res) => {
+    try {
+        const status = await bankService.getStatus();
+        const connections = bankService.getUserConnections(req.user.username);
+        let inboxCount = 0;
+        try {
+            inboxCount = (await fs.readdir(TICKETS_INBOX_DIR)).length;
+        } catch {}
+        res.json({ ...status, connections, inboxCount });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/bank/aspsps', authenticateToken, async (req, res) => {
+    try {
+        const banks = await bankService.getSpanishBanks();
+        res.json(banks);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/bank/auth-url', authenticateToken, async (req, res) => {
+    try {
+        const { aspspName } = req.body;
+        if (!aspspName) return res.status(400).json({ error: "Nombre de entidad bancaria requerido" });
+        const state = `usr_${getSafeUsername(req.user.username)}_${Date.now()}`;
+        const auth = await bankService.startAuthorization({
+            aspspName,
+            state
+        });
+        res.json(auth);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/bank/callback', async (req, res) => {
+    const { code, state } = req.query;
+    if (!code) {
+        return res.redirect(`${APP_URL}/?bank_error=no_code`);
+    }
+    try {
+        let username = 'mailmafernandez_gmail_com';
+        if (state && state.startsWith('usr_')) {
+            const parts = state.split('_');
+            if (parts.length >= 3) {
+                username = parts.slice(1, parts.length - 1).join('_');
+            }
+        }
+        const sessionData = await bankService.exchangeCodeForSession(code);
+        bankService.saveUserConnection(username, sessionData);
+        res.redirect(`${APP_URL}/?bank_auth=success`);
+    } catch (err) {
+        console.error("[BANK CALLBACK ERROR]", err);
+        res.redirect(`${APP_URL}/?bank_error=${encodeURIComponent(err.message)}`);
+    }
+});
+
+app.post('/api/bank/map-account', authenticateToken, (req, res) => {
+    try {
+        const { connectionId, accountUid, bookId, accountId, enabled } = req.body;
+        const updated = bankService.updateAccountMapping(req.user.username, {
+            connectionId, accountUid, bookId, accountId, enabled
+        });
+        res.json({ success: true, account: updated });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/bank/connection/:connectionId', authenticateToken, (req, res) => {
+    try {
+        bankService.deleteConnection(req.user.username, req.params.connectionId);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/bank/sync', authenticateToken, async (req, res) => {
+    try {
+        const result = await syncEngine.syncUser(req.user.username, {
+            readFullUserState,
+            saveFullUserState
+        });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- NOTIFICATION SETTINGS API (Telegram, Cartero, In-App) ---
+
+app.get('/api/notifications/settings', authenticateToken, (req, res) => {
+    const settings = notificationService.getUserSettings(req.user.username);
+    res.json(settings);
+});
+
+app.post('/api/notifications/settings', authenticateToken, (req, res) => {
+    const saved = notificationService.saveUserSettings(req.user.username, req.body);
+    res.json({ success: true, settings: saved });
+});
+
+app.post('/api/notifications/test-telegram', authenticateToken, async (req, res) => {
+    try {
+        const { botToken, chatId } = req.body;
+        await notificationService.sendTelegram({
+            botToken,
+            chatId,
+            text: '🚀 <b>¡ContaMiki conectado con Telegram con éxito!</b>\n\nRecibirás aquí tus resúmenes de movimientos bancarios y facturas emparejadas.'
+        });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// --- TICKETS INBOX API ---
+
+app.get('/api/tickets/inbox', authenticateToken, async (req, res) => {
+    try {
+        const files = await fs.promises.readdir(TICKETS_INBOX_DIR);
+        const fileList = [];
+        for (const f of files) {
+            const stat = await fs.promises.stat(path.join(TICKETS_INBOX_DIR, f));
+            fileList.push({ name: f, size: stat.size, date: stat.mtime });
+        }
+        res.json({ files: fileList });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/tickets/inbox/upload', async (req, res) => {
+    try {
+        const { filename, base64Data } = req.body;
+        if (!filename || !base64Data) {
+            return res.status(400).json({ error: "filename and base64Data required" });
+        }
+        const safeName = filename.replace(/[^a-zA-Z0-9._ -]/g, '_');
+        const targetPath = path.join(TICKETS_INBOX_DIR, safeName);
+        const cleanBase64 = base64Data.replace(/^data:.*?;base64,/, '');
+        await fs.promises.writeFile(targetPath, Buffer.from(cleanBase64, 'base64'));
+        console.log(`[TICKETS INBOX] Archivo subido: ${safeName}`);
+        res.json({ success: true, filename: safeName });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- TAREA AUTOMÁTICA DE SINCRONIZACIÓN MATUTINA (08:00 AM) ---
+let lastDailySyncDate = '';
+setInterval(async () => {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const hour = now.getHours();
+    
+    // Ejecutar a las 8:00 de la mañana (solo una vez al día)
+    if (hour === 8 && lastDailySyncDate !== todayStr) {
+        lastDailySyncDate = todayStr;
+        console.log(`[MORNING SYNC] Iniciando barrido automático matutino: ${todayStr}`);
+        try {
+            const users = await readUsers();
+            for (const u of users) {
+                await syncEngine.syncUser(u.username, { readFullUserState, saveFullUserState });
+            }
+        } catch (syncErr) {
+            console.error('[MORNING SYNC ERROR]', syncErr);
+        }
+    }
+}, 60 * 1000);
+
 
     let vite;
     // Vite middleware for development
