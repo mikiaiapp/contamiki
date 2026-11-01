@@ -1559,8 +1559,11 @@ app.get('/api/tickets/inbox', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/tickets/inbox/shortcut', (req, res) => {
-    const shortcutPath = path.join(__dirname, 'Subir_a_ContaMiki.shortcut');
+app.get(['/api/tickets/inbox/shortcut', '/Subir_a_ContaMiki.shortcut'], (req, res) => {
+    let shortcutPath = path.join(__dirname, 'Subir_a_ContaMiki.shortcut');
+    if (!fs.existsSync(shortcutPath)) {
+        shortcutPath = path.join(DATA_DIR, 'Subir_a_ContaMiki.shortcut');
+    }
     if (fs.existsSync(shortcutPath)) {
         res.setHeader('Content-Type', 'application/x-apple-aspen-config');
         res.setHeader('Content-Disposition', 'attachment; filename="Subir_a_ContaMiki.shortcut"');
@@ -1648,7 +1651,7 @@ setInterval(async () => {
                 html = await vite.transformIndexHtml(req.url, html);
             } else {
                 // En producción, cambiamos index.tsx por bundle.js (manejamos ambos casos por seguridad)
-                html = html.replace('src="index.tsx"', 'src="bundle.js"');
+                html = html.replace('src="index.tsx"', 'src="/bundle.js"');
                 html = html.replace('src="/index.tsx"', 'src="/bundle.js"');
             }
             
