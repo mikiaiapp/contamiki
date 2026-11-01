@@ -476,7 +476,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
         <div className="flex items-center justify-between">
           <div>
             <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">Cuentas Bancarias Vinculadas (PSD2)</h4>
-            <p className="text-xs text-slate-400">Asigna cada cuenta corriente a tu libro contable. Los extractos de tarjetas de crédito con liquidación diferida se gestionan como siempre a través del <strong>Importador Inteligente</strong>.</p>
+            <p className="text-xs text-slate-400">Asigna cada cuenta corriente a tu contabilidad correspondiente. Los extractos de tarjetas de crédito con liquidación diferida se gestionan como siempre a través del <strong>Importador Inteligente</strong>.</p>
           </div>
         </div>
 
@@ -520,7 +520,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                           onChange={(e) => handleMapAccount(conn.id, acc.uid, currentBookId, e.target.value, acc.enabled)}
                           className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
                         >
-                          <option value="">-- Mapear a cuenta ContaMiki --</option>
+                          <option value="">-- Mapear a cuenta de tu contabilidad --</option>
                           {data.accounts.map(a => (
                             <option key={a.id} value={a.id}>
                               {a.name} ({a.currency})

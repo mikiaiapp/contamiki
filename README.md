@@ -26,7 +26,7 @@
 | **Privacidad de tus datos** | ❌ En servidores de terceros | ✅ Local | ✅ **100% tuyo (Self-Hosted en Docker)** |
 | **Sincronización bancaria** | ⚠️ Solo su propio banco | ❌ Manual | ✅ **Automática multientidad (PSD2)** |
 | **Buzón y archivo de tickets** | ❌ Rara vez disponible | ❌ Complejo de enlazar | ✅ **Adjunto PDF/Foto con visor nativo** |
-| **Multi-Libro (Hogar, Negocio...)** | ❌ No disponible | ⚠️ Archivos separados | ✅ **Cambio de libro con un solo clic** |
+| **Multi-Contabilidad (Hogar, Negocio...)** | ❌ No disponible | ⚠️ Archivos separados | ✅ **Cambio de contabilidad con un solo clic** |
 | **Colaboración familiar** | ❌ Un solo usuario | ⚠️ Conflictos de edición | ✅ **Multi-usuario con roles y 2FA** |
 | **Coste recurrente** | ❌ Suscripciones mensuales | ✅ Gratuito | ✅ **Gratis, libre y sin cuotas** |
 
@@ -125,15 +125,15 @@ Elige cómo quieres recibir tu resumen financiero matutino:
 
 ---
 
-### 9. 🏠 Multi-Libro y Colaboración Multi-Usuario Segura
+### 9. 🏠 Multi-Contabilidad y Colaboración Multi-Usuario Segura
 - **Separación total de entornos:**  
-  Crea varios libros contables independientes (ej. *CASA*, *NEGOCIO*, *SEGUNDA RESIDENCIA*, *AHORROS*). Cambia entre ellos al instante sin mezclar presupuestos.
+  Crea varias contabilidades independientes (ej. *CASA*, *NEGOCIO*, *SEGUNDA RESIDENCIA*, *AHORROS*). Cambia entre ellas al instante sin mezclar presupuestos ni movimientos.
 - **Colaboración Familiar:**  
-  Invita a tu pareja, familiares o socios. Puedes asignar permisos de edición completa o acceso de solo lectura sobre libros específicos.
+  Invita a tu pareja, familiares o socios. Puedes asignar permisos de edición completa o acceso de solo lectura sobre contabilidades específicas.
 - **Máxima Seguridad:**  
   Autenticación con tokens JWT, contraseñas hasheadas con bcrypt y soporte nativo de **Doble Factor de Autenticación (2FA / TOTP)** compatible con Google Authenticator, Authy o 1Password.
 - **Copias de Seguridad Automáticas Diarias:**  
-  Sistema de backups rotativos automáticos locales por cada libro contable para que nunca pierdas un solo dato.
+  Sistema de backups rotativos automáticos locales por cada contabilidad para que nunca pierdas un solo dato.
 
 ---
 
@@ -191,7 +191,7 @@ Todo el proceso de credenciales se gestiona **directamente desde la interfaz web
 4. **Guardar en ContaMiki:**
    - Entra en ContaMiki en **Ajustes ➔ Bancos & Tickets ➔ Ajustar Credenciales**.
    - Pega tu **Application ID**, carga o pega tu clave **`enablebanking.pem`** y pulsa **Guardar y Verificar**.
-   - Pulsa el botón negro **«Vincular Banco»**, autoriza tu entidad y asigna cada cuenta a tu libro contable.
+   - Pulsa el botón negro **«Vincular Banco»**, autoriza tu entidad y asigna cada cuenta a tu contabilidad correspondiente.
 
 ---
 
@@ -209,7 +209,7 @@ data/
 │   └── factura_mercadona.pdf
 └── users/
     └── usuario_email_com/
-        ├── metadata.json      # Libros contables y permisos del usuario
+        ├── metadata.json      # Contabilidades y permisos del usuario
         ├── backups/           # Copias de seguridad automáticas diarias
         └── default_book_1/
             ├── config.json    # Cuentas, familias, categorías, favoritos y periódicos
