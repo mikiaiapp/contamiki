@@ -1,12 +1,14 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { AppState, Transaction, GlobalFilter, AccountGroup, Account, RecurrentMovement, Category, Family, BookMetadata } from './types';
-import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown, Calendar, TrendingUp, Edit3, Save, Heart, Bot, Plus } from 'lucide-react';
+import { Banknote, ChevronRight, ChevronLeft, Scale, ArrowDownCircle, ArrowUpCircle, X, Wallet, Layers, Bell, Check, Clock, History, AlertCircle, Receipt, PlusCircle, Search, CalendarDays, ChevronDown, Calendar, TrendingUp, Edit3, Save, Heart, Bot, Plus, Building2, RefreshCw } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts';
+import { getToken } from './services/authService';
 
 interface DashboardProps {
   data: AppState;
   onAddTransaction: (t: Transaction) => void;
   onUpdateData: (newData: Partial<AppState>) => void;
+  onRefreshData?: () => Promise<void>;
   filter: GlobalFilter;
   onUpdateFilter: (f: GlobalFilter) => void;
   onNavigateToTransactions: (filters: any) => void;
@@ -19,7 +21,7 @@ const numberFormatter = new Intl.NumberFormat('de-DE', {
   maximumFractionDigits: 2,
 });
 
-export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, onUpdateData, filter, onUpdateFilter, onNavigateToTransactions, currentBook }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, onUpdateData, onRefreshData, filter, onUpdateFilter, onNavigateToTransactions, currentBook }) => {
   const { transactions, accounts, families, categories, accountGroups, recurrents = [] } = data;
   const [showBalanceDetail, setShowBalanceDetail] = useState(false);
   const [showRecurrentsModal, setShowRecurrentsModal] = useState(false);
@@ -38,6 +40,94 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
   // Recurrence Edit Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [recurrenceModalTx, setRecurrenceModalTx] = useState<Partial<Transaction> | null>(null);
+
+  // Bank Sync State
+  const [isBankSyncModalOpen, setIsBankSyncModalOpen] = useState(false);
+  const [bankAccountsList, setBankAccountsList] = useState<any[]>([]);
+  const [selectedBankUids, setSelectedBankUids] = useState<string[]>([]);
+  const [isLoadingBankAccounts, setIsLoadingBankAccounts] = useState(false);
+  const [isSyncingBanks, setIsSyncingBanks] = useState(false);
+  const [bankSyncFeedback, setBankSyncFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const handleOpenBankSync = async () => {
+    setIsBankSyncModalOpen(true);
+    setIsLoadingBankAccounts(true);
+    setBankSyncFeedback(null);
+    try {
+      const token = getToken() || localStorage.getItem('auth_token');
+      const res = await fetch('/api/bank/status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const statusData = await res.json();
+        const list: any[] = [];
+        for (const conn of (statusData.connections || [])) {
+          const bankName = conn.aspsp?.name || 'Entidad Bancaria';
+          for (const acc of (conn.accounts || [])) {
+            if (acc.mappedAccountId && acc.enabled !== false) {
+              const matchedAcc = data.accounts.find(a => a.id === acc.mappedAccountId);
+              list.push({
+                uid: acc.uid,
+                name: acc.name || 'Cuenta Corriente',
+                iban: acc.iban || '',
+                bankName,
+                isCurrentBook: acc.mappedBookId === currentBook.id,
+                mappedAccountName: matchedAcc ? matchedAcc.name : 'Cuenta asociada',
+                lastSync: acc.lastSync
+              });
+            }
+          }
+        }
+        setBankAccountsList(list);
+        const currentBookUids = list.filter(a => a.isCurrentBook).map(a => a.uid);
+        setSelectedBankUids(currentBookUids.length > 0 ? currentBookUids : list.map(a => a.uid));
+      } else {
+        setBankSyncFeedback({ message: 'No se pudo cargar el estado bancario.', type: 'error' });
+      }
+    } catch (err: any) {
+      console.error('Error fetching bank status:', err);
+      setBankSyncFeedback({ message: 'Error al conectar con el servicio bancario.', type: 'error' });
+    } finally {
+      setIsLoadingBankAccounts(false);
+    }
+  };
+
+  const handleExecuteBankSync = async () => {
+    if (selectedBankUids.length === 0) return;
+    setIsSyncingBanks(true);
+    setBankSyncFeedback(null);
+    try {
+      const token = getToken() || localStorage.getItem('auth_token');
+      const res = await fetch('/api/bank/sync', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ accountUids: selectedBankUids })
+      });
+      const result = await res.json();
+      if (result.success) {
+        if (onRefreshData) {
+          await onRefreshData();
+        }
+        setBankSyncFeedback({
+          message: `✨ ¡Sincronizado! ${result.newTxs || 0} movimientos nuevos (${result.categorizedCount || 0} categorizados, ${result.pendingCategorizationCount || 0} pendientes).`,
+          type: 'success'
+        });
+        setTimeout(() => {
+          setIsBankSyncModalOpen(false);
+          setBankSyncFeedback(null);
+        }, 1800);
+      } else {
+        setBankSyncFeedback({ message: result.error || result.message || 'Error en la sincronización', type: 'error' });
+      }
+    } catch (err: any) {
+      setBankSyncFeedback({ message: err.message || 'Error al sincronizar con el banco', type: 'error' });
+    } finally {
+      setIsSyncingBanks(false);
+    }
+  };
 
   const handleUseFavorite = (fav: any) => {
       setShowFavoritesList(false);
@@ -577,6 +667,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                             </>
                         )}
                     </div>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleOpenBankSync(); }} 
+                      className="w-12 h-12 bg-sky-50 text-sky-600 border border-sky-100 rounded-xl shadow-sm active:bg-sky-100 lg:hover:bg-sky-100 flex items-center justify-center transition-all active:scale-95 touch-manipulation" 
+                      title="Sincronización Bancaria Automática (Open Banking)"
+                    >
+                      <Building2 size={20} />
+                    </button>
                     <button onClick={() => onNavigateToTransactions({ action: 'IMPORT' })} className="w-12 h-12 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl shadow-sm lg:hover:bg-indigo-100 flex items-center justify-center transition-all active:scale-95 touch-manipulation"><Bot size={20} /></button>
                     <button onClick={() => onNavigateToTransactions({ action: 'NEW' })} className="w-12 h-12 bg-slate-950 text-white rounded-xl shadow-lg lg:hover:bg-slate-800 flex items-center justify-center transition-all active:scale-95 touch-manipulation"><Plus size={20} /></button>
                 </div>
@@ -960,6 +1057,170 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
                     </button>
                 </div>
             </div>
+        </div>
+      )}
+
+      {/* MODAL: Sincronización Bancaria Rápida (Open Banking) */}
+      {isBankSyncModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 space-y-5 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center shadow-xs">
+                  <Building2 size={20}/>
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base uppercase">Sincronización Bancaria</h3>
+                  <p className="text-[11px] text-slate-400 font-medium">Descarga movimientos automáticos sin salir del Resumen</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => !isSyncingBanks && setIsBankSyncModalOpen(false)} 
+                disabled={isSyncingBanks}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X size={18}/>
+              </button>
+            </div>
+
+            {/* Feedback message */}
+            {bankSyncFeedback && (
+              <div className={`p-3.5 rounded-2xl text-xs font-bold flex items-center gap-2 ${
+                bankSyncFeedback.type === 'success' 
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                  : 'bg-rose-50 text-rose-700 border border-rose-200'
+              }`}>
+                <span>{bankSyncFeedback.message}</span>
+              </div>
+            )}
+
+            {/* Content */}
+            {isLoadingBankAccounts ? (
+              <div className="py-12 text-center space-y-3">
+                <RefreshCw size={24} className="animate-spin text-sky-600 mx-auto"/>
+                <p className="text-xs text-slate-500 font-bold">Consultando cuentas vinculadas...</p>
+              </div>
+            ) : bankAccountsList.length === 0 ? (
+              <div className="py-8 text-center space-y-3 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-6">
+                <Building2 size={28} className="text-slate-400 mx-auto"/>
+                <p className="text-xs text-slate-700 font-bold">No hay cuentas bancarias vinculadas todavía.</p>
+                <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                  Ve a la pestaña <strong>Ajustes ➔ Bancos & Tickets</strong> para vincular tu banco oficial mediante Enable Banking.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Action bar */}
+                <div className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100 text-xs">
+                  <span className="font-bold text-slate-700 text-[11px]">
+                    {selectedBankUids.length} de {bankAccountsList.length} cuenta(s) seleccionada(s)
+                  </span>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBankUids(bankAccountsList.map(a => a.uid))}
+                      disabled={isSyncingBanks}
+                      className="font-bold text-sky-600 hover:text-sky-800 hover:underline cursor-pointer"
+                    >
+                      Marcar todas
+                    </button>
+                    <span className="text-slate-300">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBankUids([])}
+                      disabled={isSyncingBanks}
+                      className="font-bold text-slate-500 hover:text-slate-700 hover:underline cursor-pointer"
+                    >
+                      Desmarcar todas
+                    </button>
+                  </div>
+                </div>
+
+                {/* Account list */}
+                <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                  {bankAccountsList.map(acc => {
+                    const isSelected = selectedBankUids.includes(acc.uid);
+                    return (
+                      <div
+                        key={acc.uid}
+                        onClick={() => {
+                          if (isSyncingBanks) return;
+                          setSelectedBankUids(prev => 
+                            prev.includes(acc.uid) ? prev.filter(id => id !== acc.uid) : [...prev, acc.uid]
+                          );
+                        }}
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                          isSelected
+                            ? 'bg-sky-50/60 border-sky-300 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-slate-300 opacity-70'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            disabled={isSyncingBanks}
+                            className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-slate-300 cursor-pointer shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-black text-slate-900 text-xs truncate">{acc.name}</span>
+                              <span className="text-[10px] text-slate-600 font-bold bg-slate-100 px-1.5 py-0.5 rounded">
+                                {acc.bankName}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5 truncate">
+                              {acc.iban && <span className="font-mono">{acc.iban}</span>}
+                              <span>➔</span>
+                              <span className="text-sky-700 font-bold truncate">💳 {acc.mappedAccountName}</span>
+                            </div>
+                            {acc.lastSync && (
+                              <p className="text-[9px] text-emerald-600 font-medium mt-0.5">
+                                Última sinc: {new Date(acc.lastSync).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="shrink-0">
+                          {isSelected ? (
+                            <span className="w-5 h-5 rounded-full bg-sky-600 text-white flex items-center justify-center">
+                              <Check size={12}/>
+                            </span>
+                          ) : (
+                            <span className="w-5 h-5 rounded-full border border-slate-300"/>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Modal footer buttons */}
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsBankSyncModalOpen(false)}
+                    disabled={isSyncingBanks}
+                    className="w-1/3 py-3 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl font-bold uppercase text-[11px] transition-all cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExecuteBankSync}
+                    disabled={isSyncingBanks || selectedBankUids.length === 0}
+                    className="w-2/3 py-3 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-xl font-bold uppercase text-[11px] tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <RefreshCw size={14} className={isSyncingBanks ? 'animate-spin' : ''}/>
+                    <span>{isSyncingBanks ? 'Sincronizando...' : `Sincronizar (${selectedBankUids.length})`}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
