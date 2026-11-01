@@ -1,7 +1,7 @@
 # ContaMiki 📊
 
 <div align="center">
-  <img width="1200" height="475" alt="ContaMiki Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+  <img width="500" alt="ContaMiki - Contabilidad Personal en la Nube" src="contamiki.png" />
 
   <h3>Tu centro de mando financiero personal y familiar: potente, 100% privado y auto-alojado.</h3>
 
