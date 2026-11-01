@@ -469,8 +469,8 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
       <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200/80 shadow-sm space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">Cuentas Bancarias & Tarjetas Vinculadas</h4>
-            <p className="text-xs text-slate-400">Asigna cada cuenta corriente o tarjeta a una cuenta de tu libro contable</p>
+            <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">Cuentas Bancarias Vinculadas (PSD2)</h4>
+            <p className="text-xs text-slate-400">Asigna cada cuenta corriente a tu libro contable. Los extractos de tarjetas de crédito con liquidación diferida se gestionan como siempre a través del <strong>Importador Inteligente</strong>.</p>
           </div>
         </div>
 
