@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, BookMetadata } from '../types';
+import { getToken } from '../services/authService';
 import { 
   Building2, RefreshCw, CheckCircle2, AlertCircle, Clock, 
   FolderArchive, ArrowUpRight, Check, Trash2, ShieldCheck, 
@@ -59,7 +60,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = (getToken() || localStorage.getItem('auth_token'));
       const authHeaders = { 'Authorization': `Bearer ${token}` };
 
       const [statusRes, notifRes, aspspRes] = await Promise.all([
@@ -94,7 +95,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
     setIsSyncing(true);
     setSyncResult(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = (getToken() || localStorage.getItem('auth_token'));
       const res = await fetch('/api/bank/sync', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
@@ -111,7 +112,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
 
   const handleConnectBank = async (aspspName: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = (getToken() || localStorage.getItem('auth_token'));
       const res = await fetch('/api/bank/auth-url', {
         method: 'POST',
         headers: {
@@ -133,7 +134,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
 
   const handleMapAccount = async (connectionId: string, accountUid: string, bookId: string, accountId: string, enabled = true) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = (getToken() || localStorage.getItem('auth_token'));
       await fetch('/api/bank/map-account', {
         method: 'POST',
         headers: {
@@ -151,7 +152,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
   const handleDeleteConnection = async (connectionId: string) => {
     if (!confirm('¿Deseas desvincular esta conexión bancaria?')) return;
     try {
-      const token = localStorage.getItem('token');
+      const token = (getToken() || localStorage.getItem('auth_token'));
       await fetch(`/api/bank/connection/${connectionId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
@@ -167,7 +168,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
     setIsSavingCreds(true);
     setCredsMessage('');
     try {
-      const token = localStorage.getItem('token');
+      const token = (getToken() || localStorage.getItem('auth_token'));
       const res = await fetch('/api/bank/credentials', {
         method: 'POST',
         headers: {
@@ -218,7 +219,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
     setIsUploadingTicket(true);
     setUploadMessage('');
     try {
-      const token = localStorage.getItem('token');
+      const token = (getToken() || localStorage.getItem('auth_token'));
       const reader = new FileReader();
       reader.onload = async (event) => {
         const base64Data = event.target?.result as string;
@@ -255,7 +256,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
     setIsSavingNotifs(true);
     setSaveNotifsMessage('');
     try {
-      const token = localStorage.getItem('token');
+      const token = (getToken() || localStorage.getItem('auth_token'));
       const res = await fetch('/api/notifications/settings', {
         method: 'POST',
         headers: {
@@ -278,7 +279,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
   const handleTestTelegram = async () => {
     setTelegramTestStatus('Enviando...');
     try {
-      const token = localStorage.getItem('token');
+      const token = (getToken() || localStorage.getItem('auth_token'));
       const res = await fetch('/api/notifications/test-telegram', {
         method: 'POST',
         headers: {
