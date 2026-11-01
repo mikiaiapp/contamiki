@@ -172,16 +172,24 @@ export class SyncEngine {
         const newTxsSummary = [];
 
         // 1. Fetch transactions for each mapped account
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().split('T')[0];
         const today = new Date().toISOString().split('T')[0];
+        const affectedBookIds = new Set();
 
         for (const mapped of mappedAccounts) {
             const bookData = userState.booksData[mapped.mappedBookId];
             if (!bookData) continue;
+            affectedBookIds.add(mapped.mappedBookId);
+
+            // Rango dinámico: 60 días en la primera sincronización, o últimos 4 días si ya se sincronizó
+            const dateFrom = mapped.lastSync 
+                ? new Date(new Date(mapped.lastSync).getTime() - 4 * 24 * 3600 * 1000).toISOString().split('T')[0]
+                : new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString().split('T')[0];
 
             let bankTxs = [];
             try {
-                bankTxs = await this.bankService.getAccountTransactions(mapped.uid, thirtyDaysAgo, today);
+                console.log(`[SYNC] Descargando movimientos para ${mapped.name || mapped.uid} (${dateFrom} -> ${today})...`);
+                bankTxs = await this.bankService.getAccountTransactions(mapped.uid, dateFrom, today);
+                console.log(`[SYNC] ${bankTxs.length} movimientos recibidos de ${mapped.aspspName}`);
             } catch (err) {
                 console.error(`[SYNC ERROR] Error fetching transactions for ${mapped.name}:`, err.message);
                 continue;
@@ -195,7 +203,7 @@ export class SyncEngine {
                 const rawAmt = parseFloat(bTx.transaction_amount?.amount || bTx.amount || 0);
                 const desc = bTx.remittance_information_unstructured || bTx.creditor_name || bTx.debtor_name || bTx.details || 'Movimiento bancario';
 
-                // Check for duplicates
+                // Deduplicación inteligente: misma cuenta, misma fecha y mismo importe exacto
                 const isDuplicate = existingTxs.some(t => {
                     const sameAcc = t.accountId === mapped.mappedAccountId;
                     const sameDate = t.date === bookingDate;
@@ -204,7 +212,7 @@ export class SyncEngine {
                 });
 
                 if (!isDuplicate) {
-                    // Auto-categorize
+                    // Categorización automática por aprendizaje histórico
                     const suggestion = this.findCategorySuggestion(desc, existingTxs, categories);
                     const newTx = {
                         id: `tx_${Math.random().toString(36).substring(2, 12)}`,
@@ -215,7 +223,7 @@ export class SyncEngine {
                         type: rawAmt < 0 ? 'EXPENSE' : 'INCOME',
                         categoryId: suggestion.categoryId || '',
                         familyId: suggestion.familyId || '',
-                        isValidated: false, // "Pendiente de revisar"
+                        isValidated: false,
                         isFromBankSync: true
                     };
 
@@ -225,38 +233,48 @@ export class SyncEngine {
                 }
             }
 
-            // 2. Run Ticket Matching on this book's transactions
-            const ticketResult = await this.matchTicketsInbox(existingTxs);
             mapped.lastSync = new Date().toISOString();
+        }
 
-            // 3. Save State
-            await saveFullUserState(username, userState);
+        // 2. Emparejamiento de tickets en los libros afectados
+        let totalMatched = 0;
+        let totalPending = 0;
+        for (const bookId of affectedBookIds) {
+            const bData = userState.booksData[bookId];
+            if (bData && bData.transactions) {
+                const ticketResult = await this.matchTicketsInbox(bData.transactions);
+                totalMatched += ticketResult.matched;
+                totalPending = ticketResult.pending;
+            }
+        }
 
-            // 4. Dispatch Notification if there is activity
-            if (totalNewTxs > 0 || ticketResult.matched > 0 || ticketResult.pending > 0) {
-                const lines = [...newTxsSummary];
-                if (ticketResult.matched > 0) {
-                    lines.push(`📎 ${ticketResult.matched} factura(s) emparejada(s) automáticamente.`);
-                }
-                if (ticketResult.pending > 0) {
-                    lines.push(`⏳ ${ticketResult.pending} ticket(s) en buzón esperando cargo bancario.`);
-                }
+        // 3. Guardar estado del usuario
+        await saveFullUserState(username, userState);
 
-                await this.notificationService.notifyUser(username, {
-                    title: 'Resumen matutino bancario',
-                    summary: `Se han sincronizado ${totalNewTxs} nuevo(s) movimiento(s) bancario(s).`,
-                    stats: `Cuentas sincronizadas: ${mappedAccounts.length}`,
-                    lines
-                });
+        // 4. Enviar notificación multicanal si hubo actividad
+        if (totalNewTxs > 0 || totalMatched > 0 || totalPending > 0) {
+            const lines = [...newTxsSummary];
+            if (totalMatched > 0) {
+                lines.push(`📎 ${totalMatched} factura(s) emparejada(s) automáticamente.`);
+            }
+            if (totalPending > 0) {
+                lines.push(`⏳ ${totalPending} ticket(s) en buzón esperando cargo bancario.`);
             }
 
-            return {
-                success: true,
-                newTxs: totalNewTxs,
-                matchedTickets: ticketResult?.matched || 0,
-                pendingTickets: ticketResult?.pending || 0
-            };
+            await this.notificationService.notifyUser(username, {
+                title: 'Resumen matutino bancario',
+                summary: `Se han sincronizado ${totalNewTxs} nuevo(s) movimiento(s) bancario(s).`,
+                stats: `Cuentas sincronizadas: ${mappedAccounts.length}`,
+                lines
+            });
         }
+
+        return {
+            success: true,
+            newTxs: totalNewTxs,
+            matchedTickets: totalMatched,
+            pendingTickets: totalPending
+        };
     }
 }
 
