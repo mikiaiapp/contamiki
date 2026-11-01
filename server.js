@@ -1592,7 +1592,22 @@ app.post('/api/tickets/inbox/upload', async (req, res) => {
             return res.status(400).json({ error: "Datos del archivo no recibidos" });
         }
 
-        const safeName = filename.replace(/[^a-zA-Z0-9._ -]/g, '_');
+        let safeName = filename.replace(/[^a-zA-Z0-9._ -]/g, '_');
+        
+        // Si no tiene extensión o termina en punto, detectar el tipo real por cabecera binaria
+        if (!path.extname(safeName) || path.extname(safeName) === '.') {
+            const header = fileBuffer.slice(0, 8).toString('latin1');
+            if (header.startsWith('%PDF')) {
+                safeName += '.pdf';
+            } else if (fileBuffer[0] === 0xFF && fileBuffer[1] === 0xD8 && fileBuffer[2] === 0xFF) {
+                safeName += '.jpg';
+            } else if (fileBuffer[0] === 0x89 && fileBuffer[1] === 0x50 && fileBuffer[2] === 0x4E && fileBuffer[3] === 0x47) {
+                safeName += '.png';
+            } else {
+                safeName += '.pdf';
+            }
+        }
+
         const targetPath = path.join(TICKETS_INBOX_DIR, safeName);
         await fs.writeFile(targetPath, fileBuffer);
         console.log(`[TICKETS INBOX] Archivo subido: ${safeName} (${fileBuffer.length} bytes)`);

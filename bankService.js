@@ -23,6 +23,25 @@ export class BankService {
         return path.join(this.dataDir, 'bank_config.json');
     }
 
+    getResolvedKeyPath() {
+        const candidates = [
+            this.keyPath,
+            this.dataDir ? path.join(this.dataDir, 'enablebanking.pem') : null,
+            '/app/data/enablebanking.pem',
+            path.join(process.cwd(), 'data', 'enablebanking.pem')
+        ].filter(Boolean);
+
+        for (const p of candidates) {
+            try {
+                if (fs.existsSync(p)) {
+                    this.keyPath = p;
+                    return p;
+                }
+            } catch {}
+        }
+        return this.keyPath;
+    }
+
     readConfig() {
         try {
             const cfgPath = this.getConfigFile();
@@ -41,8 +60,9 @@ export class BankService {
             cfg.appId = appId.trim();
             this.appId = cfg.appId;
         }
+        const resolvedKeyPath = this.getResolvedKeyPath();
         if (pemContent && pemContent.trim()) {
-            fs.writeFileSync(this.keyPath, pemContent.trim(), 'utf8');
+            fs.writeFileSync(resolvedKeyPath, pemContent.trim(), 'utf8');
         }
         cfg.updatedAt = new Date().toISOString();
         fs.writeFileSync(this.getConfigFile(), JSON.stringify(cfg, null, 2), 'utf8');
@@ -55,10 +75,11 @@ export class BankService {
     getJWT() {
         const cfg = this.readConfig();
         const activeAppId = cfg.appId || this.appId;
-        if (!fs.existsSync(this.keyPath)) {
-            throw new Error(`Enable Banking key file not found at: ${this.keyPath}`);
+        const resolvedKeyPath = this.getResolvedKeyPath();
+        if (!fs.existsSync(resolvedKeyPath)) {
+            throw new Error(`Enable Banking key file not found at: ${resolvedKeyPath}`);
         }
-        const privateKey = fs.readFileSync(this.keyPath, 'utf8');
+        const privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
         const now = Math.floor(Date.now() / 1000);
         const payload = {
             iss: 'enablebanking.com',
@@ -102,12 +123,13 @@ export class BankService {
      * Checks if Enable Banking app is active and key exists
      */
     async getStatus() {
-        const keyExists = fs.existsSync(this.keyPath);
+        const resolvedKeyPath = this.getResolvedKeyPath();
+        const keyExists = fs.existsSync(resolvedKeyPath);
         const cfg = this.readConfig();
         const activeAppId = cfg.appId || this.appId;
         let keySize = 0;
         if (keyExists) {
-            try { keySize = fs.statSync(this.keyPath).size; } catch {}
+            try { keySize = fs.statSync(resolvedKeyPath).size; } catch {}
         }
 
         if (!keyExists) {
@@ -116,7 +138,8 @@ export class BankService {
                 appId: activeAppId,
                 keyExists: false,
                 keySize: 0,
-                error: 'Archivo enablebanking.pem no encontrado en /app/data/'
+                keyPath: resolvedKeyPath,
+                error: 'Archivo enablebanking.pem no encontrado'
             };
         }
         try {
@@ -126,6 +149,7 @@ export class BankService {
                 appId: activeAppId,
                 keyExists: true,
                 keySize,
+                keyPath: resolvedKeyPath,
                 appActive: !!appData.active,
                 appData
             };
@@ -135,6 +159,7 @@ export class BankService {
                 appId: activeAppId,
                 keyExists: true,
                 keySize,
+                keyPath: resolvedKeyPath,
                 appActive: false,
                 error: err.message
             };

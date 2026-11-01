@@ -45,6 +45,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
   const [credsMessage, setCredsMessage] = useState('');
   const [showStepGuide, setShowStepGuide] = useState(true);
   const [copiedRedirect, setCopiedRedirect] = useState(false);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
 
   // Notifications form state
   const [isSavingNotifs, setIsSavingNotifs] = useState(false);
@@ -862,7 +863,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
         </div>
       )}
 
-      {/* Modal: Guía & Descarga Atajo iOS */}
+      {/* Modal: Guía Atajo iOS con IA & Manual */}
       {isShortcutModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 space-y-5 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
@@ -871,7 +872,10 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                 <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
                   <Smartphone size={16}/>
                 </div>
-                <h3 className="font-black text-slate-900 text-base uppercase">Atajo para iPhone / iPad</h3>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base uppercase">Atajo para iPhone / iPad</h3>
+                  <p className="text-[10px] text-slate-400 font-medium">Compartir tickets directamente al buzón</p>
+                </div>
               </div>
               <button onClick={() => setIsShortcutModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={18}/>
@@ -879,51 +883,62 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
             </div>
 
             <div className="space-y-4 text-xs text-slate-600 leading-relaxed">
-              <div className="p-4 bg-sky-50 rounded-2xl border border-sky-100 space-y-3">
-                <div className="flex items-center gap-2 font-bold text-sky-900">
-                  <Download size={14}/> Método 1: Descarga Directa
+              {/* Opción 1: Crear con IA (Apple Intelligence) */}
+              <div className="p-4 bg-gradient-to-br from-indigo-50 to-sky-50 rounded-2xl border border-indigo-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-black text-indigo-950 uppercase text-[11px] tracking-wider">
+                    <Sparkles size={14} className="text-indigo-600"/> Crear con IA en Atajos (Recomendado)
+                  </div>
+                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 font-bold text-[9px] uppercase rounded-full">
+                    Rápido & 100% Nativo
+                  </span>
                 </div>
-                <p className="text-[11px] text-sky-800">
-                  Descarga el atajo oficial ya empaquetado para añadirlo con un toque:
+                <p className="text-[11px] text-slate-600">
+                  En la app <strong>Atajos</strong> de tu iPhone o iPad, pulsa el botón de crear atajo con IA y pega este prompt exacto:
                 </p>
-                <a
-                  href="/api/tickets/inbox/shortcut"
-                  download="Subir_a_ContaMiki.shortcut"
-                  className="inline-flex items-center justify-center gap-2 w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold uppercase text-[11px] transition-all shadow-sm"
-                >
-                  <Download size={13}/> Descargar «Subir a ContaMiki.shortcut»
-                </a>
+
+                <div className="relative">
+                  <pre className="p-3 bg-white rounded-xl border border-indigo-200 text-[10px] font-mono text-slate-800 leading-relaxed whitespace-pre-wrap select-all max-h-36 overflow-y-auto custom-scrollbar">
+{`Crea un atajo que aparezca en la hoja de compartir para recibir archivos, imágenes y documentos PDF. Debe obtener el nombre del archivo recibido, codificar el archivo completo en Base64 sin saltos de línea y enviar una petición HTTP POST a ${window.location.origin}/api/tickets/inbox/upload con cuerpo JSON que contenga dos campos: "filename" con el nombre del archivo y "base64Data" con el texto codificado en Base64. Al terminar, muestra una notificación que diga "Ticket subido a ContaMiki ✅".`}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const promptText = `Crea un atajo que aparezca en la hoja de compartir para recibir archivos, imágenes y documentos PDF. Debe obtener el nombre del archivo recibido, codificar el archivo completo en Base64 sin saltos de línea y enviar una petición HTTP POST a ${window.location.origin}/api/tickets/inbox/upload con cuerpo JSON que contenga dos campos: "filename" con el nombre del archivo y "base64Data" con el texto codificado en Base64. Al terminar, muestra una notificación que diga "Ticket subido a ContaMiki ✅".`;
+                      navigator.clipboard.writeText(promptText);
+                      setCopiedPrompt(true);
+                      setTimeout(() => setCopiedPrompt(false), 2500);
+                    }}
+                    className="mt-2.5 w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold uppercase text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95"
+                  >
+                    <Copy size={13}/> {copiedPrompt ? '¡Prompt Copiado al Portapapeles!' : 'Copiar Prompt para la App Atajos'}
+                  </button>
+                </div>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
-                <div className="flex items-center gap-2 font-bold text-slate-900">
-                  <Sparkles size={14} className="text-amber-500"/> Método 2: Crear en 30 segundos (Recomendado para iOS 17+)
+              {/* Opción 2: Pasos Manuales */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="font-bold text-slate-900 text-[11px] uppercase">
+                  O crearlo manualmente en 4 pasos:
                 </div>
-                <p className="text-[11px]">
-                  Si iOS te avisa de que el archivo descargado no está firmado por Apple, puedes crearlo en 3 pasos en la app <strong>Atajos</strong> de tu iPhone/iPad:
-                </p>
-                <ol className="list-decimal pl-4 space-y-2 text-[11px]">
-                  <li>Abre la app <strong>Atajos</strong> y pulsa el botón <strong>+</strong>.</li>
+                <ol className="list-decimal pl-4 space-y-1.5 text-[11px] text-slate-600">
+                  <li>En <strong>Atajos</strong> pulsa <strong>+</strong> y en la <strong>(i)</strong> activa <strong>«Mostrar al compartir»</strong> (Archivos e Imágenes).</li>
+                  <li>Añade la acción <strong>«Codificar con Base64»</strong> sobre la <em>Entrada del atajo</em>.</li>
                   <li>
-                    Pulsa en la <strong>(i)</strong> de información inferior y activa <strong>«Mostrar al compartir»</strong> (acepta Imágenes y Archivos).
+                    Añade <strong>«Obtener contenido de URL»</strong>:
+                    <div className="p-2 bg-white rounded-lg border border-slate-200 font-mono text-[10px] mt-1 space-y-0.5 text-slate-700">
+                      <div>URL: <strong>{window.location.origin}/api/tickets/inbox/upload</strong></div>
+                      <div>Método: <strong>POST</strong> | Cuerpo: <strong>JSON</strong></div>
+                      <div>Campo 1: <code>filename</code> ➔ Nombre</div>
+                      <div>Campo 2: <code>base64Data</code> ➔ Codificado con Base64</div>
+                    </div>
                   </li>
-                  <li>Añade la acción <strong>«Codificar con Base64»</strong> (sobre la Entrada del atajo).</li>
-                  <li>
-                    Añade la acción <strong>«Obtener contenido de URL»</strong>:
-                    <ul className="list-disc pl-4 mt-1 space-y-1 text-slate-500 font-mono text-[10px]">
-                      <li>URL: <span className="text-indigo-600 font-bold">https://conta.mafede.i234.me/api/tickets/inbox/upload</span></li>
-                      <li>Método: <span className="font-bold">POST</span></li>
-                      <li>Cuerpo: <span className="font-bold">JSON</span></li>
-                      <li>Campo 1: <span className="font-bold">filename</span> ➔ Nombre (de la entrada)</li>
-                      <li>Campo 2: <span className="font-bold">base64Data</span> ➔ Codificado con Base64</li>
-                    </ul>
-                  </li>
-                  <li>(Opcional) Añade la acción <strong>«Mostrar notificación»</strong> con el texto: <em>Ticket subido a ContaMiki ✅</em></li>
+                  <li>Añade <strong>«Mostrar notificación»</strong>: <em>Ticket subido a ContaMiki ✅</em></li>
                 </ol>
               </div>
 
-              <p className="text-[11px] text-slate-400 italic">
-                A partir de ese momento, cada vez que abras una factura en PDF o hagas foto a un ticket, pulsas <strong>Compartir</strong> ➔ <strong>Subir a ContaMiki</strong> y quedará registrado al instante.
+              <p className="text-[10px] text-slate-400 italic">
+                Nota: Apple bloquea los archivos .shortcut descargados de internet alegando "archivos sin firmar". Creándolo con el prompt de IA o manualmente se sincroniza limpiamente en todos tus dispositivos Apple vía iCloud.
               </p>
             </div>
           </div>
