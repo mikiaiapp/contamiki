@@ -3,50 +3,145 @@
 <div align="center">
   <img width="1200" height="475" alt="ContaMiki Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 
-  <p><strong>Gestor financiero personal y familiar auto-alojado (Self-Hosted), multi-libro y con sincronización bancaria Open Banking (PSD2).</strong></p>
+  <h3>Tu centro de mando financiero personal y familiar: potente, 100% privado y auto-alojado.</h3>
 
   <p>
-    <img src="https://img.shields.io/badge/Node.js-18+-green.svg" alt="Node.js" />
-    <img src="https://img.shields.io/badge/Docker-Ready-blue.svg" alt="Docker" />
-    <img src="https://img.shields.io/badge/Open_Banking-PSD2-orange.svg" alt="Open Banking" />
-    <img src="https://img.shields.io/badge/License-MIT-purple.svg" alt="License" />
+    <strong>ContaMiki</strong> es una plataforma financiera moderna y completa diseñada para recuperar el control total de tu dinero. Olvídate de hojas de cálculo tediosas, suscripciones mensuales abusivas o apps comerciales que monetizan tus datos. Con ContaMiki dispones de <strong>Open Banking oficial europeo (PSD2)</strong>, <strong>categorización automática</strong>, <strong>buzón inteligente de facturas y tickets</strong>, <strong>importador masivo</strong> y <strong>análisis visual en tiempo real</strong>, todo corriendo bajo tu propio techo.
+  </p>
+
+  <p>
+    <a href="#-características-y-operativa-completa"><img src="https://img.shields.io/badge/Operativa-Completa-indigo?style=for-the-badge&logo=cashapp" alt="Operativa" /></a>
+    <a href="#-despliegue-con-docker-en-2-minutos"><img src="https://img.shields.io/badge/Docker-Listo_en_2_min-blue?style=for-the-badge&logo=docker" alt="Docker" /></a>
+    <a href="#-sincronización-bancaria-open-banking-psd2"><img src="https://img.shields.io/badge/PSD2-Open_Banking_Activo-emerald?style=for-the-badge&logo=bank" alt="Open Banking" /></a>
+    <a href="#-licencia"><img src="https://img.shields.io/badge/Licencia-MIT-purple?style=for-the-badge" alt="Licencia" /></a>
   </p>
 </div>
 
 ---
 
-## 🚀 Características principales
+## ✨ ¿Por qué ContaMiki?
 
-- **🏠 Multi-Libro independiente:** Gestiona varias contabilidades separadas (ej. *CASA*, *NEGOCIO*, *AHORROS*) dentro de la misma cuenta.
-- **👥 Multi-Usuario y Colaboración:** Invita a otros usuarios con roles de edición o solo lectura sobre libros específicos.
-- **🔐 Seguridad y Privacidad:**
-  - Autenticación segura mediante **JWT**.
-  - **Doble Factor de Autenticación (2FA / TOTP)** compatible con Google Authenticator, Authy, etc.
-  - Almacenamiento 100% privado en volúmenes persistentes locales.
-- **🏦 Sincronización Bancaria Automática (Open Banking / PSD2):**
-  - Conexión oficial y certificada con más de 100 bancos españoles (CaixaBank, Banco Santander, Bankinter, BBVA, etc.) y europeos vía API Open Banking.
-  - Sincronización programada y descarga automática de movimientos diarios.
-- **📎 Gestión de Tickets y Adjuntos:**
-  - Adjunta fotos y comprobantes en JPG o PDF.
-  - Visor interactivo nativo integrado en la propia aplicación.
-- **🧠 Motor de Auto-Categorización:**
-  - Reglas inteligentes basadas en historial bancario.
-  - Bandeja de entrada para transacciones pendientes de clasificar o validar.
-- **📈 Gráficos e Informes Visuales:**
-  - Desglose por familias, categorías y evolución temporal con Recharts.
-  - Filtros avanzados por mes, año o rango de fechas personalizado.
-- **💾 Copias de Seguridad Automáticas:**
-  - Backups diarios automáticos rotativos por libro contable.
+| Característica | Aplicaciones bancarias típicas | Hojas de cálculo tradicionales | ContaMiki 📊 |
+| :--- | :---: | :---: | :---: |
+| **Privacidad de tus datos** | ❌ En servidores de terceros | ✅ Local | ✅ **100% tuyo (Self-Hosted en Docker)** |
+| **Sincronización bancaria** | ⚠️ Solo su propio banco | ❌ Manual | ✅ **Automática multientidad (PSD2)** |
+| **Buzón y archivo de tickets** | ❌ Rara vez disponible | ❌ Complejo de enlazar | ✅ **Adjunto PDF/Foto con visor nativo** |
+| **Multi-Libro (Hogar, Negocio...)** | ❌ No disponible | ⚠️ Archivos separados | ✅ **Cambio de libro con un solo clic** |
+| **Colaboración familiar** | ❌ Un solo usuario | ⚠️ Conflictos de edición | ✅ **Multi-usuario con roles y 2FA** |
+| **Coste recurrente** | ❌ Suscripciones mensuales | ✅ Gratuito | ✅ **Gratis, libre y sin cuotas** |
 
 ---
 
-## 🐳 Despliegue con Docker (Recomendado)
+## 🎯 Operativa y Funcionalidades en Detalle
 
-La forma más sencilla y rápida de desplegar ContaMiki en un NAS (Synology, QNAP), servidor doméstico o VPS es mediante `docker-compose`.
+```mermaid
+flowchart LR
+    A["🏦 Bancos Españoles / PSD2"] -->|Sincronización 06:00 AM| D["🧠 Motor ContaMiki"]
+    B["📲 Atajo iOS / Buzón de Tickets"] -->|Subida PDF & Foto| D
+    C["📑 Extractos Excel / CSV"] -->|Importador Inteligente| D
+    E["✍️ Apuntes Manuales & Favoritos"] --> D
+    
+    D --> F["🏷️ Auto-Categorización por IA"]
+    D --> G["📎 Emparejamiento de Tickets"]
+    D --> H["📊 Gráficos y Flujo de Caja"]
+    D --> I["🔔 Notificaciones (Telegram, Email, App)"]
+```
+
+### 1. 🏛️ Estructura Financiera Profesional: Cuentas, Familias y Categorías
+ContaMiki no se limita a anotar gastos sueltos: te ofrece un modelo contable de tres niveles intuitivo y flexible:
+- **Cuentas Bancarias y Monederos:**  
+  Configura todas tus cuentas corrientes, cuentas de ahorro remuneradas, efectivo en cartera, depósitos o tarjetas. Cada cuenta cuenta con su divisa, icono personalizado y saldo consolidado en tiempo real.
+- **Familias (Nivel Macro):**  
+  Grandes bloques presupuestarios para entender tu estructura de costes de un vistazo (ej. *Hogar*, *Alimentación*, *Transporte*, *Ocio & Viajes*, *Salud*, *Nóminas*, *Inversiones*).
+- **Categorías (Nivel Quirúrgico):**  
+  Dentro de cada familia, define categorías precisas (ej. dentro de *Alimentación*: *Mercadona*, *Carnicería*, *Restaurantes*, *Cafeterías*). Así sabrás con exactitud matemática a dónde va cada euro.
+
+---
+
+### 2. ✍️ Entrada de Apuntes Manual y Accesos Rápidos
+Registrar un movimiento en el día a día es una experiencia inmediata y agradable:
+- **Entrada Ultra-Rápida:** Formularios optimizados para móvil y ordenador con selector rápido de fecha, cuenta de cargo/abono, importe e imputación de categoría.
+- **⭐ Movimientos Favoritos:**  
+  ¿Compras el pan a diario o tomas café en el mismo bar? Guarda tus gastos más repetitivos como favoritos para generarlos con **un solo toque** en pantalla sin volver a rellenar nada.
+- **🔁 Movimientos Periódicos y Recurrentes:**  
+  Automatiza tus cuotas fijas: alquiler, hipoteca, nóminas, suscripciones (Netflix, Spotify), recibos de luz, seguros o cuotas de comunidad. Define la periodicidad (mensual, quincenal, trimestral, anual) y ContaMiki los mantendrá al día.
+- **Transferencias entre cuentas:**  
+  Registra traspasos de fondos entre tus propias cuentas con trazabilidad perfecta de origen y destino.
+- **Conciliación y Validación:**  
+  Los movimientos cuentan con un indicador de estado (*«Pendiente de revisar»* vs *«Validado con check verde»*). Así siempre sabrás qué movimientos has comprobado y cuáles acaban de entrar.
+
+---
+
+### 3. 📎 Buzón de Tickets Inteligente y Visor Nativo de Facturas
+Nunca más perderás una garantía ni un justificante de compra:
+- **Adjunta cualquier comprobante:**  
+  Soporta facturas en **PDF**, fotos de tickets en **JPG** o **PNG**.
+- **Visor Interactivo Integrado:**  
+  Abre cualquier transacción y previsualiza el PDF o la foto directamente en un visor nativo integrado en la aplicación, con opciones de pantalla completa, zoom y descarga.
+- **📥 Buzón de Tickets Inbox (`tickets_inbox`):**  
+  Deja tus PDFs o fotos en la carpeta compartida de red de tu NAS o envíalos desde tu teléfono móvil. En el barrido diario, ContaMiki analiza el importe y la fecha del documento y lo **empareja automáticamente con el movimiento bancario correspondiente**, eliminándolo del buzón una vez conciliado.
+
+---
+
+### 4. 📲 Integración con iPhone, iPad y Atajos de Apple (iOS)
+Envía tickets a tu buzón en segundos sin abrir la web:
+- **Atajo oficial con Apple Intelligence:**  
+  Configura en menos de 1 minuto un atajo que aparece en el menú nativo **Compartir** de iOS.
+- **Un toque desde cualquier app:**  
+  Estés viendo un recibo en Mail, una foto en la galería o un PDF en WhatsApp, pulsas *Compartir* ➔ *«Subir a ContaMiki»* y viajará directo a tu buzón para ser conciliado.
+
+---
+
+### 5. 🧠 Motor de Auto-Categorización Inteligente
+- Cuando sincronizas con el banco o importas extractos, ContaMiki analiza los nombres de comercios y conceptos bancarios.
+- Aprende de tus categorizaciones históricas: si siempre asignas *"MERCADONA"* a *Alimentación ➔ Supermercado*, el sistema le asignará esa categoría de forma automática en cuanto detecte el cargo.
+
+---
+
+### 6. 📑 Importador Inteligente de Extractos (Excel y CSV)
+¿Tienes meses de histórico o extractos de tarjetas de crédito con liquidación diferida?
+- Arrastra directamente el archivo Excel (`.xlsx`, `.xls`) o `.csv` descargado de la banca online.
+- El asistente inteligente detecta las columnas, formatea los importes y signos, y te muestra una vista previa interactiva antes de confirmar la importación.
+
+---
+
+### 7. 🏦 Sincronización Bancaria Automática (Open Banking PSD2)
+- **Conexión Directa y Homologada:**  
+  Conexión nativa con la infraestructura europea de **Enable Banking** bajo la estricta normativa bancaria **PSD2**.
+- **Bancos Españoles y Europeos:**  
+  Compatible con *CaixaBank, Banco Santander, BBVA, Bankinter, Banco Sabadell, ING, Openbank, Abanca, Kutxabank, Unicaja* y más de 100 entidades.
+- **Sincronización Matutina Silenciosa:**  
+  El servidor ejecuta un barrido automático programable (por defecto a las **06:00 AM**) para que cuando te despiertes a las 07:00 AM tengas tus saldos actualizados y las facturas emparejadas.
+- **Protección Anti-Duplicados:**  
+  Algoritmo estricto de triple coincidencia (cuenta, fecha e importe exacto) que garantiza que jamás se duplique un apunte aunque solapen las fechas de consulta.
+
+---
+
+### 8. 🔔 Notificaciones Multicanal (Telegram, Cartero y App)
+Elige cómo quieres recibir tu resumen financiero matutino:
+- **🤖 Bot de Telegram:** Recibe un mensaje diario formateado con el número de movimientos nuevos descargados, facturas emparejadas y tickets pendientes.
+- **✉️ Cartero Email:** Envío automático del resumen matutino a tu correo electrónico personal.
+- **🔔 Avisos In-App:** Notificaciones en la campana dentro de la propia plataforma.
+
+---
+
+### 9. 🏠 Multi-Libro y Colaboración Multi-Usuario Segura
+- **Separación total de entornos:**  
+  Crea varios libros contables independientes (ej. *CASA*, *NEGOCIO*, *SEGUNDA RESIDENCIA*, *AHORROS*). Cambia entre ellos al instante sin mezclar presupuestos.
+- **Colaboración Familiar:**  
+  Invita a tu pareja, familiares o socios. Puedes asignar permisos de edición completa o acceso de solo lectura sobre libros específicos.
+- **Máxima Seguridad:**  
+  Autenticación con tokens JWT, contraseñas hasheadas con bcrypt y soporte nativo de **Doble Factor de Autenticación (2FA / TOTP)** compatible con Google Authenticator, Authy o 1Password.
+- **Copias de Seguridad Automáticas Diarias:**  
+  Sistema de backups rotativos automáticos locales por cada libro contable para que nunca pierdas un solo dato.
+
+---
+
+## 🐳 Despliegue con Docker en 2 minutos
+
+La forma recomendada de desplegar ContaMiki en un NAS (Synology, QNAP, Unraid), servidor doméstico o VPS es mediante **Docker Compose**.
 
 ### 1. `docker-compose.yml`
-
-Crea un archivo `docker-compose.yml` con la siguiente configuración:
 
 ```yaml
 version: '3.8'
@@ -54,125 +149,70 @@ version: '3.8'
 services:
   contamiki:
     container_name: contamiki
-    image: ghcr.io/mikiaiapp/contamiki:latest  # o build: . si compilas localmente
+    image: ghcr.io/mikiaiapp/contamiki:latest  # o build: . si compilas el código fuente
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       - PORT=3000
       - NODE_ENV=production
-      - JWT_SECRET=cambia_esta_clave_por_una_cadena_larga_y_aleatoria
+      - JWT_SECRET=cambia_esta_clave_por_una_cadena_larga_y_aleatoria_123456
       - APP_URL=https://conta.tudominio.com  # URL pública o IP con protocolo
     volumes:
-      - ./data:/app/data
+      - /ruta/a/tu/almacenamiento/data:/app/data
 ```
 
-### 2. Iniciar el contenedor
+### 2. Levantar el servicio
 
 ```bash
 docker compose up -d
 ```
 
-La aplicación estará accesible de inmediato en el puerto `3000` (o a través de tu proxy inverso HTTPS habitual como Nginx Proxy Manager, Traefik o Caddy).
+Accede desde tu navegador a `http://tu-ip:3000` (o a través de tu proxy inverso con HTTPS como Nginx Proxy Manager, Cloudflare Tunnels o Traefik).
 
 ---
 
-## 🏦 Configuración de Sincronización Bancaria (Open Banking)
+## 🔑 Configuración de Open Banking (Enable Banking)
 
-ContaMiki permite conectarse de forma oficial a tus bancos bajo la normativa europea **PSD2**, sin almacenar tus contraseñas bancarias y mediante autorización segura en tu propia app del banco.
+Todo el proceso de credenciales se gestiona **directamente desde la interfaz web de ContaMiki** (en **Ajustes ➔ Bancos & Tickets ➔ Ajustar Credenciales**):
 
-### Paso 1: Obtener credenciales de desarrollador
-
-1. Regístrate en el portal de Open Banking europeo de [Enable Banking](https://enablebanking.com/sign-in/) (o GoCardless Bank Account Data).
-2. Accede a la pestaña **`API applications`** y pulsa en **`Add a new application`**:
-   - **Environment:** `Production` (para bancos reales).
-   - **Allowed redirect URLs:**
+1. **Alta gratuita:** Regístrate como desarrollador en [enablebanking.com](https://enablebanking.com) (el servicio es gratuito para uso personal y sustituye la antigua API de GoCardless).
+2. **Crear aplicación:**
+   - En el panel de Enable Banking ve a **API applications** ➔ **Add a new application**.
+   - Entorno: **Production**.
+   - Generar clave en el navegador: se descargará automáticamente tu archivo **`enablebanking.pem`**.
+   - Allowed redirect URLs (puedes copiarlas desde el botón de la app):
      ```text
-     https://conta.tudominio.com/api/bank/callback
-     https://conta.tudominio.com
+     https://tu-dominio.com/api/bank/callback
+     https://tu-dominio.com/
      ```
-   - **Private Key:** Selecciona generar clave en el navegador.
-3. Al registrarse, el navegador descargará automáticamente un archivo de clave privada (ej. `xxxxxxxx.pem`). Guarda también el **`Application ID`** (UUID).
-
-### Paso 2: Configurar las claves en ContaMiki
-
-1. Copia tu archivo de clave privada dentro de la carpeta persistente de datos de Docker:
-   ```text
-   /ruta_a_tu_volumen/data/enablebanking.pem
-   ```
-2. Añade las siguientes variables de entorno a tu `docker-compose.yml` o archivo `.env`:
-   ```env
-   ENABLE_BANKING_APP_ID=tu_application_id_aqui
-   ENABLE_BANKING_KEY_PATH=/app/data/enablebanking.pem
-   ```
-
-### Paso 3: Vincular tus cuentas bancarias
-
-1. En el panel de Enable Banking, en tu aplicación, utiliza los desplegables de vinculación de cuentas:
-   - **Country:** `Spain` (ES)
-   - **ASPSP / Banco:** Selecciona tu entidad (*CaixaBank*, *Banco Santander*, *Bankinter*, etc.)
-   - **PSU Type:** `Personal`
-   - Pulsa **`Link`**.
-2. Te redirigirá a la pasarela oficial de tu banco para autorizar el acceso de lectura con tu app bancaria.
-3. Una vez autorizado, la aplicación se activará automáticamente y ContaMiki comenzará a sincronizar tus movimientos.
-
-> [!NOTE]
-> Por exigencia de la directiva europea PSD2, la autorización de acceso tiene una validez máxima de 90 a 180 días. Cumplido ese plazo, basta con volver a autorizar el acceso en la app del banco.
+3. **Activar en producción:**
+   - En el panel de Enable Banking, selecciona tu banco en el cuadro desplegable y pulsa **Link** para autorizar tu primera cuenta personal (la app pasará de `Inactive` a `Active`).
+4. **Guardar en ContaMiki:**
+   - Entra en ContaMiki en **Ajustes ➔ Bancos & Tickets ➔ Ajustar Credenciales**.
+   - Pega tu **Application ID**, carga o pega tu clave **`enablebanking.pem`** y pulsa **Guardar y Verificar**.
+   - Pulsa el botón negro **«Vincular Banco»**, autoriza tu entidad y asigna cada cuenta a tu libro contable.
 
 ---
 
-## 💻 Desarrollo local
+## 📁 Estructura del Almacenamiento Persistente
 
-Si prefieres ejecutar o modificar ContaMiki localmente:
-
-### Requisitos previos
-- [Node.js](https://nodejs.org/) v18 o superior
-- npm
-
-### Pasos
-
-1. Clona el repositorio:
-   ```bash
-   git clone https://github.com/mikiaiapp/contamiki.git
-   cd contamiki
-   ```
-
-2. Instala las dependencias:
-   ```bash
-   npm install
-   ```
-
-3. Crea un archivo `.env` en la raíz (puedes basarte en `.env.example`):
-   ```env
-   JWT_SECRET=secreto_de_desarrollo
-   APP_URL=http://localhost:3000
-   ```
-
-4. Inicia el servidor de desarrollo:
-   ```bash
-   npm run dev
-   ```
-
-5. Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
-
----
-
-## 📁 Estructura del Almacenamiento
-
-Todos los datos se guardan de forma aislada y estructurada dentro de la carpeta `/app/data` montada en el host:
+Todos tus datos se almacenan de forma ordenada dentro del volumen `/app/data`:
 
 ```text
 data/
-├── users.json                 # Registro de usuarios y hash de contraseñas
-├── shared_access.json         # Permisos de libros compartidos
-├── invitations.json           # Invitaciones de colaboración pendientes
-├── enablebanking.pem          # Clave RSA para Open Banking
+├── users.json                 # Registro de usuarios y credenciales seguras
+├── bank_config.json           # Configuración activa de Open Banking
+├── bank_connections.json      # Conexiones bancarias autorizadas y mapeos
+├── enablebanking.pem          # Clave RSA privada para Open Banking
+├── tickets_inbox/             # Buzón temporal de facturas y tickets pendientes
+│   └── factura_mercadona.pdf
 └── users/
     └── usuario_email_com/
-        ├── metadata.json      # Configuración de libros del usuario
-        ├── backups/           # Copias de seguridad automáticas
+        ├── metadata.json      # Libros contables y permisos del usuario
+        ├── backups/           # Copias de seguridad automáticas diarias
         └── default_book_1/
-            ├── config.json    # Cuentas, familias y categorías del libro
+            ├── config.json    # Cuentas, familias, categorías, favoritos y periódicos
             ├── transactions_2024.json
             ├── transactions_2025.json
             └── transactions_2026.json
@@ -180,6 +220,24 @@ data/
 
 ---
 
+## 💻 Desarrollo Local
+
+Para ejecutar o contribuir al código fuente:
+
+```bash
+# 1. Clonar el repositorio
+git clone https://github.com/mikiaiapp/contamiki.git
+cd contamiki
+
+# 2. Instalar dependencias
+npm install
+
+# 3. Iniciar entorno de desarrollo
+npm run dev
+```
+
+---
+
 ## 📄 Licencia
 
-Este proyecto está bajo la licencia [MIT](LICENSE).
+Este proyecto está publicado bajo la licencia de código abierto [MIT](LICENSE). Siéntete libre de utilizarlo, modificarlo y compartirlo.
