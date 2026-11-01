@@ -1433,7 +1433,8 @@ app.post('/api/bank/auth-url', authenticateToken, async (req, res) => {
     try {
         const { aspspName } = req.body;
         if (!aspspName) return res.status(400).json({ error: "Nombre de entidad bancaria requerido" });
-        const state = `usr_${getSafeUsername(req.user.username)}_${Date.now()}`;
+        const b64User = Buffer.from(req.user.username).toString('base64url');
+        const state = `usr_${b64User}_${Date.now()}`;
         const auth = await bankService.startAuthorization({
             aspspName,
             state
@@ -1450,11 +1451,15 @@ app.get('/api/bank/callback', async (req, res) => {
         return res.redirect(`${APP_URL}/?bank_error=no_code`);
     }
     try {
-        let username = 'mailmafernandez_gmail_com';
+        let username = 'mailmafernandez@gmail.com';
         if (state && state.startsWith('usr_')) {
             const parts = state.split('_');
             if (parts.length >= 3) {
-                username = parts.slice(1, parts.length - 1).join('_');
+                try {
+                    username = Buffer.from(parts[1], 'base64url').toString('utf8');
+                } catch {
+                    username = parts.slice(1, parts.length - 1).join('_');
+                }
             }
         }
         const sessionData = await bankService.exchangeCodeForSession(code);
@@ -1558,25 +1563,28 @@ app.post('/api/tickets/inbox/upload', async (req, res) => {
     }
 });
 
-// --- TAREA AUTOMÁTICA DE SINCRONIZACIÓN MATUTINA (08:00 AM) ---
+// --- TAREA AUTOMÁTICA DE SINCRONIZACIÓN MATUTINA (Parametrizable, default 06:00 AM) ---
 let lastDailySyncDate = '';
 setInterval(async () => {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     const hour = now.getHours();
     
-    // Ejecutar a las 8:00 de la mañana (solo una vez al día)
-    if (hour === 8 && lastDailySyncDate !== todayStr) {
-        lastDailySyncDate = todayStr;
-        console.log(`[MORNING SYNC] Iniciando barrido automático matutino: ${todayStr}`);
-        try {
-            const users = await readUsers();
-            for (const u of users) {
+    try {
+        const users = await readUsers();
+        for (const u of users) {
+            const settings = notificationService.getUserSettings(u.username);
+            const targetHour = settings.syncHour !== undefined ? settings.syncHour : 6;
+            const syncKey = `${todayStr}_${targetHour}_${u.username}`;
+            
+            if (hour === targetHour && lastDailySyncDate !== syncKey) {
+                lastDailySyncDate = syncKey;
+                console.log(`[MORNING SYNC] Iniciando barrido automático matutino a las ${hour}:00 para ${u.username}`);
                 await syncEngine.syncUser(u.username, { readFullUserState, saveFullUserState });
             }
-        } catch (syncErr) {
-            console.error('[MORNING SYNC ERROR]', syncErr);
         }
+    } catch (syncErr) {
+        console.error('[MORNING SYNC ERROR]', syncErr);
     }
 }, 60 * 1000);
 

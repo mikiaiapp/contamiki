@@ -3,6 +3,8 @@ import { AppState, Account, Family, Category, TransactionType, RecurrentMovement
 import { Trash2, Edit2, Wallet, BoxSelect, Check, X, ChevronDown, AlertTriangle, Loader2, Search, Layers, Tag, CalendarClock, Heart, Palette, DatabaseZap, ShieldAlert, Image as ImageIcon, Sparkles, Eye, EyeOff, Plus, Upload, Eraser, Bot, XCircle, Download, FileJson, CheckCircle2, History, Fingerprint, Play, Pause, Users, Mail, RefreshCw } from 'lucide-react';
 import { searchInternetLogos } from '../services/iconService';
 import { inviteUser, getUsername, getCollaborators, revokeCollaborator, cancelInvitation, getAutoBackups, restoreAutoBackup } from '../services/authService';
+import { Building2 } from 'lucide-react';
+import { BankSyncSettingsTab } from './BankSyncSettingsTab';
 
 interface SettingsViewProps {
   data: AppState;
@@ -511,7 +513,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
             {id: 'RECURRENTS', label: 'Recurrentes', icon: <CalendarClock size={16}/>}, 
             {id: 'FAVORITES', label: 'Favoritos', icon: <Heart size={16}/>}, 
             {id: 'DATA', label: 'Gestión', icon: <ShieldAlert size={16}/>},
-            {id: 'USERS', label: 'Usuarios', icon: <Users size={16}/>}
+            {id: 'USERS', label: 'Usuarios', icon: <Users size={16}/>},
+            {id: 'BANK_SYNC', label: 'Bancos & Tickets', icon: <Building2 size={16}/>}
         ].map(t => (
             <button 
                 key={t.id} 
@@ -1073,6 +1076,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ data, books, current
                     </div>
                 </div>
             </div>
+        )}
+
+        {activeTab === 'BANK_SYNC' && (
+            <BankSyncSettingsTab 
+                data={data}
+                currentBookId={currentBookId}
+                books={books}
+            />
         )}
       </div>
 

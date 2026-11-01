@@ -26,7 +26,8 @@ export class NotificationService {
         return all[username] || {
             email: { enabled: true, address: username },
             telegram: { enabled: false, botToken: '', chatId: '' },
-            inApp: { enabled: true }
+            inApp: { enabled: true },
+            syncHour: 6
         };
     }
 
@@ -44,7 +45,8 @@ export class NotificationService {
             },
             inApp: {
                 enabled: settings.inApp?.enabled ?? true
-            }
+            },
+            syncHour: settings.syncHour !== undefined ? parseInt(settings.syncHour, 10) : 6
         };
         this.saveAllSettings(all);
         return all[username];
@@ -161,3 +163,4 @@ export class NotificationService {
         return results;
     }
 }
+

@@ -1,0 +1,556 @@
+import React, { useState, useEffect } from 'react';
+import { AppState, BookMetadata } from '../types';
+import { Building2, RefreshCw, CheckCircle2, AlertCircle, Send, Bell, Clock, FolderArchive, ArrowUpRight, Check, Trash2, ShieldCheck, Mail, Bot } from 'lucide-react';
+
+interface BankSyncSettingsTabProps {
+  data: AppState;
+  currentBookId: string;
+  books: BookMetadata[];
+}
+
+export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
+  data,
+  currentBookId,
+  books
+}) => {
+  const [status, setStatus] = useState<any>(null);
+  const [aspsps, setAspsps] = useState<any[]>([]);
+  const [notifSettings, setNotifSettings] = useState<any>({
+    email: { enabled: true, address: '' },
+    telegram: { enabled: false, botToken: '', chatId: '' },
+    inApp: { enabled: true },
+    syncHour: 6
+  });
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<any>(null);
+  const [telegramTestStatus, setTelegramTestStatus] = useState<string>('');
+  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [bankSearch, setBankSearch] = useState('');
+  const [isSavingNotifs, setIsSavingNotifs] = useState(false);
+  const [saveNotifsMessage, setSaveNotifsMessage] = useState('');
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const authHeaders = { 'Authorization': `Bearer ${token}` };
+
+      const [statusRes, notifRes, aspspRes] = await Promise.all([
+        fetch('/api/bank/status', { headers: authHeaders }),
+        fetch('/api/notifications/settings', { headers: authHeaders }),
+        fetch('/api/bank/aspsps', { headers: authHeaders }).catch(() => null)
+      ]);
+
+      if (statusRes.ok) {
+        setStatus(await statusRes.json());
+      }
+      if (notifRes.ok) {
+        setNotifSettings(await notifRes.json());
+      }
+      if (aspspRes && aspspRes.ok) {
+        setAspsps(await aspspRes.json());
+      }
+    } catch (err) {
+      console.error('Error loading bank sync settings:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    setSyncResult(null);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/bank/sync', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const result = await res.json();
+      setSyncResult(result);
+      await loadData();
+    } catch (err: any) {
+      setSyncResult({ error: err.message || 'Error en la sincronización' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleConnectBank = async (aspspName: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/bank/auth-url', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ aspspName })
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || 'No se pudo obtener la URL del banco');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error conectando con el banco');
+    }
+  };
+
+  const handleMapAccount = async (connectionId: string, accountUid: string, bookId: string, accountId: string, enabled = true) => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('/api/bank/map-account', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ connectionId, accountUid, bookId, accountId, enabled })
+      });
+      await loadData();
+    } catch (err) {
+      console.error('Error mapping account:', err);
+    }
+  };
+
+  const handleDeleteConnection = async (connectionId: string) => {
+    if (!confirm('¿Deseas desvincular esta conexión bancaria?')) return;
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`/api/bank/connection/${connectionId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      await loadData();
+    } catch (err) {
+      console.error('Error deleting connection:', err);
+    }
+  };
+
+  const handleSaveNotifications = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingNotifs(true);
+    setSaveNotifsMessage('');
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/notifications/settings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(notifSettings)
+      });
+      if (res.ok) {
+        setSaveNotifsMessage('✅ Configuración guardada correctamente');
+        setTimeout(() => setSaveNotifsMessage(''), 4000);
+      }
+    } catch (err) {
+      setSaveNotifsMessage('❌ Error al guardar configuración');
+    } finally {
+      setIsSavingNotifs(false);
+    }
+  };
+
+  const handleTestTelegram = async () => {
+    setTelegramTestStatus('Enviando...');
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/notifications/test-telegram', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          botToken: notifSettings.telegram?.botToken,
+          chatId: notifSettings.telegram?.chatId
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTelegramTestStatus('✅ Mensaje de prueba enviado con éxito a Telegram');
+      } else {
+        setTelegramTestStatus(`❌ Error: ${data.error}`);
+      }
+    } catch (err: any) {
+      setTelegramTestStatus(`❌ Error: ${err.message}`);
+    }
+  };
+
+  const filteredAspsps = aspsps.filter(b => 
+    b.name.toLowerCase().includes(bankSearch.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-300">
+      {/* Header Info Banner */}
+      <div className="bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-950 rounded-3xl p-6 md:p-8 text-white relative overflow-hidden shadow-2xl border border-indigo-800/40">
+        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase tracking-widest rounded-full border border-emerald-500/30 flex items-center gap-1.5">
+                <ShieldCheck size={12}/> Open Banking PSD2 Activo
+              </span>
+              <span className="px-3 py-1 bg-white/10 text-white/80 text-[10px] font-black uppercase tracking-widest rounded-full">
+                Enable Banking
+              </span>
+            </div>
+            <h3 className="text-2xl md:text-3xl font-black tracking-tight">Sincronización Bancaria & Buzón</h3>
+            <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
+              Descarga automática de movimientos cada mañana a las {String(notifSettings.syncHour ?? 6).padStart(2, '0')}:00 y emparejamiento inteligente de facturas y tickets desde tu buzón.
+            </p>
+          </div>
+
+          <button
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className="w-full md:w-auto px-6 py-4 bg-white text-indigo-950 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-50 active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            <RefreshCw size={16} className={isSyncing ? 'animate-spin text-indigo-600' : ''}/>
+            {isSyncing ? 'Sincronizando...' : 'Sincronizar Ahora'}
+          </button>
+        </div>
+
+        {syncResult && (
+          <div className="mt-6 p-4 rounded-2xl bg-white/10 border border-white/20 text-xs text-white flex items-center justify-between">
+            <div>
+              {syncResult.error ? (
+                <span className="text-rose-300 font-bold">{syncResult.error}</span>
+              ) : (
+                <span>
+                  ✨ {syncResult.newTxs || 0} movimientos nuevos | 📎 {syncResult.matchedTickets || 0} facturas emparejadas | ⏳ {syncResult.pendingTickets || 0} en buzón
+                </span>
+              )}
+            </div>
+            <button onClick={() => setSyncResult(null)} className="text-white/60 hover:text-white text-xs font-bold">Cerrar</button>
+          </div>
+        )}
+      </div>
+
+      {/* Grid: Estado Open Banking & Buzón de Tickets */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Card: Conexión API */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                <Building2 size={20}/>
+              </div>
+              <div>
+                <h4 className="font-black text-slate-900 uppercase text-xs tracking-wider">Credenciales Open Banking</h4>
+                <p className="text-[11px] text-slate-400 font-medium">Clave RSA y Application ID</p>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 border border-emerald-200 text-[10px] font-black uppercase rounded-lg">
+              Operativo
+            </span>
+          </div>
+
+          <div className="space-y-2 text-xs">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+              <span className="text-slate-500 font-bold text-[10px] uppercase">Application ID</span>
+              <span className="font-mono text-slate-800 text-[11px] select-all">a4b70785-ab0e-4c8f-b5da-4688b87f7dcf</span>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+              <span className="text-slate-500 font-bold text-[10px] uppercase">Clave Privada RSA</span>
+              <span className="text-emerald-600 font-bold text-[11px] flex items-center gap-1">
+                <Check size={12}/> enablebanking.pem cargado
+              </span>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setIsBankModalOpen(true)}
+            className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
+          >
+            <Building2 size={14}/> Vincular nuevo Banco (CaixaBank, Santander, etc.)
+          </button>
+        </div>
+
+        {/* Card: Buzón de Tickets */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <FolderArchive size={20}/>
+              </div>
+              <div>
+                <h4 className="font-black text-slate-900 uppercase text-xs tracking-wider">Buzón de Tickets Inbox</h4>
+                <p className="text-[11px] text-slate-400 font-medium">Archivos pendientes de conciliar</p>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-black rounded-lg">
+              {status?.inboxCount || 0} archivo(s)
+            </span>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 text-xs text-slate-600">
+            <p className="text-[11px] leading-relaxed">
+              Deja facturas o tickets en PDF o foto en esta carpeta compartida de tu red o envíalos desde el botón Compartir de iOS:
+            </p>
+            <div className="p-2.5 bg-white rounded-xl border border-slate-200 font-mono text-[10px] text-slate-800 select-all break-all">
+              \\192.168.1.2\docker\contamiki\data\tickets_inbox\
+            </div>
+            <p className="text-[10px] text-slate-400">
+              Al coincidir fecha e importe con un cargo bancario, el ticket se adjunta a la transacción y se elimina automáticamente del buzón.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Cuentas Bancarias Conectadas y Mapeo */}
+      <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200/80 shadow-sm space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">Cuentas Bancarias Vinculadas</h4>
+            <p className="text-xs text-slate-400">Asigna cada cuenta bancaria o tarjeta a una cuenta de tu libro contable</p>
+          </div>
+        </div>
+
+        {status?.connections && status.connections.length > 0 ? (
+          <div className="space-y-4">
+            {status.connections.map((conn: any) => (
+              <div key={conn.id} className="p-5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">🏦</span>
+                    <div>
+                      <span className="font-black text-slate-900 text-sm">{conn.aspsp?.name || 'Entidad Bancaria'}</span>
+                      <p className="text-[10px] text-slate-400">Sesión iniciada: {new Date(conn.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteConnection(conn.id)}
+                    className="p-2 text-slate-400 hover:text-rose-500 rounded-xl hover:bg-rose-50 transition-colors"
+                    title="Desvincular"
+                  >
+                    <Trash2 size={16}/>
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {conn.accounts && conn.accounts.map((acc: any) => (
+                    <div key={acc.uid} className="bg-white p-4 rounded-xl border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-800 text-xs">{acc.name || 'Cuenta'}</span>
+                          <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">{acc.iban || acc.uid}</span>
+                        </div>
+                        {acc.lastSync && (
+                          <p className="text-[10px] text-emerald-600 font-medium mt-1">Última sincronización: {new Date(acc.lastSync).toLocaleString()}</p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <select
+                          value={acc.mappedAccountId || ''}
+                          onChange={(e) => handleMapAccount(conn.id, acc.uid, currentBookId, e.target.value, acc.enabled)}
+                          className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
+                        >
+                          <option value="">-- Mapear a cuenta ContaMiki --</option>
+                          {data.accounts.map(a => (
+                            <option key={a.id} value={a.id}>
+                              {a.name} ({a.currency})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-3">
+            <span className="text-3xl">🏦</span>
+            <p className="text-xs text-slate-500 font-bold">No hay cuentas bancarias vinculadas todavía.</p>
+            <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+              Pulsa en el botón superior para vincular tu banco oficial mediante la pasarela segura de Enable Banking.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Configuración de Notificaciones & Tarea Matutina */}
+      <form onSubmit={handleSaveNotifications} className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200/80 shadow-sm space-y-6">
+        <div>
+          <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">Notificaciones & Tarea Matutina</h4>
+          <p className="text-xs text-slate-400">Elige por qué canales quieres recibir el resumen matutino diario y a qué hora</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Hora de sincronización */}
+          <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3">
+            <div className="flex items-center gap-2 text-indigo-600 font-bold text-xs uppercase">
+              <Clock size={16}/> Hora del barrido matutino
+            </div>
+            <select
+              value={notifSettings.syncHour ?? 6}
+              onChange={(e) => setNotifSettings({ ...notifSettings, syncHour: parseInt(e.target.value, 10) })}
+              className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none"
+            >
+              {Array.from({ length: 24 }).map((_, i) => (
+                <option key={i} value={i}>
+                  {String(i).padStart(2, '0')}:00 {i < 12 ? 'AM' : 'PM'} {i === 6 ? '(Recomendado: 6:00 AM)' : ''}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-slate-400">
+              ContaMiki descargará los movimientos a esta hora para tener el informe listo al despertar.
+            </p>
+          </div>
+
+          {/* Telegram Bot */}
+          <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sky-600 font-bold text-xs uppercase">
+                <Bot size={16}/> Bot de Telegram
+              </div>
+              <input
+                type="checkbox"
+                checked={notifSettings.telegram?.enabled ?? false}
+                onChange={(e) => setNotifSettings({
+                  ...notifSettings,
+                  telegram: { ...notifSettings.telegram, enabled: e.target.checked }
+                })}
+                className="w-4 h-4 rounded text-indigo-600"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <input
+                type="text"
+                placeholder="Bot Token (de @BotFather)"
+                value={notifSettings.telegram?.botToken || ''}
+                onChange={(e) => setNotifSettings({
+                  ...notifSettings,
+                  telegram: { ...notifSettings.telegram, botToken: e.target.value }
+                })}
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Chat ID (de @userinfobot)"
+                value={notifSettings.telegram?.chatId || ''}
+                onChange={(e) => setNotifSettings({
+                  ...notifSettings,
+                  telegram: { ...notifSettings.telegram, chatId: e.target.value }
+                })}
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono outline-none"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleTestTelegram}
+              className="w-full py-2 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-xl text-[10px] font-bold uppercase transition-colors"
+            >
+              Probar Telegram
+            </button>
+            {telegramTestStatus && (
+              <p className="text-[10px] font-bold text-slate-700 mt-1">{telegramTestStatus}</p>
+            )}
+          </div>
+
+          {/* Cartero Email & In-App */}
+          <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs uppercase">
+                <Mail size={16}/> Cartero Email
+              </div>
+              <input
+                type="checkbox"
+                checked={notifSettings.email?.enabled ?? true}
+                onChange={(e) => setNotifSettings({
+                  ...notifSettings,
+                  email: { ...notifSettings.email, enabled: e.target.checked }
+                })}
+                className="w-4 h-4 rounded text-indigo-600"
+              />
+            </div>
+
+            <input
+              type="email"
+              placeholder="Email de destino"
+              value={notifSettings.email?.address || ''}
+              onChange={(e) => setNotifSettings({
+                ...notifSettings,
+                email: { ...notifSettings.email, address: e.target.value }
+              })}
+              className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"
+            />
+
+            <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-700">Avisos dentro de la App</span>
+              <input
+                type="checkbox"
+                checked={notifSettings.inApp?.enabled ?? true}
+                onChange={(e) => setNotifSettings({
+                  ...notifSettings,
+                  inApp: { ...notifSettings.inApp, enabled: e.target.checked }
+                })}
+                className="w-4 h-4 rounded text-indigo-600"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-2">
+          {saveNotifsMessage && (
+            <p className="text-xs font-bold">{saveNotifsMessage}</p>
+          )}
+          <button
+            type="submit"
+            disabled={isSavingNotifs}
+            className="ml-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-indigo-600/20 active:scale-95 transition-all"
+          >
+            {isSavingNotifs ? 'Guardando...' : 'Guardar Preferencias de Notificación'}
+          </button>
+        </div>
+      </form>
+
+      {/* Modal: Selección de Banco */}
+      {isBankModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 max-h-[85vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-black text-slate-900 text-base uppercase">Selecciona tu Banco</h3>
+              <button onClick={() => setIsBankModalOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Buscar banco (ej. CaixaBank, Santander, Bankinter...)"
+              value={bankSearch}
+              onChange={(e) => setBankSearch(e.target.value)}
+              className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none"
+            />
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+              {filteredAspsps.map((b: any) => (
+                <div
+                  key={b.name}
+                  onClick={() => handleConnectBank(b.name)}
+                  className="p-3.5 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 cursor-pointer transition-all flex items-center justify-between group"
+                >
+                  <span className="font-bold text-slate-800 text-xs group-hover:text-indigo-600">{b.name}</span>
+                  <ArrowUpRight size={14} className="text-slate-300 group-hover:text-indigo-600"/>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
