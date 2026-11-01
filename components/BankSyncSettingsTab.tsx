@@ -189,7 +189,11 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
           setCredsMessage('');
         }, 1500);
       } else {
-        setCredsMessage(`❌ Error: ${data.error || 'No se pudo validar con Enable Banking'}`);
+        if (res.status === 401 || res.status === 403 || data.error?.toLowerCase().includes('token')) {
+          setCredsMessage('❌ Tu sesión en ContaMiki ha caducado. Recarga la página (F5) o vuelve a iniciar sesión para renovarla.');
+        } else {
+          setCredsMessage(`❌ Error: ${data.error || 'No se pudo validar con Enable Banking'}`);
+        }
       }
     } catch (err: any) {
       setCredsMessage(`❌ Error: ${err.message}`);
