@@ -38,6 +38,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
   const [bankSearch, setBankSearch] = useState('');
   const [isCredsModalOpen, setIsCredsModalOpen] = useState(false);
   const [isShortcutModalOpen, setIsShortcutModalOpen] = useState(false);
+  const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
 
   // Credentials form state
   const [appIdInput, setAppIdInput] = useState('a4b70785-ab0e-4c8f-b5da-4688b87f7dcf');
@@ -580,7 +581,16 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
               <div className="flex items-center gap-2 text-sky-600 font-bold text-xs uppercase">
                 <Bot size={16}/> Bot de Telegram
               </div>
-              <input
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsTelegramModalOpen(true)}
+                  className="text-[10px] text-sky-600 hover:text-sky-700 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                  title="¿Cómo crear tu bot de Telegram?"
+                >
+                  <HelpCircle size={12}/> ¿Cómo crear tu Bot?
+                </button>
+                <input
                 type="checkbox"
                 checked={notifSettings.telegram?.enabled ?? false}
                 onChange={(e) => setNotifSettings({
@@ -945,6 +955,93 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
               <p className="text-[10px] text-slate-400 italic">
                 Nota: Apple bloquea los archivos .shortcut descargados de internet alegando "archivos sin firmar". Creándolo con el prompt de IA o manualmente se sincroniza limpiamente en todos tus dispositivos Apple vía iCloud.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      
+      {/* Modal: Instrucciones Telegram Bot */}
+      {isTelegramModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 space-y-5 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                  <Bot size={16}/>
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base uppercase">Crear tu Bot de Telegram</h3>
+                  <p className="text-[10px] text-slate-400 font-medium">Instrucciones paso a paso en 2 minutos</p>
+                </div>
+              </div>
+              <button onClick={() => setIsTelegramModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18}/>
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs text-slate-600 leading-relaxed">
+              <div className="flex items-start gap-3 p-3.5 bg-sky-50/60 rounded-2xl border border-sky-100">
+                <span className="w-5 h-5 rounded-full bg-sky-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                <div className="space-y-1">
+                  <strong className="text-slate-900 font-black">Crear el Bot con @BotFather:</strong>
+                  <p className="text-[11px]">
+                    Abre Telegram y busca al bot oficial <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-sky-600 font-bold underline">@BotFather ↗</a>.
+                  </p>
+                  <ul className="list-disc pl-4 space-y-1 text-[10px] text-slate-500 font-mono">
+                    <li>Envía el mensaje: <code>/newbot</code></li>
+                    <li>Escribe el nombre visible (ej. <code>ContaMiki Avisos</code>)</li>
+                    <li>Escribe un alias terminado en bot (ej. <code>mi_contamiki_bot</code>)</li>
+                  </ul>
+                  <p className="text-[11px] text-slate-700">
+                    BotFather te responderá con tu <strong>HTTP API Token</strong> (ej. <code>8611126291:AAEc11...</code>). Cópialo y pégalo en el campo <strong>Bot Token</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                <span className="w-5 h-5 rounded-full bg-slate-800 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                <div className="space-y-1">
+                  <strong className="text-slate-900 font-black">Obtener tu Chat ID con @userinfobot:</strong>
+                  <p className="text-[11px]">
+                    En Telegram, busca a <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" className="text-sky-600 font-bold underline">@userinfobot ↗</a> y pulsa en <strong>Iniciar</strong>.
+                  </p>
+                  <p className="text-[11px] text-slate-700">
+                    Te responderá con tu identificador numérico (ej. <code>651388683</code>). Cópialo en el campo <strong>Chat ID</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3.5 bg-amber-50/80 rounded-2xl border border-amber-200/80">
+                <span className="w-5 h-5 rounded-full bg-amber-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                <div className="space-y-1">
+                  <strong className="text-amber-950 font-black">¡Paso Clave! Iniciar tu propio Bot:</strong>
+                  <p className="text-[11px] text-amber-900">
+                    Abre el chat de tu nuevo bot en Telegram (el enlace que te dio BotFather) y pulsa en <strong>«INICIAR»</strong> o escribe <code>/start</code>.
+                  </p>
+                  <p className="text-[10px] text-amber-800 italic">
+                    (Telegram prohíbe que los bots envíen mensajes a usuarios que no hayan iniciado conversación con ellos primero).
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3.5 bg-emerald-50/80 rounded-2xl border border-emerald-200/80">
+                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                <div className="space-y-1">
+                  <strong className="text-emerald-950 font-black">Probar y Guardar:</strong>
+                  <p className="text-[11px] text-emerald-900">
+                    Pulsa en <strong>«Probar Telegram»</strong> para recibir un mensaje de bienvenida inmediato, y pulsa <strong>«Guardar Preferencias de Notificación»</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsTelegramModalOpen(false)}
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold uppercase text-[11px] transition-all"
+              >
+                Entendido
+              </button>
             </div>
           </div>
         </div>

@@ -120,6 +120,10 @@ Envía tickets a tu buzón en segundos sin abrir la web:
 ### 8. 🔔 Notificaciones Multicanal (Telegram, Cartero y App)
 Elige cómo quieres recibir tu resumen financiero matutino:
 - **🤖 Bot de Telegram:** Recibe un mensaje diario formateado con el número de movimientos nuevos descargados, facturas emparejadas y tickets pendientes.
+  > **¿Cómo configurarlo en 2 minutos?**
+  > 1. Abre Telegram y escribe a [@BotFather](https://t.me/BotFather) el comando `/newbot`. Te dará tu **Bot Token** (ej. `8611126291:AA...`).
+  > 2. Escribe a [@userinfobot](https://t.me/userinfobot) y pulsa *Iniciar* para obtener tu **Chat ID** (ej. `651388683`).
+  > 3. ¡Importante! Abre el chat de tu nuevo bot y pulsa **«Iniciar»** (`/start`). Pega ambos datos en ContaMiki y pulsa *Probar Telegram*.
 - **✉️ Cartero Email:** Envío automático del resumen matutino a tu correo electrónico personal.
 - **🔔 Avisos In-App:** Notificaciones en la campana dentro de la propia plataforma.
 
