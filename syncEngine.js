@@ -149,11 +149,12 @@ export class SyncEngine {
     }
 
     /**
-     * Executes the full daily sync: banks + categorization + tickets + notifications
+     * Executes the daily or manual sync: banks + categorization + tickets + notifications
+     * Optionally accepts accountUids to synchronize only a subset of mapped accounts
      */
-    async syncUser(username, { readFullUserState, saveFullUserState }) {
+    async syncUser(username, { readFullUserState, saveFullUserState, accountUids = null }) {
         const connections = this.bankService.getUserConnections(username);
-        const mappedAccounts = [];
+        let mappedAccounts = [];
         
         for (const conn of connections) {
             for (const acc of (conn.accounts || [])) {
@@ -163,8 +164,13 @@ export class SyncEngine {
             }
         }
 
+        // Si se especifican cuentas concretas, filtrar solo por esos UIDs
+        if (Array.isArray(accountUids) && accountUids.length > 0) {
+            mappedAccounts = mappedAccounts.filter(acc => accountUids.includes(acc.uid));
+        }
+
         if (mappedAccounts.length === 0) {
-            return { success: true, message: 'No hay cuentas bancarias mapeadas para sincronizar.', newTxs: 0, matchedTickets: 0 };
+            return { success: true, message: 'No hay cuentas bancarias seleccionadas o mapeadas para sincronizar.', newTxs: 0, matchedTickets: 0, syncedAccountsCount: 0 };
         }
 
         const userState = await readFullUserState(username);
@@ -233,7 +239,11 @@ export class SyncEngine {
                 }
             }
 
-            mapped.lastSync = new Date().toISOString();
+            const nowIso = new Date().toISOString();
+            mapped.lastSync = nowIso;
+            if (this.bankService && typeof this.bankService.updateAccountLastSync === 'function') {
+                this.bankService.updateAccountLastSync(username, mapped.connectionId, mapped.uid, nowIso);
+            }
         }
 
         // 2. Emparejamiento de tickets en los libros afectados
@@ -273,7 +283,8 @@ export class SyncEngine {
             success: true,
             newTxs: totalNewTxs,
             matchedTickets: totalMatched,
-            pendingTickets: totalPending
+            pendingTickets: totalPending,
+            syncedAccountsCount: mappedAccounts.length
         };
     }
 }

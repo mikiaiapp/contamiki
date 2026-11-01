@@ -1508,9 +1508,11 @@ app.delete('/api/bank/connection/:connectionId', authenticateToken, (req, res) =
 
 app.post('/api/bank/sync', authenticateToken, async (req, res) => {
     try {
+        const { accountUids } = req.body || {};
         const result = await syncEngine.syncUser(req.user.username, {
             readFullUserState,
-            saveFullUserState
+            saveFullUserState,
+            accountUids: Array.isArray(accountUids) && accountUids.length > 0 ? accountUids : null
         });
         res.json(result);
     } catch (err) {

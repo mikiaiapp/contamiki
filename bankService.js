@@ -327,5 +327,17 @@ export class BankService {
         const filtered = all.filter(c => !(c.username === username && c.id === connectionId));
         this.saveConnections(filtered);
     }
+
+    updateAccountLastSync(username, connectionId, accountUid, lastSyncIso) {
+        const all = this.readConnections();
+        const conn = all.find(c => c.username === username && c.id === connectionId);
+        if (conn) {
+            const acc = (conn.accounts || []).find(a => a.uid === accountUid);
+            if (acc) {
+                acc.lastSync = lastSyncIso;
+                this.saveConnections(all);
+            }
+        }
+    }
 }
 

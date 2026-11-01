@@ -114,6 +114,8 @@ Envía tickets a tu buzón en segundos sin abrir la web:
   El servidor ejecuta un barrido automático programable (por defecto a las **06:00 AM**) para que cuando te despiertes a las 07:00 AM tengas tus saldos actualizados y las facturas emparejadas.
 - **Protección Anti-Duplicados:**  
   Algoritmo estricto de triple coincidencia (cuenta, fecha e importe exacto) que garantiza que jamás se duplique un apunte aunque solapen las fechas de consulta.
+- **Sincronización Manual Selectiva:**  
+  Posibilidad de sincronizar todas las cuentas vinculadas a la vez o abrir el selector interactivo para centrarse únicamente en una o dos cuentas específicas, además de contar con un botón de sincronización directa en cada cuenta individual.
 
 ---
 

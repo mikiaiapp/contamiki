@@ -39,6 +39,9 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
   const [isCredsModalOpen, setIsCredsModalOpen] = useState(false);
   const [isShortcutModalOpen, setIsShortcutModalOpen] = useState(false);
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [selectedSyncAccountUids, setSelectedSyncAccountUids] = useState<string[]>([]);
+  const [syncingSingleUid, setSyncingSingleUid] = useState<string | null>(null);
 
   // Credentials form state
   const [appIdInput, setAppIdInput] = useState('a4b70785-ab0e-4c8f-b5da-4688b87f7dcf');
@@ -92,22 +95,93 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
     loadData();
   }, []);
 
-  const handleManualSync = async () => {
+  const mappedAccountsList = React.useMemo(() => {
+    const list: Array<{
+      uid: string;
+      connId: string;
+      name: string;
+      iban: string;
+      bankName: string;
+      bookName: string;
+      accountName: string;
+      lastSync?: string;
+    }> = [];
+    if (!status?.connections) return list;
+    for (const conn of status.connections) {
+      const bankName = conn.aspsp?.name || 'Entidad Bancaria';
+      for (const acc of (conn.accounts || [])) {
+        if (acc.mappedAccountId && acc.enabled !== false) {
+          const book = books.find(b => b.id === acc.mappedBookId);
+          const acct = data.accounts.find(a => a.id === acc.mappedAccountId);
+          list.push({
+            uid: acc.uid,
+            connId: conn.id,
+            name: acc.name || 'Cuenta Corriente',
+            iban: acc.iban || '',
+            bankName,
+            bookName: book ? book.name : (acc.mappedBookId || 'Contabilidad'),
+            accountName: acct ? acct.name : (acc.mappedAccountId || 'Cuenta asociada'),
+            lastSync: acc.lastSync
+          });
+        }
+      }
+    }
+    return list;
+  }, [status, books, data.accounts]);
+
+  const handleOpenSyncModal = () => {
+    if (mappedAccountsList.length === 0) {
+      setSyncResult({ error: 'No hay cuentas bancarias vinculadas y mapeadas a una contabilidad todavía.' });
+      return;
+    }
+    setSelectedSyncAccountUids(mappedAccountsList.map(a => a.uid));
+    setIsSyncModalOpen(true);
+  };
+
+  const toggleSelectAccount = (uid: string) => {
+    setSelectedSyncAccountUids(prev => 
+      prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+    );
+  };
+
+  const selectAllAccounts = () => {
+    setSelectedSyncAccountUids(mappedAccountsList.map(a => a.uid));
+  };
+
+  const deselectAllAccounts = () => {
+    setSelectedSyncAccountUids([]);
+  };
+
+  const handleManualSync = async (uidsToSync?: string[]) => {
+    const targetUids = uidsToSync || (selectedSyncAccountUids.length > 0 ? selectedSyncAccountUids : undefined);
+    
+    if (uidsToSync && uidsToSync.length === 1) {
+      setSyncingSingleUid(uidsToSync[0]);
+    }
+
     setIsSyncing(true);
     setSyncResult(null);
     try {
       const token = (getToken() || localStorage.getItem('auth_token'));
       const res = await fetch('/api/bank/sync', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          accountUids: targetUids
+        })
       });
       const result = await res.json();
       setSyncResult(result);
       await loadData();
+      setIsSyncModalOpen(false);
     } catch (err: any) {
       setSyncResult({ error: err.message || 'Error en la sincronización' });
     } finally {
       setIsSyncing(false);
+      setSyncingSingleUid(null);
     }
   };
 
@@ -328,7 +402,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
           </div>
 
           <button
-            onClick={handleManualSync}
+            onClick={handleOpenSyncModal}
             disabled={isSyncing}
             className="w-full md:w-auto px-6 py-4 bg-white text-indigo-950 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-50 active:scale-95 transition-all flex items-center justify-center gap-2"
           >
@@ -344,7 +418,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                 <span className="text-rose-300 font-bold">{syncResult.error}</span>
               ) : (
                 <span>
-                  ✨ {syncResult.newTxs || 0} movimientos nuevos | 📎 {syncResult.matchedTickets || 0} facturas emparejadas | ⏳ {syncResult.pendingTickets || 0} en buzón
+                  ✨ {syncResult.newTxs || 0} movimientos nuevos {syncResult.syncedAccountsCount !== undefined ? `(${syncResult.syncedAccountsCount} cuenta${syncResult.syncedAccountsCount === 1 ? '' : 's'})` : ''} | 📎 {syncResult.matchedTickets || 0} facturas emparejadas | ⏳ {syncResult.pendingTickets || 0} en buzón
                 </span>
               )}
             </div>
@@ -515,7 +589,19 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                         )}
                       </div>
 
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+                        {acc.mappedAccountId && (
+                          <button
+                            type="button"
+                            onClick={() => handleManualSync([acc.uid])}
+                            disabled={isSyncing}
+                            className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 active:scale-95 cursor-pointer disabled:opacity-50"
+                            title="Sincronizar solo esta cuenta ahora"
+                          >
+                            <RefreshCw size={12} className={syncingSingleUid === acc.uid ? 'animate-spin text-indigo-600' : ''}/>
+                            <span>{syncingSingleUid === acc.uid ? 'Sincronizando...' : 'Sincronizar'}</span>
+                          </button>
+                        )}
                         <select
                           value={acc.mappedAccountId || ''}
                           onChange={(e) => handleMapAccount(conn.id, acc.uid, currentBookId, e.target.value, acc.enabled)}
@@ -961,6 +1047,140 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
       )}
 
       
+      {/* Modal: Selector de Cuentas para Sincronización Manual */}
+      {isSyncModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 space-y-5 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''}/>
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base uppercase">Sincronización Bancaria Manual</h3>
+                  <p className="text-[11px] text-slate-400 font-medium">Selecciona las cuentas a consultar en este barrido</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => !isSyncing && setIsSyncModalOpen(false)} 
+                disabled={isSyncing}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X size={18}/>
+              </button>
+            </div>
+
+            {/* Quick Action Bar & Counter */}
+            <div className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100 text-xs">
+              <span className="font-bold text-slate-700 text-[11px]">
+                {selectedSyncAccountUids.length} de {mappedAccountsList.length} cuenta(s) seleccionada(s)
+              </span>
+              <div className="flex items-center gap-2 text-[11px]">
+                <button
+                  type="button"
+                  onClick={selectAllAccounts}
+                  disabled={isSyncing}
+                  className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+                >
+                  Marcar todas
+                </button>
+                <span className="text-slate-300">•</span>
+                <button
+                  type="button"
+                  onClick={deselectAllAccounts}
+                  disabled={isSyncing}
+                  className="font-bold text-slate-500 hover:text-slate-700 hover:underline cursor-pointer"
+                >
+                  Desmarcar todas
+                </button>
+              </div>
+            </div>
+
+            {/* Accounts Checklist */}
+            <div className="space-y-2.5">
+              {mappedAccountsList.map(item => {
+                const isSelected = selectedSyncAccountUids.includes(item.uid);
+                return (
+                  <div
+                    key={item.uid}
+                    onClick={() => !isSyncing && toggleSelectAccount(item.uid)}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                      isSelected
+                        ? 'bg-indigo-50/60 border-indigo-300 shadow-xs'
+                        : 'bg-white border-slate-200 hover:border-slate-300 opacity-70'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}}
+                        disabled={isSyncing}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-slate-900 text-xs truncate">{item.name}</span>
+                          <span className="text-[10px] text-slate-600 font-bold bg-slate-100 px-1.5 py-0.5 rounded">
+                            {item.bankName}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5 truncate">
+                          {item.iban && <span className="font-mono">{item.iban}</span>}
+                          <span>➔</span>
+                          <span className="text-indigo-700 font-bold truncate">📁 {item.bookName} ({item.accountName})</span>
+                        </div>
+                        {item.lastSync && (
+                          <p className="text-[9px] text-emerald-600 font-medium mt-0.5">
+                            Última sinc: {new Date(item.lastSync).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {isSelected ? (
+                        <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                          <Check size={12}/>
+                        </span>
+                      ) : (
+                        <span className="w-5 h-5 rounded-full border border-slate-300"/>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsSyncModalOpen(false)}
+                disabled={isSyncing}
+                className="w-1/3 py-3 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl font-bold uppercase text-[11px] transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleManualSync()}
+                disabled={isSyncing || selectedSyncAccountUids.length === 0}
+                className="w-2/3 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold uppercase text-[11px] tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''}/>
+                <span>
+                  {isSyncing 
+                    ? 'Sincronizando...' 
+                    : `Sincronizar (${selectedSyncAccountUids.length})`}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal: Instrucciones Telegram Bot */}
       {isTelegramModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
