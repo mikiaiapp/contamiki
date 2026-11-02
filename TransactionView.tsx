@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, RecurrentMovement, RecurrenceFrequency, Category, Account, BookMetadata } from './types';
-import { Building2, RefreshCw, Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check, AlertTriangle, FileDown } from 'lucide-react';
+import { Building2, RefreshCw, Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check, AlertTriangle, FileDown, CircleDot } from 'lucide-react';
 import { getToken } from './services/authService';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -106,6 +106,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   const [isSyncingBanks, setIsSyncingBanks] = useState(false);
   const [bankSyncFeedback, setBankSyncFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [filterPendingOnly, setFilterPendingOnly] = useState<boolean>(Boolean(initialSpecificFilters?.filterPending));
+  const [filterReviewedState, setFilterReviewedState] = useState<'ALL' | 'PENDING' | 'REVIEWED'>('ALL');
   
   const [recDesc, setRecDesc] = useState('');
   const [recAmount, setRecAmount] = useState('');
@@ -246,7 +247,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
   useEffect(() => {
       setCurrentPage(1);
       setSelectedIds(new Set());
-  }, [colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, colFilterAmountVal1, filter]);
+  }, [colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, colFilterAmountVal1, filterReviewedState, filter]);
 
   useEffect(() => {
     if (initialSpecificFilters) {
@@ -275,6 +276,9 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       } else {
           if (initialSpecificFilters.filterPending) {
               setFilterPendingOnly(true);
+          }
+          if (initialSpecificFilters.filterUnreviewed) {
+              setFilterReviewedState('PENDING');
           }
           if (initialSpecificFilters.filterCategory) {
               setColFilterEntry(initialSpecificFilters.filterCategory);
@@ -624,7 +628,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         categoryId: p.categoryId,
         familyId: indices.cat.get(p.categoryId)?.familyId || '',
         transferAccountId: transAccId,
-        attachment: p.attachment
+        attachment: p.attachment,
+        isReviewed: false
       };
     });
 
@@ -756,6 +761,39 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       }
   };
 
+  const handleBulkMarkReviewed = () => {
+    const updatedTxs = data.transactions.map(t => {
+      if (selectedIds.has(t.id)) {
+        return { ...t, isReviewed: true };
+      }
+      return t;
+    });
+    onUpdateData({ transactions: updatedTxs });
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkUnmarkReviewed = () => {
+    const updatedTxs = data.transactions.map(t => {
+      if (selectedIds.has(t.id)) {
+        return { ...t, isReviewed: false };
+      }
+      return t;
+    });
+    onUpdateData({ transactions: updatedTxs });
+    setSelectedIds(new Set());
+  };
+
+  const handleToggleReviewed = (txId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const tx = data.transactions.find(t => t.id === txId);
+    if (!tx) return;
+    const updatedTx: Transaction = {
+      ...tx,
+      isReviewed: tx.isReviewed === false ? true : false
+    };
+    onUpdateTransaction(updatedTx);
+  };
+
   const timeFilteredList = useMemo(() => {
     const y = filter.referenceDate.getFullYear();
     const m = filter.referenceDate.getMonth();
@@ -830,9 +868,11 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         const isPending = t.type !== 'TRANSFER' && (!t.categoryId || t.categoryId === '' || t.isPendingCategorization);
         if (!isPending) return false;
       }
+      if (filterReviewedState === 'PENDING' && t.isReviewed !== false) return false;
+      if (filterReviewedState === 'REVIEWED' && t.isReviewed !== true) return false;
       return true;
     });
-  }, [timeFilteredList, colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, colFilterAmountVal1, filterPendingOnly]);
+  }, [timeFilteredList, colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, colFilterAmountVal1, filterPendingOnly, filterReviewedState]);
 
   const sortedTransactions = useMemo(() => {
     return [...filteredList].sort((a, b) => {
@@ -911,10 +951,12 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     if (colFilterClip !== 'ALL') chips.push({ id: 'clip', label: `Clip: ${colFilterClip}`, onRemove: () => setColFilterClip('ALL') });
     if (colFilterAmountOp !== 'ALL') chips.push({ id: 'amount', label: `Imp: ${colFilterAmountOp}`, onRemove: () => setColFilterAmountOp('ALL') });
     if (filterPendingOnly) chips.push({ id: 'pendingOnly', label: 'Por Categorizar', onRemove: () => setFilterPendingOnly(false) });
+    if (filterReviewedState === 'PENDING') chips.push({ id: 'reviewedPending', label: 'Sin Revisar / No Punteados', onRemove: () => setFilterReviewedState('ALL') });
+    if (filterReviewedState === 'REVIEWED') chips.push({ id: 'reviewedDone', label: 'Solo Punteados', onRemove: () => setFilterReviewedState('ALL') });
     return chips;
-  }, [colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, indices]);
+  }, [colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, filterPendingOnly, filterReviewedState, indices]);
 
-  const clearAllFilters = () => { setColFilterEntry('ALL'); setColFilterDesc(''); setColFilterClip('ALL'); setColFilterExit('ALL'); setColFilterAmountOp('ALL'); setColFilterAmountVal1(''); };
+  const clearAllFilters = () => { setColFilterEntry('ALL'); setColFilterDesc(''); setColFilterClip('ALL'); setColFilterExit('ALL'); setColFilterAmountOp('ALL'); setColFilterAmountVal1(''); setFilterPendingOnly(false); setFilterReviewedState('ALL'); };
   const resetForm = () => { setEditingTx(null); setFType('EXPENSE'); setFAmount(''); setFDesc(''); setFDate(new Date().toISOString().split('T')[0]); setFAcc(data.accounts[0]?.id || ''); setFCat(''); setFTransferDest(''); setFAttachment(undefined); setSelectorTarget(null); setModalSearchTerm(''); };
   
   const openEditor = (t?: Transaction) => { 
@@ -1094,7 +1136,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
           categoryId: fCat, 
           familyId: cat?.familyId || '', 
           attachment: fAttachment, 
-          transferAccountId: fType === 'TRANSFER' ? fTransferDest : undefined 
+          transferAccountId: fType === 'TRANSFER' ? fTransferDest : undefined,
+          isReviewed: editingTx ? (editingTx.isReviewed ?? true) : true
       }; 
       if (editingTx) onUpdateTransaction(tx); 
       else onAddTransaction(tx); 
@@ -1156,12 +1199,16 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
   const years = Array.from({length: new Date().getFullYear() - 2015 + 5}, (_, i) => 2015 + i);
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-  const gridClasses = "grid grid-cols-[22px_45px_1fr_1.2fr_12px_1fr_55px_0px_20px] sm:grid-cols-[25px_65px_1fr_1.4fr_20px_1fr_65px_60px_25px] md:grid-cols-[25px_75px_1fr_1.4fr_25px_1fr_75px_75px_30px] gap-1.5 sm:gap-2 md:gap-2 items-center";
+  const gridClasses = "grid grid-cols-[22px_22px_45px_1fr_1.2fr_12px_1fr_55px_0px_20px] sm:grid-cols-[24px_24px_65px_1fr_1.4fr_20px_1fr_65px_60px_25px] md:grid-cols-[24px_24px_75px_1fr_1.4fr_25px_1fr_75px_75px_30px] gap-1.5 sm:gap-2 md:gap-2 items-center";
 
   const pendingCategorizationCount = useMemo(() => {
     return (data.transactions || []).filter(t => 
       t.type !== 'TRANSFER' && (!t.categoryId || t.categoryId === '' || t.isPendingCategorization)
     ).length;
+  }, [data.transactions]);
+
+  const unreviewedCount = useMemo(() => {
+    return (data.transactions || []).filter(t => t.isReviewed === false).length;
   }, [data.transactions]);
 
   const duplicateProps = useMemo(() => proposedTransactions.filter(p => p.isDuplicate), [proposedTransactions]);
@@ -1265,6 +1312,19 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                     <span className="hidden sm:inline text-xs font-bold">por categorizar</span>
                   </button>
                 )}
+                {unreviewedCount > 0 && (
+                  <button 
+                    onClick={() => setFilterReviewedState(filterReviewedState === 'PENDING' ? 'ALL' : 'PENDING')}
+                    className={`${
+                      filterReviewedState === 'PENDING' ? 'bg-amber-600 ring-4 ring-amber-200' : 'bg-amber-500'
+                    } text-white px-3.5 py-1.5 md:px-4 md:py-2 rounded-2xl flex items-center gap-2 shadow-lg shadow-amber-200 transition-all active:scale-95 cursor-pointer`}
+                    title={filterReviewedState === 'PENDING' ? "Mostrando no revisados (clic para ver todos)" : "Filtrar movimientos pendientes de revisar / puntear"}
+                  >
+                    <CircleDot size={16} />
+                    <span className="text-xs font-black">{unreviewedCount}</span>
+                    <span className="hidden sm:inline text-xs font-bold">por revisar</span>
+                  </button>
+                )}
               </div>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-center md:justify-start">
@@ -1362,7 +1422,20 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
       )}
 
       <div className={`bg-slate-900/5 p-2 md:p-4 rounded-2xl border border-slate-100 ${gridClasses}`}>
-          <div className="flex items-center justify-center"><button onClick={toggleSelectAllPage} className="text-slate-400 active:text-indigo-600 lg:hover:text-indigo-600">{paginatedTransactions.length > 0 && paginatedTransactions.every(t => selectedIds.has(t.id)) ? <CheckSquare size={16}/> : <Square size={16}/>}</button></div>
+          <div className="flex items-center justify-center"><button onClick={toggleSelectAllPage} className="text-slate-400 active:text-indigo-600 lg:hover:text-indigo-600" title="Seleccionar todos">{paginatedTransactions.length > 0 && paginatedTransactions.every(t => selectedIds.has(t.id)) ? <CheckSquare size={16}/> : <Square size={16}/>}</button></div>
+          <div className="flex flex-col items-center justify-center">
+            <span className="hidden md:block text-[7px] sm:text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Rev</span>
+            <select 
+              className="bg-white border border-slate-200 rounded-lg text-[8px] sm:text-[9px] md:text-[10px] font-bold py-0.5 md:py-1 px-0.5 outline-none text-center cursor-pointer"
+              value={filterReviewedState}
+              onChange={e => setFilterReviewedState(e.target.value as any)}
+              title="Filtrar por revisión / punteo"
+            >
+              <option value="ALL">✓?</option>
+              <option value="PENDING">⚠️</option>
+              <option value="REVIEWED">✓</option>
+            </select>
+          </div>
           <div className="flex flex-col items-center justify-center"><button onClick={() => { if(sortField==='DATE') setSortDirection(sortDirection==='ASC'?'DESC':'ASC'); else setSortField('DATE'); }} className="text-[7px] sm:text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest inline-flex items-center gap-0.5">Fec <SortIcon field="DATE"/></button></div>
           <div className="flex flex-col"><span className="hidden md:block text-[7px] sm:text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Filtro A</span><select className="w-full bg-white border border-slate-200 rounded-lg text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-bold py-0.5 md:py-1 outline-none truncate" value={colFilterEntry} onChange={e => setColFilterEntry(e.target.value)}><option value="ALL">Todo</option>{activeDropdownOptions.entryGroups.map(group => (<optgroup key={group.label} label={group.label}>{group.options.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}</optgroup>))}</select></div>
           <div className="flex flex-col"><span className="hidden md:block text-[7px] sm:text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Concepto</span><input type="text" className="w-full bg-white border border-slate-200 rounded-lg text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-bold py-0.5 md:py-1 px-1 md:px-2 outline-none" placeholder="..." value={colFilterDesc} onChange={e => setColFilterDesc(e.target.value)} /></div>
@@ -1441,6 +1514,19 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
             <div key={t.id} className={`group bg-white p-2 md:p-4 md:px-6 rounded-2xl border ${isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-100'} active:shadow-lg lg:hover:shadow-lg transition-all relative touch-action-manipulation`}>
                 <div className={gridClasses}>
                     <div className="flex justify-center"><button onClick={(e) => { e.stopPropagation(); toggleSelection(t.id); }} className={`text-slate-400 touch-action-manipulation ${isSelected ? 'text-indigo-600' : 'active:text-indigo-600 lg:hover:text-indigo-600'}`}>{isSelected ? <CheckSquare size={16} /> : <Square size={16} />}</button></div>
+                    <div className="flex justify-center">
+                      <button 
+                        onClick={(e) => handleToggleReviewed(t.id, e)}
+                        className="p-0.5 rounded-lg transition-transform active:scale-90 hover:opacity-80"
+                        title={t.isReviewed === false ? "Pendiente de revisar / puntear. Clic para marcar como revisado." : "Movimiento punteado / revisado. Clic para desmarcar."}
+                      >
+                        {t.isReviewed === false ? (
+                          <CircleDot size={16} className="text-amber-500 hover:text-amber-600" />
+                        ) : (
+                          <CheckCircle2 size={16} className="text-emerald-600 fill-emerald-50 hover:text-emerald-700" />
+                        )}
+                      </button>
+                    </div>
                     <div className="text-left text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-black text-slate-400 uppercase tracking-tighter leading-none truncate">{formatDateDisplay(t.date)}</div>
                     <div className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] pr-1 sm:pr-0 leading-tight">{debitNode}</div>
                     <button className="min-w-0 text-[8px] sm:text-[9px] md:text-[10px] lg:text-[11px] font-bold text-slate-800 uppercase text-left line-clamp-2 leading-tight active:text-indigo-600 lg:hover:text-indigo-600 pl-0.5 sm:pl-0 touch-action-manipulation" onClick={(e) => {e.stopPropagation(); setColFilterDesc(t.description);}}>{t.description}</button>
@@ -1482,7 +1568,20 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
 
       {selectedIds.size > 0 && (
           <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-[150] animate-in slide-in-from-bottom-4 fade-in duration-300 w-max max-w-[95vw]">
-              <div className="bg-slate-950 text-white rounded-2xl shadow-2xl p-2 px-4 flex items-center gap-4 border border-white/10"><span className="text-[10px] font-black uppercase tracking-widest px-2">{selectedIds.size} Seleccionados</span><div className="h-6 w-px bg-white/20"></div><button onClick={() => { setBulkEditTarget('DATE'); setBulkEditValue(''); setIsBulkEditModalOpen(true); }} className="flex items-center gap-2 px-3 py-2 active:bg-white/10 lg:hover:bg-white/10 rounded-xl transition-all"><PenTool size={14}/> <span className="text-[10px] font-bold uppercase">Editar Bloque</span></button><button onClick={() => { setBulkEditTarget('DELETE'); setIsBulkEditModalOpen(true); }} className="flex items-center gap-2 px-3 py-2 bg-rose-600 active:bg-rose-700 lg:hover:bg-rose-700 rounded-xl transition-all shadow-lg"><Trash2 size={14}/> <span className="text-[10px] font-bold uppercase">Borrar</span></button><button onClick={() => setSelectedIds(new Set())} className="p-2 active:bg-white/10 lg:hover:bg-white/10 rounded-full text-slate-400 active:text-white lg:hover:text-white"><X size={14}/></button></div>
+              <div className="bg-slate-950 text-white rounded-2xl shadow-2xl p-2 px-4 flex items-center gap-2 sm:gap-4 border border-white/10 flex-wrap sm:flex-nowrap">
+                <span className="text-[10px] font-black uppercase tracking-widest px-2">{selectedIds.size} Seleccionados</span>
+                <div className="h-6 w-px bg-white/20 hidden sm:block"></div>
+                <button onClick={handleBulkMarkReviewed} className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 active:bg-emerald-700 lg:hover:bg-emerald-700 rounded-xl transition-all shadow-lg text-white" title="Marcar seleccionados como punteados / revisados">
+                  <CheckCircle2 size={14}/> <span className="text-[10px] font-bold uppercase">Puntear ({selectedIds.size})</span>
+                </button>
+                <button onClick={handleBulkUnmarkReviewed} className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 active:bg-amber-700 lg:hover:bg-amber-700 rounded-xl transition-all shadow-lg text-white" title="Marcar seleccionados como pendientes de revisión">
+                  <CircleDot size={14}/> <span className="text-[10px] font-bold uppercase">Desmarcar</span>
+                </button>
+                <div className="h-6 w-px bg-white/20 hidden sm:block"></div>
+                <button onClick={() => { setBulkEditTarget('DATE'); setBulkEditValue(''); setIsBulkEditModalOpen(true); }} className="flex items-center gap-2 px-3 py-2 active:bg-white/10 lg:hover:bg-white/10 rounded-xl transition-all"><PenTool size={14}/> <span className="text-[10px] font-bold uppercase">Editar Bloque</span></button>
+                <button onClick={() => { setBulkEditTarget('DELETE'); setIsBulkEditModalOpen(true); }} className="flex items-center gap-2 px-3 py-2 bg-rose-600 active:bg-rose-700 lg:hover:bg-rose-700 rounded-xl transition-all shadow-lg"><Trash2 size={14}/> <span className="text-[10px] font-bold uppercase">Borrar</span></button>
+                <button onClick={() => setSelectedIds(new Set())} className="p-2 active:bg-white/10 lg:hover:bg-white/10 rounded-full text-slate-400 active:text-white lg:hover:text-white"><X size={14}/></button>
+              </div>
           </div>
       )}
 

@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+bundle.js
 *.local
 
 # Sensitive information and local data

@@ -48,6 +48,7 @@ export interface Transaction {
   isFromRecurrence?: string; 
   isValidated?: boolean;
   isPendingCategorization?: boolean;
+  isReviewed?: boolean;
 }
 
 export interface RecurrentMovement {

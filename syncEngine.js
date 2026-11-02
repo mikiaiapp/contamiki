@@ -9,41 +9,71 @@ export class SyncEngine {
     }
 
     /**
-     * Attempts to find a matching category based on historical merchant descriptions
+     * Attempts to find a matching category based on historical merchant descriptions and category names
      */
-    findCategorySuggestion(description, historicalTxs, categories) {
-        if (!description || !historicalTxs || historicalTxs.length === 0) {
-            return { categoryId: '', familyId: '', matchedKeyword: null };
+    findCategorySuggestion(description, txType, historicalTxs, categories, families = []) {
+        if (!description || !categories || categories.length === 0) {
+            return { categoryId: '', familyId: '', confidence: 'NONE' };
         }
 
-        const cleanDesc = description.toLowerCase();
-        
-        // Count category occurrences for matching descriptions
-        const categoryScore = {};
-        for (const tx of historicalTxs) {
-            if (!tx.categoryId || !tx.description) continue;
-            const pastDesc = tx.description.toLowerCase();
-            
-            // Check significant tokens (min 4 chars)
-            const words = pastDesc.split(/[\s,.-]+/).filter(w => w.length >= 4);
-            for (const word of words) {
-                if (cleanDesc.includes(word)) {
-                    categoryScore[tx.categoryId] = (categoryScore[tx.categoryId] || 0) + 1;
+        const cleanDesc = description.toLowerCase().trim();
+        const allowedFamilies = families.filter(f => f.type === txType).map(f => f.id);
+        const candidateCats = categories.filter(c => allowedFamilies.length === 0 || allowedFamilies.includes(c.familyId));
+
+        // 1. Direct category name match
+        for (const cat of candidateCats) {
+          const catNameClean = cat.name.toLowerCase().trim();
+          if (catNameClean.length >= 4 && cleanDesc.includes(catNameClean)) {
+            return { categoryId: cat.id, familyId: cat.familyId, confidence: 'HIGH' };
+          }
+        }
+
+        if (!historicalTxs || historicalTxs.length === 0) {
+            return { categoryId: '', familyId: '', confidence: 'NONE' };
+        }
+
+        const STOP_WORDS = new Set([
+            'pago', 'movil', 'en', 'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'por', 'para',
+            'tarjeta', 'tarj', 'compra', 'recibo', 'transferencia', 'trans', 'abono', 'cargo',
+            'liquidacion', 'periodica', 'ref', 'mandato', 'bizum', 'orden', 'emisor', 'beneficiario',
+            'operacion', 'autorizacion', 'dees', 'es', 'spain', 'numero', 'cta', 'cuenta', 'favor',
+            'concepto', 'barcelona', 'madrid', 'banco', 'santander', 'caixabank', 'bankinter'
+        ]);
+
+        const tokens = cleanDesc.split(/[^a-záéíóúñ0-9]+/).filter(w => w.length >= 3 && !STOP_WORDS.has(w) && !/^\d+$/.test(w));
+        if (tokens.length === 0) {
+            return { categoryId: '', familyId: '', confidence: 'NONE' };
+        }
+
+        const catScores = new Map();
+        for (const t of historicalTxs) {
+            if (!t.categoryId || (t.type && t.type !== txType)) continue;
+            const cat = candidateCats.find(c => c.id === t.categoryId);
+            if (!cat) continue;
+
+            const pastClean = (t.description || '').toLowerCase();
+            let score = 0;
+            for (const token of tokens) {
+                if (pastClean.includes(token)) {
+                    score += Math.pow(token.length, 1.5);
                 }
+            }
+            if (score > 0) {
+                catScores.set(cat.id, (catScores.get(cat.id) || 0) + score);
             }
         }
 
-        let bestCatId = '';
-        let highestScore = 0;
-        for (const [catId, score] of Object.entries(categoryScore)) {
-            if (score > highestScore) {
-                highestScore = score;
+        let bestCatId = null;
+        let maxScore = 0;
+        for (const [catId, score] of catScores.entries()) {
+            if (score > maxScore) {
+                maxScore = score;
                 bestCatId = catId;
             }
         }
 
-        if (bestCatId && highestScore >= 2) {
-            const cat = categories.find(c => c.id === bestCatId);
+        if (bestCatId && maxScore >= 15) {
+            const cat = candidateCats.find(c => c.id === bestCatId);
             if (cat) {
                 return { categoryId: cat.id, familyId: cat.familyId, confidence: 'HIGH' };
             }
@@ -204,10 +234,17 @@ export class SyncEngine {
 
             const existingTxs = bookData.transactions || [];
             const categories = bookData.categories || [];
+            const families = bookData.families || [];
 
             for (const bTx of bankTxs) {
                 const bookingDate = bTx.booking_date || bTx.value_date || today;
-                const rawAmt = parseFloat(bTx.transaction_amount?.amount || bTx.amount || 0);
+                
+                // Signo e importe correcto según PSD2 / Enable Banking
+                const absAmt = Math.abs(parseFloat(bTx.transaction_amount?.amount || bTx.amount || 0));
+                // DBIT = Cargo (Gasto / Salida de dinero), CRDT = Abono (Ingreso / Entrada de dinero)
+                const isDebit = bTx.credit_debit_indicator === 'DBIT' || bTx.amount < 0;
+                const txType = isDebit ? 'EXPENSE' : 'INCOME';
+                const finalAmount = isDebit ? -absAmt : absAmt;
                 
                 // Extracción exhaustiva de la descripción bancaria (Enable Banking / ASPSP)
                 let desc = '';
@@ -236,31 +273,32 @@ export class SyncEngine {
 
                     const tAmt = Number(t.amount);
                     if (isDirectAcc) {
-                        if (Math.abs(tAmt - rawAmt) < 0.005) return true;
-                        if (Math.abs(Math.abs(tAmt) - Math.abs(rawAmt)) < 0.005 && diffDays <= 1) return true;
+                        if (Math.abs(tAmt - finalAmount) < 0.005) return true;
+                        if (Math.abs(Math.abs(tAmt) - absAmt) < 0.005 && diffDays <= 1) return true;
                     } else if (isTransferAcc) {
-                        if (Math.abs(Math.abs(tAmt) - Math.abs(rawAmt)) < 0.005) return true;
+                        if (Math.abs(Math.abs(tAmt) - absAmt) < 0.005) return true;
                     }
                     return false;
                 });
 
                 if (!isDuplicate) {
                     // Categorización automática por aprendizaje histórico
-                    const suggestion = this.findCategorySuggestion(desc, existingTxs, categories);
+                    const suggestion = this.findCategorySuggestion(desc, txType, existingTxs, categories, families);
                     const hasCategory = Boolean(suggestion.categoryId);
                     const matchedCat = hasCategory ? categories.find(c => c.id === suggestion.categoryId) : null;
 
                     const newTx = {
                         id: `tx_${Math.random().toString(36).substring(2, 12)}`,
                         date: bookingDate,
-                        amount: rawAmt,
+                        amount: finalAmount,
                         description: desc.trim(),
                         accountId: mapped.mappedAccountId,
-                        type: rawAmt < 0 ? 'EXPENSE' : 'INCOME',
+                        type: txType,
                         categoryId: suggestion.categoryId || '',
                         familyId: suggestion.familyId || '',
                         isValidated: hasCategory,
                         isPendingCategorization: !hasCategory,
+                        isReviewed: false,
                         isFromBankSync: true
                     };
 
