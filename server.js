@@ -198,7 +198,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(__dirname));
+    app.use(express.static(__dirname, { index: false }));
 }
 
 // Initialize System Files
@@ -1673,11 +1673,15 @@ setInterval(async () => {
                 // En desarrollo, Vite ya maneja index.tsx
                 html = await vite.transformIndexHtml(req.url, html);
             } else {
-                // En producción, cambiamos index.tsx por bundle.js (manejamos ambos casos por seguridad)
-                html = html.replace('src="index.tsx"', 'src="/bundle.js"');
-                html = html.replace('src="/index.tsx"', 'src="/bundle.js"');
+                // En producción, cambiamos index.tsx por bundle.js con cache-busting
+                const v = Date.now();
+                html = html.replace('src="index.tsx"', `src="/bundle.js?v=${v}"`);
+                html = html.replace('src="/index.tsx"', `src="/bundle.js?v=${v}"`);
             }
             
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
             res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
         } catch (e) {
             console.error(e);
