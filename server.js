@@ -1509,10 +1509,15 @@ app.delete('/api/bank/connection/:connectionId', authenticateToken, (req, res) =
 app.post('/api/bank/sync', authenticateToken, async (req, res) => {
     try {
         const { accountUids } = req.body || {};
+        const clientIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || '').split(',')[0].trim();
+        const userAgent = req.headers['user-agent'] || '';
+        const psuContext = { ip: clientIp, userAgent };
+
         const result = await syncEngine.syncUser(req.user.username, {
             readFullUserState,
             saveFullUserState,
-            accountUids: Array.isArray(accountUids) && accountUids.length > 0 ? accountUids : null
+            accountUids: Array.isArray(accountUids) && accountUids.length > 0 ? accountUids : null,
+            psuContext
         });
         res.json(result);
     } catch (err) {

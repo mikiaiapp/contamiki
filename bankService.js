@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import jwt from 'jsonwebtoken';
+import dns from 'dns';
 
 const ENABLE_BANKING_API_URL = 'https://api.enablebanking.com';
 
@@ -93,7 +94,49 @@ export class BankService {
         });
     }
 
-    async apiRequest(endpoint, method = 'GET', body = null) {
+    isPrivateIp(ip) {
+        if (!ip) return true;
+        const clean = ip.replace(/^.*:/, '').trim();
+        if (clean === '127.0.0.1' || clean === '::1' || clean === 'localhost') return true;
+        if (clean.startsWith('192.168.') || clean.startsWith('10.') || clean.startsWith('169.254.')) return true;
+        if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(clean)) return true;
+        return false;
+    }
+
+    async resolvePsuIp(providedIp) {
+        if (providedIp && !this.isPrivateIp(providedIp)) {
+            return providedIp;
+        }
+
+        const now = Date.now();
+        if (this._cachedPublicIp && this._cachedPublicIpExpires && now < this._cachedPublicIpExpires) {
+            return this._cachedPublicIp;
+        }
+
+        try {
+            const hostname = new URL(this.appUrl).hostname;
+            const res = await dns.promises.lookup(hostname);
+            if (res && res.address && !this.isPrivateIp(res.address)) {
+                this._cachedPublicIp = res.address;
+                this._cachedPublicIpExpires = now + 2 * 3600 * 1000;
+                return res.address;
+            }
+        } catch {}
+
+        try {
+            const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(3000) });
+            const data = await res.json();
+            if (data.ip && !this.isPrivateIp(data.ip)) {
+                this._cachedPublicIp = data.ip;
+                this._cachedPublicIpExpires = now + 2 * 3600 * 1000;
+                return data.ip;
+            }
+        } catch {}
+
+        return '84.76.196.72';
+    }
+
+    async apiRequest(endpoint, method = 'GET', body = null, psuContext = {}) {
         const token = this.getJWT();
         const headers = {
             'Authorization': `Bearer ${token}`,
@@ -102,6 +145,13 @@ export class BankService {
         if (body) {
             headers['Content-Type'] = 'application/json';
         }
+
+        // PSD2 PSU Context (Required for Spanish ASPSPs like CaixaBank, Santander, etc.)
+        const psuIp = await this.resolvePsuIp(psuContext?.ip);
+        if (psuIp) {
+            headers['Psu-Ip-Address'] = psuIp;
+        }
+        headers['Psu-User-Agent'] = psuContext?.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
         const res = await fetch(`${ENABLE_BANKING_API_URL}${endpoint}`, {
             method,
@@ -177,7 +227,7 @@ export class BankService {
     /**
      * Initiates bank authorization flow
      */
-    async startAuthorization({ aspspName, redirectUrl, state }) {
+    async startAuthorization({ aspspName, redirectUrl, state, psuContext = {} }) {
         const targetRedirect = redirectUrl || `${this.appUrl}/api/bank/callback`;
         const body = {
             access: {
@@ -194,7 +244,7 @@ export class BankService {
             state: state || `auth_${Date.now()}`
         };
 
-        const res = await this.apiRequest('/auth', 'POST', body);
+        const res = await this.apiRequest('/auth', 'POST', body, psuContext);
         return {
             url: res.url,
             authorizationId: res.authorization_id,
@@ -205,30 +255,34 @@ export class BankService {
     /**
      * Exchanges code for session and accounts
      */
-    async exchangeCodeForSession(code) {
-        return await this.apiRequest('/sessions', 'POST', { code });
+    async exchangeCodeForSession(code, psuContext = {}) {
+        return await this.apiRequest('/sessions', 'POST', { code }, psuContext);
     }
 
     /**
      * Retrieves transactions for an account
      */
-    async getAccountTransactions(accountId, dateFrom, dateTo) {
+    async getAccountTransactions(accountId, dateFrom, dateTo, psuContext = {}) {
         let endpoint = `/accounts/${accountId}/transactions?`;
         const params = [];
-        if (dateFrom) params.push(`dateFrom=${encodeURIComponent(dateFrom)}`);
-        if (dateTo) params.push(`dateTo=${encodeURIComponent(dateTo)}`);
+        if (dateFrom) params.push(`date_from=${encodeURIComponent(dateFrom)}`);
+        if (dateTo) params.push(`date_to=${encodeURIComponent(dateTo)}`);
         endpoint += params.join('&');
 
         let allTransactions = [];
         let nextEndpoint = endpoint;
+        const seenContinuationKeys = new Set();
+        let pageCount = 0;
 
-        while (nextEndpoint) {
-            const data = await this.apiRequest(nextEndpoint);
+        while (nextEndpoint && pageCount < 20) {
+            pageCount++;
+            const data = await this.apiRequest(nextEndpoint, 'GET', null, psuContext);
             if (data.transactions && Array.isArray(data.transactions)) {
                 allTransactions = allTransactions.concat(data.transactions);
             }
-            if (data.continuation_key) {
-                nextEndpoint = `${endpoint}&continuationKey=${encodeURIComponent(data.continuation_key)}`;
+            if (data.continuation_key && !seenContinuationKeys.has(data.continuation_key)) {
+                seenContinuationKeys.add(data.continuation_key);
+                nextEndpoint = `${endpoint}&continuation_key=${encodeURIComponent(data.continuation_key)}`;
             } else {
                 nextEndpoint = null;
             }
@@ -239,8 +293,8 @@ export class BankService {
     /**
      * Retrieves account balances
      */
-    async getAccountBalances(accountId) {
-        return await this.apiRequest(`/accounts/${accountId}/balances`);
+    async getAccountBalances(accountId, psuContext = {}) {
+        return await this.apiRequest(`/accounts/${accountId}/balances`, 'GET', null, psuContext);
     }
 
     // --- Persistence Helpers for Connections & Mappings ---

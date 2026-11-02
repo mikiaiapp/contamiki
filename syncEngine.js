@@ -152,7 +152,7 @@ export class SyncEngine {
      * Executes the daily or manual sync: banks + categorization + tickets + notifications
      * Optionally accepts accountUids to synchronize only a subset of mapped accounts
      */
-    async syncUser(username, { readFullUserState, saveFullUserState, accountUids = null }) {
+    async syncUser(username, { readFullUserState, saveFullUserState, accountUids = null, psuContext = {} }) {
         const connections = this.bankService.getUserConnections(username);
         let mappedAccounts = [];
         
@@ -195,7 +195,7 @@ export class SyncEngine {
             let bankTxs = [];
             try {
                 console.log(`[SYNC] Descargando movimientos para ${mapped.name || mapped.uid} (${dateFrom} -> ${today})...`);
-                bankTxs = await this.bankService.getAccountTransactions(mapped.uid, dateFrom, today);
+                bankTxs = await this.bankService.getAccountTransactions(mapped.uid, dateFrom, today, psuContext);
                 console.log(`[SYNC] ${bankTxs.length} movimientos recibidos de ${mapped.aspspName}`);
             } catch (err) {
                 console.error(`[SYNC ERROR] Error fetching transactions for ${mapped.name}:`, err.message);
