@@ -9,6 +9,22 @@ export class SyncEngine {
     }
 
     /**
+     * Extracts clean merchant name from bank/POS terminal strings
+     * E.g. "PAGO MOVIL EN PEM GUIERA, CERDANYOLA ES, TARJ. :*355035" -> "pem guiera"
+     * E.g. "COMPRA EN LIDL ST CUGAT, SANT CUGAT..." -> "lidl st cugat"
+     * E.g. "RECIBO C.P. LA BASSA 1..." -> "c.p. la bassa 1"
+     */
+    extractMerchantClean(desc) {
+        if (!desc) return '';
+        const d = desc.toLowerCase().trim();
+        const posMatch = d.match(/(?:pago\s+m[oó]vil\s+en|compra\s+(?:pago\s+m[oó]vil\s+en\s+)?en|compra\s+|recibo\s+)(.+?)(?:,|\s+tarj|\s+n[ºo]|\s+ref|\s+dees|\s+es\b|$)/i);
+        if (posMatch && posMatch[1].trim().length >= 3) {
+            return posMatch[1].trim();
+        }
+        return '';
+    }
+
+    /**
      * Attempts to find a matching category based on historical merchant descriptions and category names
      */
     findCategorySuggestion(description, txType, historicalTxs, categories, families = []) {
@@ -32,12 +48,46 @@ export class SyncEngine {
             return { categoryId: '', familyId: '', confidence: 'NONE' };
         }
 
+        // 2. Extracted Merchant Match (e.g. "pem guiera")
+        const merchant = this.extractMerchantClean(cleanDesc);
+        if (merchant && merchant.length >= 3) {
+            const merchantTxs = historicalTxs.filter(t => 
+                t.categoryId && (!t.type || t.type === txType) &&
+                (t.description || '').toLowerCase().includes(merchant)
+            );
+            if (merchantTxs.length > 0) {
+                // Count category votes among these exact merchant transactions with recency weighting
+                const votes = new Map();
+                for (const t of merchantTxs) {
+                    const weight = (t.date && t.date >= '2025-01-01') ? 3 : 1;
+                    votes.set(t.categoryId, (votes.get(t.categoryId) || 0) + weight);
+                }
+                let bestCatId = null;
+                let maxVotes = 0;
+                for (const [cid, v] of votes.entries()) {
+                    if (v > maxVotes) {
+                        maxVotes = v;
+                        bestCatId = cid;
+                    }
+                }
+                if (bestCatId && maxVotes >= 2) {
+                    const cat = candidateCats.find(c => c.id === bestCatId);
+                    if (cat) {
+                        return { categoryId: cat.id, familyId: cat.familyId, confidence: 'HIGH' };
+                    }
+                }
+            }
+        }
+
+        // 3. Multi-token weighted matching with comprehensive Stop Words (Spanish banking, cities, generic terms)
         const STOP_WORDS = new Set([
             'pago', 'movil', 'en', 'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'por', 'para',
             'tarjeta', 'tarj', 'compra', 'recibo', 'transferencia', 'trans', 'abono', 'cargo',
             'liquidacion', 'periodica', 'ref', 'mandato', 'bizum', 'orden', 'emisor', 'beneficiario',
-            'operacion', 'autorizacion', 'dees', 'es', 'spain', 'numero', 'cta', 'cuenta', 'favor',
-            'concepto', 'barcelona', 'madrid', 'banco', 'santander', 'caixabank', 'bankinter'
+            'operacion', 'autorizacion', 'dees', 'es', 'esp', 'spain', 'numero', 'cta', 'cuenta', 'favor',
+            'concepto', 'barcelona', 'madrid', 'banco', 'santander', 'caixabank', 'bankinter',
+            'cerdanyola', 'valles', 'ripollet', 'sabadell', 'terrassa', 'sant', 'cugat', 'badalona',
+            'montcada', 'mollet', 'zaragoza', 'andorra', 'cork'
         ]);
 
         const tokens = cleanDesc.split(/[^a-záéíóúñ0-9]+/).filter(w => w.length >= 3 && !STOP_WORDS.has(w) && !/^\d+$/.test(w));
@@ -52,14 +102,22 @@ export class SyncEngine {
             if (!cat) continue;
 
             const pastClean = (t.description || '').toLowerCase();
+            let matchedCount = 0;
             let score = 0;
             for (const token of tokens) {
                 if (pastClean.includes(token)) {
+                    matchedCount++;
                     score += Math.pow(token.length, 1.5);
                 }
             }
-            if (score > 0) {
-                catScores.set(cat.id, (catScores.get(cat.id) || 0) + score);
+
+            // Must match at least 2 tokens, OR 1 strong distinctive token (length >= 5)
+            const hasStrongToken = tokens.some(tk => tk.length >= 5 && pastClean.includes(tk));
+            if (matchedCount >= 2 || (matchedCount === 1 && hasStrongToken)) {
+                const recencyMultiplier = (t.date && t.date >= '2025-01-01') ? 2 : 1;
+                const cooccurrenceMultiplier = Math.pow(matchedCount, 1.5);
+                const finalScore = score * recencyMultiplier * cooccurrenceMultiplier;
+                catScores.set(cat.id, (catScores.get(cat.id) || 0) + finalScore);
             }
         }
 
@@ -72,7 +130,7 @@ export class SyncEngine {
             }
         }
 
-        if (bestCatId && maxScore >= 15) {
+        if (bestCatId && maxScore >= 20) {
             const cat = candidateCats.find(c => c.id === bestCatId);
             if (cat) {
                 return { categoryId: cat.id, familyId: cat.familyId, confidence: 'HIGH' };
