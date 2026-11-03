@@ -300,20 +300,63 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     const text = desc.toLowerCase().trim();
     if (!text) return '';
 
+    const GENERIC_STOP_WORDS = new Set([
+      'pago', 'recibo', 'tarjeta', 'tarj', 'compra', 'transferencia', 'trans', 'abono', 'cargo',
+      'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'es', 'esp', 'spain',
+      'cerdanyola', 'barcelona', 'madrid', 'valles', 'sant', 'cugat', 'ripollet', 'sabadell'
+    ]);
+
+    // 1. Extracción y cotejo directo de nombre de comercio en datáfonos bancarios
+    const merchantMatch = text.match(/(?:pago\s+m[oó]vil\s+en|compra\s+(?:pago\s+m[oó]vil\s+en\s+)?en|compra\s+|recibo\s+)(.+?)(?:,|\s+tarj|\s+n[ºo]|\s+ref|\s+dees|\s+es\b|$)/i);
+    const merchant = (merchantMatch && merchantMatch[1].trim().length >= 3) ? merchantMatch[1].trim() : '';
+    if (merchant) {
+      const merchantTxs = data.transactions.filter(t =>
+        Boolean(t.categoryId) && (t.description || '').toLowerCase().includes(merchant)
+      );
+      if (merchantTxs.length > 0) {
+        const votes = new Map<string, number>();
+        for (const t of merchantTxs) {
+          const accWeight = t.accountId === importAccount ? 3 : 1;
+          const recWeight = (t.date && t.date >= '2025-01-01') ? 2 : 1;
+          votes.set(t.categoryId, (votes.get(t.categoryId) || 0) + (accWeight * recWeight));
+        }
+        let bestId = '';
+        let maxVotes = 0;
+        for (const [cid, v] of votes.entries()) {
+          if (v > maxVotes) {
+            maxVotes = v;
+            bestId = cid;
+          }
+        }
+        if (bestId) return bestId;
+      }
+    }
+
     const isMatch = (tDesc: string) => {
-      const hText = tDesc.toLowerCase();
+      const hText = tDesc.toLowerCase().trim();
+      if (!hText || hText.length < 3 || GENERIC_STOP_WORDS.has(hText)) return false;
       return (hText.length > 2 && text.includes(hText)) || (text.length > 2 && hText.includes(text));
     };
 
-    // Prioritize matches in the current import account
-    const accountMatch = data.transactions.find(t => t.accountId === importAccount && isMatch(t.description));
-    if (accountMatch) return accountMatch.categoryId;
+    // Priorizar coincidencias en la cuenta actual (exigiendo que tenga categoría asignada y no sea traspaso)
+    const validAccountTxs = data.transactions.filter(t => t.accountId === importAccount && Boolean(t.categoryId) && isMatch(t.description));
+    if (validAccountTxs.length > 0) {
+      validAccountTxs.sort((a, b) => (b.description || '').length - (a.description || '').length);
+      return validAccountTxs[0].categoryId;
+    }
 
-    // Fallback to global history
-    const match = data.transactions.find(t => isMatch(t.description));
-    if (match) return match.categoryId;
+    // Coincidencias en el histórico global (ordenadas por especificidad/longitud de descripción)
+    const validGlobalTxs = data.transactions.filter(t => Boolean(t.categoryId) && isMatch(t.description));
+    if (validGlobalTxs.length > 0) {
+      validGlobalTxs.sort((a, b) => (b.description || '').length - (a.description || '').length);
+      return validGlobalTxs[0].categoryId;
+    }
 
-    const catMatch = data.categories.find(c => text.includes(c.name.toLowerCase()));
+    // Coincidencia con nombre de categoría directa
+    const catMatch = data.categories.find(c => {
+      const name = c.name.toLowerCase().trim();
+      return name.length >= 3 && !GENERIC_STOP_WORDS.has(name) && text.includes(name);
+    });
     if (catMatch) return catMatch.id;
     return '';
   };
