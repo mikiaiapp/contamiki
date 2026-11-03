@@ -1,19 +1,12 @@
-# Usamos una imagen ligera de Node.js basada en Alpine Linux
-FROM node:18-alpine
-
-# --- SOLUCIÓN DEL ERROR ---
-# Instalamos la librería de compatibilidad libc6 y bash para depuración.
-# Esto es OBLIGATORIO para que 'esbuild' funcione dentro de Alpine Linux.
-RUN apk add --no-cache libc6-compat bash
+# Usamos imagen Debian Slim de Node.js 20 (LTS) con soporte nativo completo para glibc
+# Esto evita problemas de compatibilidad de binarios nativos (esbuild, etc.) de Alpine/musl
+FROM node:20-slim
 
 # Establecemos el directorio de trabajo
 WORKDIR /app
 
-# 1. Copiamos primero los archivos de definición de dependencias
-# Esto permite a Docker cachear la instalación de módulos si estos archivos no cambian
-COPY package.json ./
-# Si tuvieras un package-lock.json, deberías descomentar la siguiente línea:
-# COPY package-lock.json ./
+# 1. Copiamos archivos de dependencias
+COPY package.json package-lock.json* ./
 
 # 2. Instalamos las dependencias del proyecto
 RUN npm install
@@ -22,7 +15,6 @@ RUN npm install
 COPY . .
 
 # 4. Construimos el bundle de la aplicación
-# Esto ejecutará "esbuild index.tsx ..." definido en tu package.json
 RUN npm run build
 
 # Exponemos el puerto donde correrá la app
@@ -33,5 +25,4 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 # Comando para iniciar el servidor
-
 CMD ["npm", "start"]
