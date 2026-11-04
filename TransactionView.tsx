@@ -1923,7 +1923,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
               </div>
 
               <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Concepto</label><input type="text" placeholder="Ej: Compra semanal..." className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500 transition-all" value={fDesc} onChange={e => { setFDesc(e.target.value); if (!editingTx && !fCat && fType !== 'TRANSFER') { const sugg = findSuggestedCategory(e.target.value); if (sugg) setFCat(sugg); } }} /></div>
-              <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Comprobante (Opcional)</label><div className="flex items-center gap-3"><button onClick={() => fileInputRef.current?.click()} className="flex-1 py-4 bg-white border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 active:border-indigo-400 lg:hover:border-indigo-400 active:text-indigo-500 lg:hover:text-indigo-500 transition-all font-bold uppercase text-[10px] flex justify-center items-center gap-2" disabled={isCompressing}>{isCompressing ? <span className="animate-spin">⏳</span> : <Paperclip size={16} />}{fAttachment ? 'Cambiar Archivo' : 'Adjuntar Imagen'}</button>{fAttachment && (<button onClick={() => setFAttachment(undefined)} className="p-4 bg-rose-50 text-rose-500 rounded-2xl active:bg-rose-100 lg:hover:bg-rose-100"><Trash2 size={18} /></button>)}</div><input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />{fAttachment && <p className="text-[10px] text-emerald-500 font-bold flex items-center gap-1"><Check size={12} /> Archivo listo para guardar</p>}</div>
+              <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Comprobante (Opcional)</label><div className="flex items-center gap-3"><button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 py-4 bg-white border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 active:border-indigo-400 lg:hover:border-indigo-400 active:text-indigo-500 lg:hover:text-indigo-500 transition-all font-bold uppercase text-[10px] flex justify-center items-center gap-2" disabled={isCompressing}>{isCompressing ? <span className="animate-spin">⏳</span> : <Paperclip size={16} />}{fAttachment ? 'Cambiar Archivo' : 'Adjuntar Imagen'}</button>{fAttachment && (<button type="button" onClick={() => setFAttachment(undefined)} className="p-4 bg-rose-50 text-rose-500 rounded-2xl active:bg-rose-100 lg:hover:bg-rose-100"><Trash2 size={18} /></button>)}</div><input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />{fAttachment && <div className="flex items-center gap-2 text-[10px] text-emerald-500 font-bold"><p className="flex items-center gap-1"><Check size={12} /> {fAttachment.startsWith('data:') ? 'Archivo listo para guardar' : 'Comprobante adjuntado'}</p><button type="button" onClick={() => setPreviewAttachment(fAttachment)} className="text-indigo-500 underline font-bold ml-1">Ver</button></div>}</div>
               <button onClick={handleSave} className="w-full py-6 bg-slate-950 text-white rounded-2xl font-black uppercase text-[11px] active:bg-indigo-600 lg:hover:bg-indigo-600 shadow-xl tracking-widest transition-all active:scale-95">{editingTx ? 'Actualizar Movimiento' : 'Guardar Movimiento'}</button>
             </div>
           </div>
@@ -2010,25 +2010,38 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         </div>
       )}
 
-      {previewAttachment && (
-        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[300] p-4 animate-in fade-in zoom-in duration-300 cursor-pointer" onClick={() => setPreviewAttachment(null)}>
-          <div className="relative max-w-4xl max-h-[90vh] w-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setPreviewAttachment(null)} className="absolute -top-12 right-0 p-2 text-white/50 active:text-white lg:hover:text-white cursor-pointer touch-action-manipulation"><X size={32} /></button>
-            {previewAttachment.startsWith('data:application/pdf') || previewAttachment.includes('application/pdf') ? (
-              <iframe src={previewAttachment} className="w-full h-[80vh] rounded-2xl shadow-2xl border-4 border-white/10 bg-white" title="Comprobante PDF" />
-            ) : (
-              <img src={previewAttachment} className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border-4 border-white/10" alt="Comprobante" />
-            )}
-            <a
-              href={previewAttachment}
-              download={previewAttachment.startsWith('data:application/pdf') || previewAttachment.includes('application/pdf') ? `ticket_${Date.now()}.pdf` : `comprobante_${Date.now()}.jpg`}
-              className="mt-4 px-6 py-3 bg-white text-slate-900 rounded-full font-black uppercase text-[10px] tracking-widest active:scale-105 lg:hover:scale-105 transition-transform shadow-xl flex items-center gap-2 touch-action-manipulation"
-            >
-              <ArrowUpDown size={14} className="rotate-180" /> {previewAttachment.startsWith('data:application/pdf') || previewAttachment.includes('application/pdf') ? 'Descargar Ticket PDF' : 'Descargar Imagen Original'}
-            </a>
+      {previewAttachment && (() => {
+        const getAttachmentUrl = (url: string) => {
+          if (!url) return '';
+          if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+          const token = localStorage.getItem('auth_token') || '';
+          if (!token) return url;
+          const sep = url.includes('?') ? '&' : '?';
+          return `${url}${sep}key=${encodeURIComponent(token)}`;
+        };
+        const resolvedUrl = getAttachmentUrl(previewAttachment);
+        const isPdf = previewAttachment.toLowerCase().includes('.pdf') || previewAttachment.includes('application/pdf');
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[300] p-4 animate-in fade-in zoom-in duration-300 cursor-pointer" onClick={() => setPreviewAttachment(null)}>
+            <div className="relative max-w-4xl max-h-[90vh] w-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setPreviewAttachment(null)} className="absolute -top-12 right-0 p-2 text-white/50 active:text-white lg:hover:text-white cursor-pointer touch-action-manipulation"><X size={32} /></button>
+              {isPdf ? (
+                <iframe src={resolvedUrl} className="w-full h-[80vh] rounded-2xl shadow-2xl border-4 border-white/10 bg-white" title="Comprobante PDF" />
+              ) : (
+                <img src={resolvedUrl} className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border-4 border-white/10" alt="Comprobante" />
+              )}
+              <a
+                href={resolvedUrl}
+                download={isPdf ? `ticket_${Date.now()}.pdf` : `comprobante_${Date.now()}.jpg`}
+                className="mt-4 px-6 py-3 bg-white text-slate-900 rounded-full font-black uppercase text-[10px] tracking-widest active:scale-105 lg:hover:scale-105 transition-transform shadow-xl flex items-center gap-2 touch-action-manipulation"
+              >
+                <ArrowUpDown size={14} className="rotate-180" /> {isPdf ? 'Descargar Ticket PDF' : 'Descargar Imagen Original'}
+              </a>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Global Selectors moved to top level to fix stacking and positioning issues */}
       {openSelectorId && (

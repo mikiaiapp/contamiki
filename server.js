@@ -595,9 +595,38 @@ const saveFullUserState = async (username, fullState) => {
             }
 
             await fs.mkdir(targetDir, { recursive: true });
+            const attachmentsDir = path.join(targetDir, 'attachments');
+            await fs.mkdir(attachmentsDir, { recursive: true });
 
             // Separar transacciones de configuración
             const { transactions, ...configData } = bookData;
+
+            // Desacoplar adjuntos en base64 hacia archivos en disco
+            if (Array.isArray(transactions)) {
+                for (const tx of transactions) {
+                    if (tx.attachment && typeof tx.attachment === 'string' && tx.attachment.startsWith('data:')) {
+                        const match = tx.attachment.match(/^data:([^;]+);base64,(.+)$/s);
+                        if (match) {
+                            const mime = match[1];
+                            const b64Data = match[2];
+                            let ext = '.jpg';
+                            if (mime.includes('pdf')) ext = '.pdf';
+                            else if (mime.includes('png')) ext = '.png';
+                            else if (mime.includes('webp')) ext = '.webp';
+                            const safeTxId = (tx.id || 'att_' + Date.now()).replace(/[^a-zA-Z0-9_-]/g, '_');
+                            const attachmentFileName = `${safeTxId}${ext}`;
+                            const attachmentPath = path.join(attachmentsDir, attachmentFileName);
+                            try {
+                                const buffer = Buffer.from(b64Data, 'base64');
+                                await fs.writeFile(attachmentPath, buffer);
+                                tx.attachment = `/api/book/${bookId}/attachments/${attachmentFileName}`;
+                            } catch (attErr) {
+                                console.error(`[ATTACHMENT SAVE ERROR] tx ${tx.id}:`, attErr);
+                            }
+                        }
+                    }
+                }
+            }
 
             // Guardar Configuración (Overwrite atomic)
             const configFile = path.join(targetDir, 'config.json');
@@ -658,9 +687,9 @@ const saveUsers = async (users) => {
 const authenticateToken = (req, res, next) => {
   let token = req.headers['authorization'] && req.headers['authorization'].split(' ')[1];
   
-  // Soporte para token por Query Param (para cargar imágenes)
-  if (!token && req.query.key) {
-      token = req.query.key;
+  // Soporte para token por Query Param (para cargar imágenes y archivos adjuntos)
+  if (!token && (req.query.key || req.query.token)) {
+      token = req.query.key || req.query.token;
   }
   
   if (!token) return res.status(401).json({ error: "No autorizado" });
@@ -1073,8 +1102,54 @@ app.get('/api/book/:bookId/logo', authenticateToken, async (req, res) => {
         await fs.access(logoPath);
         res.sendFile(logoPath);
     } catch {
+        // Podría ser libro compartido
+        try {
+            const sharedAccess = await readSharedAccess();
+            const access = sharedAccess.find(a => a.userId === req.user.username && a.bookId === bookId);
+            if (access) {
+                const ownerDir = getUserDir(access.ownerUsername);
+                const ownerLogoPath = path.join(ownerDir, safeBookId, 'logo.png');
+                await fs.access(ownerLogoPath);
+                return res.sendFile(ownerLogoPath);
+            }
+        } catch {}
         res.status(404).send('Not found');
     }
+});
+
+// Servir archivos adjuntos / comprobantes / tickets (AUTENTICADO)
+app.get('/api/book/:bookId/attachments/:filename', authenticateToken, async (req, res) => {
+    const { bookId, filename } = req.params;
+    const safeBookId = bookId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const safeFilename = path.basename(filename);
+    
+    // Comprobar si el usuario tiene acceso al libro (propio o compartido)
+    let bookDir = path.join(getUserDir(req.user.username), safeBookId);
+    let filePath = path.join(bookDir, 'attachments', safeFilename);
+    let fileExists = false;
+
+    try {
+        await fs.access(filePath);
+        fileExists = true;
+    } catch {
+        // Verificar si es un libro compartido al que tiene acceso
+        try {
+            const sharedAccess = await readSharedAccess();
+            const access = sharedAccess.find(a => a.userId === req.user.username && a.bookId === bookId);
+            if (access) {
+                bookDir = path.join(getUserDir(access.ownerUsername), safeBookId);
+                filePath = path.join(bookDir, 'attachments', safeFilename);
+                await fs.access(filePath);
+                fileExists = true;
+            }
+        } catch {}
+    }
+
+    if (!fileExists) {
+        return res.status(404).send('Comprobante no encontrado');
+    }
+
+    res.sendFile(filePath);
 });
 
 // RUTA PÚBLICA PARA EL LOGO DEL SISTEMA (LOGIN SCREEN)
