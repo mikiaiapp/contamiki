@@ -141,6 +141,62 @@ export class SyncEngine {
     }
 
     /**
+     * Extracts official accounting balance from Enable Banking balances payload
+     */
+    extractBankBalance(balancesResponse) {
+        if (!balancesResponse || !Array.isArray(balancesResponse.balances) || balancesResponse.balances.length === 0) {
+            return null;
+        }
+        const balances = balancesResponse.balances;
+        // Prefer CLBD (Closing Booked / Saldo contable oficial)
+        const clbd = balances.find(b => b.balance_type === 'CLBD');
+        if (clbd && clbd.balance_amount && clbd.balance_amount.amount !== undefined) {
+            return {
+                amount: parseFloat(clbd.balance_amount.amount),
+                currency: clbd.balance_amount.currency || 'EUR',
+                type: clbd.balance_type,
+                referenceDate: clbd.reference_date || null
+            };
+        }
+        const anyBal = balances.find(b => b.balance_amount && b.balance_amount.amount !== undefined);
+        if (anyBal) {
+            return {
+                amount: parseFloat(anyBal.balance_amount.amount),
+                currency: anyBal.balance_amount.currency || 'EUR',
+                type: anyBal.balance_type || anyBal.name || 'Contable',
+                referenceDate: anyBal.reference_date || null
+            };
+        }
+        return null;
+    }
+
+    /**
+     * Computes the current balance of an account in ContaMiki across all book transactions
+     */
+    calculateAccountBalance(bookData, accountId) {
+        if (!bookData) return 0;
+        const contaAcc = (bookData.accounts || []).find(a => a.id === accountId);
+        let balance = contaAcc ? (Number(contaAcc.initialBalance) || 0) : 0;
+
+        for (const t of (bookData.transactions || [])) {
+            let eff = Number(t.amount);
+            if (t.type === 'EXPENSE' || t.type === 'TRANSFER') {
+                eff = -Math.abs(eff);
+            } else {
+                eff = Math.abs(eff);
+            }
+
+            if (t.accountId === accountId) {
+                balance += eff;
+            }
+            if (t.type === 'TRANSFER' && t.transferAccountId === accountId) {
+                balance -= eff;
+            }
+        }
+        return Math.round(balance * 100) / 100;
+    }
+
+    /**
      * Parses tickets in inbox and matches against transactions
      */
     async matchTicketsInbox(bookTransactions) {
@@ -240,7 +296,7 @@ export class SyncEngine {
      * Executes the daily or manual sync: banks + categorization + tickets + notifications
      * Optionally accepts accountUids to synchronize only a subset of mapped accounts
      */
-    async syncUser(username, { readFullUserState, saveFullUserState, accountUids = null, psuContext = {} }) {
+    async syncUser(username, { readFullUserState, saveFullUserState, accountUids = null, isScheduled = false, psuContext = {} }) {
         const connections = this.bankService.getUserConnections(username);
         let mappedAccounts = [];
         
@@ -258,13 +314,14 @@ export class SyncEngine {
         }
 
         if (mappedAccounts.length === 0) {
-            return { success: true, message: 'No hay cuentas bancarias seleccionadas o mapeadas para sincronizar.', newTxs: 0, matchedTickets: 0, syncedAccountsCount: 0 };
+            return { success: true, message: 'No hay cuentas bancarias seleccionadas o mapeadas para sincronizar.', newTxs: 0, matchedTickets: 0, syncedAccountsCount: 0, balanceReconciliations: [] };
         }
 
         const userState = await readFullUserState(username);
         let totalNewTxs = 0;
         const categorizedTxsSummary = [];
         const pendingTxsSummary = [];
+        const balanceReconciliations = [];
 
         // 1. Fetch transactions for each mapped account
         const today = new Date().toISOString().split('T')[0];
@@ -380,6 +437,58 @@ export class SyncEngine {
                 }
             }
 
+            // Obtener saldo bancario en tiempo real para cuadre contable
+            let bankBalInfo = null;
+            try {
+                const balRes = await this.bankService.getAccountBalances(mapped.uid, psuContext);
+                bankBalInfo = this.extractBankBalance(balRes);
+            } catch (balErr) {
+                console.warn(`[SYNC] No se pudo obtener saldo bancario para ${mapped.name || mapped.uid}:`, balErr.message);
+            }
+
+            const contaBalance = this.calculateAccountBalance(bookData, mapped.mappedAccountId);
+            const contaAcc = (bookData.accounts || []).find(a => a.id === mapped.mappedAccountId);
+            const accountDisplayName = contaAcc ? contaAcc.name : (mapped.name || 'Cuenta Bancaria');
+
+            if (bankBalInfo !== null) {
+                const diff = Math.round((contaBalance - bankBalInfo.amount) * 100) / 100;
+                const isCuadrado = Math.abs(diff) < 0.01;
+                balanceReconciliations.push({
+                    uid: mapped.uid,
+                    connectionId: mapped.connectionId,
+                    aspspName: mapped.aspspName,
+                    accountName: accountDisplayName,
+                    iban: mapped.iban,
+                    bankBalance: bankBalInfo.amount,
+                    contaBalance,
+                    diff,
+                    isCuadrado,
+                    referenceDate: bankBalInfo.referenceDate
+                });
+
+                if (this.bankService && typeof this.bankService.updateAccountBalanceInfo === 'function') {
+                    this.bankService.updateAccountBalanceInfo(username, mapped.connectionId, mapped.uid, {
+                        bankBalance: bankBalInfo.amount,
+                        contaBalance,
+                        diff,
+                        isCuadrado,
+                        checkedAt: new Date().toISOString()
+                    });
+                }
+            } else {
+                balanceReconciliations.push({
+                    uid: mapped.uid,
+                    connectionId: mapped.connectionId,
+                    aspspName: mapped.aspspName,
+                    accountName: accountDisplayName,
+                    iban: mapped.iban,
+                    bankBalance: null,
+                    contaBalance,
+                    diff: null,
+                    isCuadrado: false
+                });
+            }
+
             const nowIso = new Date().toISOString();
             mapped.lastSync = nowIso;
             if (this.bankService && typeof this.bankService.updateAccountLastSync === 'function') {
@@ -402,8 +511,16 @@ export class SyncEngine {
         // 3. Guardar estado del usuario
         await saveFullUserState(username, userState);
 
-        // 4. Enviar notificación multicanal si hubo actividad
-        if (totalNewTxs > 0 || totalMatched > 0 || totalPending > 0) {
+        const formatMoney = (val) => {
+            if (val === null || val === undefined || isNaN(val)) return '0,00 €';
+            return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val) + ' €';
+        };
+
+        // 4. Enviar notificación multicanal si hubo actividad o cuadre de saldos
+        const hasDifferences = balanceReconciliations.some(r => r.bankBalance !== null && !r.isCuadrado);
+        const shouldNotify = totalNewTxs > 0 || totalMatched > 0 || totalPending > 0 || hasDifferences || isScheduled;
+
+        if (shouldNotify) {
             const lines = [];
 
             if (categorizedTxsSummary.length > 0) {
@@ -420,6 +537,20 @@ export class SyncEngine {
                 }
             }
 
+            if (balanceReconciliations.length > 0) {
+                lines.push(`<b>⚖️ Cuadre de saldos:</b>`);
+                for (const rec of balanceReconciliations) {
+                    if (rec.bankBalance === null) {
+                        lines.push(`• <b>${rec.accountName} (${rec.aspspName}):</b> Saldo no disponible en la API`);
+                    } else if (rec.isCuadrado) {
+                        lines.push(`• <b>${rec.accountName}:</b> El saldo de <b>${formatMoney(rec.bankBalance)}</b> está cuadrado ✅`);
+                    } else {
+                        const diffSign = rec.diff > 0 ? '+' : '';
+                        lines.push(`• <b>${rec.accountName}:</b> Banco ${formatMoney(rec.bankBalance)} vs ContaMiki ${formatMoney(rec.contaBalance)} (Diferencia: <b>${diffSign}${formatMoney(rec.diff)}</b>) ⚠️`);
+                    }
+                }
+            }
+
             if (totalMatched > 0) {
                 lines.push(`📎 <b>${totalMatched} factura(s) emparejada(s)</b> automáticamente.`);
             }
@@ -427,10 +558,17 @@ export class SyncEngine {
                 lines.push(`⏳ <b>${totalPending} ticket(s) en buzón</b> esperando cargo bancario.`);
             }
 
+            const squaredCount = balanceReconciliations.filter(r => r.isCuadrado).length;
+            const stats = `Cuentas: ${mappedAccounts.length} | Categorizados: ${categorizedTxsSummary.length} | Saldos cuadrados: ${squaredCount}/${balanceReconciliations.length}`;
+
             await this.notificationService.notifyUser(username, {
                 title: 'Resumen bancario matutino',
-                summary: `Se han procesado ${totalNewTxs} nuevo(s) movimiento(s) bancario(s).`,
-                stats: `Cuentas sincronizadas: ${mappedAccounts.length} | Categorizados: ${categorizedTxsSummary.length} | Pendientes: ${pendingTxsSummary.length}`,
+                summary: totalNewTxs > 0
+                    ? `Se han procesado ${totalNewTxs} nuevo(s) movimiento(s) bancario(s).`
+                    : (hasDifferences
+                        ? `Se ha revisado la sincronización bancaria y se han detectado diferencias de saldo.`
+                        : `Sincronización bancaria completada. Todos los saldos coinciden con los bancos.`),
+                stats,
                 lines
             });
         }
@@ -442,7 +580,8 @@ export class SyncEngine {
             pendingTickets: totalPending,
             categorizedCount: categorizedTxsSummary.length,
             pendingCategorizationCount: pendingTxsSummary.length,
-            syncedAccountsCount: mappedAccounts.length
+            syncedAccountsCount: mappedAccounts.length,
+            balanceReconciliations
         };
     }
 }

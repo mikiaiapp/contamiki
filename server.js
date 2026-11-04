@@ -1642,7 +1642,7 @@ setInterval(async () => {
             if (hour === targetHour && lastDailySyncDate !== syncKey) {
                 lastDailySyncDate = syncKey;
                 console.log(`[MORNING SYNC] Iniciando barrido automático matutino a las ${hour}:00 para ${u.username}`);
-                await syncEngine.syncUser(u.username, { readFullUserState, saveFullUserState });
+                await syncEngine.syncUser(u.username, { readFullUserState, saveFullUserState, isScheduled: true });
             }
         }
     } catch (syncErr) {

@@ -347,7 +347,18 @@ export class BankService {
             newConn.accounts = newConn.accounts.map(acc => {
                 const old = oldAccounts.find(o => o.uid === acc.uid || o.iban === acc.iban);
                 if (old) {
-                    return { ...acc, mappedBookId: old.mappedBookId, mappedAccountId: old.mappedAccountId, enabled: old.enabled };
+                    return {
+                        ...acc,
+                        mappedBookId: old.mappedBookId,
+                        mappedAccountId: old.mappedAccountId,
+                        enabled: old.enabled,
+                        lastSync: old.lastSync,
+                        lastBankBalance: old.lastBankBalance,
+                        lastContaBalance: old.lastContaBalance,
+                        lastBalanceDiff: old.lastBalanceDiff,
+                        lastIsCuadrado: old.lastIsCuadrado,
+                        lastBalanceCheck: old.lastBalanceCheck
+                    };
                 }
                 return acc;
             });
@@ -389,6 +400,22 @@ export class BankService {
             const acc = (conn.accounts || []).find(a => a.uid === accountUid);
             if (acc) {
                 acc.lastSync = lastSyncIso;
+                this.saveConnections(all);
+            }
+        }
+    }
+
+    updateAccountBalanceInfo(username, connectionId, accountUid, balanceInfo) {
+        const all = this.readConnections();
+        const conn = all.find(c => c.username === username && c.id === connectionId);
+        if (conn) {
+            const acc = (conn.accounts || []).find(a => a.uid === accountUid);
+            if (acc) {
+                acc.lastBankBalance = balanceInfo.bankBalance;
+                acc.lastContaBalance = balanceInfo.contaBalance;
+                acc.lastBalanceDiff = balanceInfo.diff;
+                acc.lastIsCuadrado = balanceInfo.isCuadrado;
+                acc.lastBalanceCheck = balanceInfo.checkedAt;
                 this.saveConnections(all);
             }
         }

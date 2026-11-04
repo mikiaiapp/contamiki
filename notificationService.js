@@ -89,7 +89,16 @@ export class NotificationService {
                 let tgText = `📊 <b>ContaMiki | ${title}</b>\n\n`;
                 if (summary) tgText += `${summary}\n\n`;
                 if (lines && lines.length > 0) {
-                    tgText += lines.map(l => `• ${l}`).join('\n') + '\n\n';
+                    tgText += lines.map(l => {
+                        const trimmed = l.trim();
+                        if (trimmed.startsWith('<b>') || trimmed.startsWith('⚖️') || trimmed.startsWith('📎') || trimmed.startsWith('⏳')) {
+                            return trimmed;
+                        }
+                        if (trimmed.startsWith('•')) {
+                            return trimmed;
+                        }
+                        return `• ${trimmed}`;
+                    }).join('\n') + '\n\n';
                 }
                 if (stats) {
                     tgText += `<i>${stats}</i>`;
@@ -110,7 +119,14 @@ export class NotificationService {
         if (settings.email?.enabled && this.sendEmailFn) {
             try {
                 const targetEmail = settings.email.address || username;
-                const htmlLines = lines.map(l => `<li style="margin-bottom:6px;">${l}</li>`).join('');
+                const htmlLines = lines.map(l => {
+                    const trimmed = l.trim();
+                    if (trimmed.startsWith('<b>')) {
+                        return `<li style="list-style:none; margin-top:14px; margin-bottom:6px; font-weight:bold; font-size:14px; color:#1e293b;">${trimmed}</li>`;
+                    }
+                    const cleanText = trimmed.replace(/^•\s*/, '');
+                    return `<li style="margin-bottom:6px; margin-left: 10px; font-size:13px; color:#334155;">${cleanText}</li>`;
+                }).join('');
                 const htmlContent = `
                     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1e293b;">
                         <div style="background: linear-gradient(135deg, #4f46e5, #6366f1); padding: 24px; border-radius: 16px; color: white; margin-bottom: 20px;">

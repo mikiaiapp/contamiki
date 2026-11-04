@@ -111,8 +111,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, onAddTransaction, on
         if (onRefreshData) {
           await onRefreshData();
         }
+        let balanceMsg = '';
+        if (result.balanceReconciliations && result.balanceReconciliations.length > 0) {
+          const squared = result.balanceReconciliations.filter((r: any) => r.isCuadrado).length;
+          const total = result.balanceReconciliations.length;
+          if (squared === total) {
+            balanceMsg = ` • ⚖️ Saldos: ${squared}/${total} cuadrados ✅`;
+          } else {
+            balanceMsg = ` • ⚠️ Saldos: ${squared}/${total} cuadrados (${total - squared} con diferencia)`;
+          }
+        }
         setBankSyncFeedback({
-          message: `✨ ¡Sincronizado! ${result.newTxs || 0} movimientos nuevos (${result.categorizedCount || 0} categorizados, ${result.pendingCategorizationCount || 0} pendientes).`,
+          message: `✨ ¡Sincronizado! ${result.newTxs || 0} movimientos nuevos (${result.categorizedCount || 0} categorizados, ${result.pendingCategorizationCount || 0} pendientes)${balanceMsg}`,
           type: 'success'
         });
         setTimeout(() => {

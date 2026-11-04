@@ -105,6 +105,11 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
       bookName: string;
       accountName: string;
       lastSync?: string;
+      lastBankBalance?: number;
+      lastContaBalance?: number;
+      lastBalanceDiff?: number;
+      lastIsCuadrado?: boolean;
+      lastBalanceCheck?: string;
     }> = [];
     if (!status?.connections) return list;
     for (const conn of status.connections) {
@@ -121,7 +126,12 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
             bankName,
             bookName: book ? book.name : (acc.mappedBookId || 'Contabilidad'),
             accountName: acct ? acct.name : (acc.mappedAccountId || 'Cuenta asociada'),
-            lastSync: acc.lastSync
+            lastSync: acc.lastSync,
+            lastBankBalance: acc.lastBankBalance,
+            lastContaBalance: acc.lastContaBalance,
+            lastBalanceDiff: acc.lastBalanceDiff,
+            lastIsCuadrado: acc.lastIsCuadrado,
+            lastBalanceCheck: acc.lastBalanceCheck
           });
         }
       }
@@ -586,6 +596,19 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                         </div>
                         {acc.lastSync && (
                           <p className="text-[10px] text-emerald-600 font-medium mt-1">Última sincronización: {new Date(acc.lastSync).toLocaleString()}</p>
+                        )}
+                        {acc.lastBalanceCheck && acc.lastBankBalance !== undefined && acc.lastBankBalance !== null && (
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            {acc.lastIsCuadrado ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                ⚖️ Saldo cuadrado: {new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(acc.lastBankBalance)} €
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                                ⚠️ Dif: {acc.lastBalanceDiff > 0 ? '+' : ''}{new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(acc.lastBalanceDiff)} € (Banco: {new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(acc.lastBankBalance)} € | ContaMiki: {new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(acc.lastContaBalance)} €)
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
 
@@ -1136,6 +1159,19 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                           <p className="text-[9px] text-emerald-600 font-medium mt-0.5">
                             Última sinc: {new Date(item.lastSync).toLocaleString()}
                           </p>
+                        )}
+                        {item.lastBalanceCheck && item.lastBankBalance !== undefined && item.lastBankBalance !== null && (
+                          <div className="mt-1">
+                            {item.lastIsCuadrado ? (
+                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100/70 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                ⚖️ Saldo cuadrado ({new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.lastBankBalance)} €)
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-bold text-amber-700 bg-amber-100/70 border border-amber-200 px-1.5 py-0.5 rounded">
+                                ⚠️ Dif: {item.lastBalanceDiff > 0 ? '+' : ''}{new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.lastBalanceDiff)} € (Banco: {new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.lastBankBalance)} €)
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
