@@ -2022,22 +2022,128 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
         const resolvedUrl = getAttachmentUrl(previewAttachment);
         const isPdf = previewAttachment.toLowerCase().includes('.pdf') || previewAttachment.includes('application/pdf');
 
+        const isIOS = typeof navigator !== 'undefined' && (
+          /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+        );
+
+        const handleDownload = async (e: React.MouseEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          try {
+            const filename = isPdf ? `ticket_${Date.now()}.pdf` : `comprobante_${Date.now()}.jpg`;
+            const mime = isPdf ? 'application/pdf' : 'image/jpeg';
+
+            // 1. En iOS (iPhone / iPad / Safari PWA), el API nativo navigator.share
+            // abre el Share Sheet oficial de iOS ("Guardar en Archivos", "Imprimir", etc.)
+            // ¡sin abandonar jamás la app de ContaMiki ni recargar la pantalla!
+            if (isIOS && navigator.share && navigator.canShare) {
+              try {
+                const res = await fetch(resolvedUrl);
+                const blob = await res.blob();
+                const file = new File([blob], filename, { type: blob.type || mime });
+                if (navigator.canShare({ files: [file] })) {
+                  await navigator.share({
+                    files: [file],
+                    title: isPdf ? 'Ticket PDF' : 'Comprobante',
+                  });
+                  return;
+                }
+              } catch (shareErr: any) {
+                if (shareErr.name === 'AbortError') return; // Cancelado por el usuario
+              }
+            }
+
+            // 2. En escritorio o navegadores estándar, descarga limpia mediante Blob URL
+            const res = await fetch(resolvedUrl);
+            const blob = await res.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = blobUrl;
+            a.download = filename;
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+              document.body.removeChild(a);
+              window.URL.revokeObjectURL(blobUrl);
+            }, 1000);
+          } catch (err) {
+            console.warn('Error descargando adjunto:', err);
+            // Fallback seguro: abrir en pestaña nueva en vez de navegar la ventana actual
+            window.open(resolvedUrl, '_blank');
+          }
+        };
+
         return (
-          <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[300] p-4 animate-in fade-in zoom-in duration-300 cursor-pointer" onClick={() => setPreviewAttachment(null)}>
-            <div className="relative max-w-4xl max-h-[90vh] w-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
-              <button onClick={() => setPreviewAttachment(null)} className="absolute -top-12 right-0 p-2 text-white/50 active:text-white lg:hover:text-white cursor-pointer touch-action-manipulation"><X size={32} /></button>
-              {isPdf ? (
-                <iframe src={resolvedUrl} className="w-full h-[80vh] rounded-2xl shadow-2xl border-4 border-white/10 bg-white" title="Comprobante PDF" />
-              ) : (
-                <img src={resolvedUrl} className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border-4 border-white/10" alt="Comprobante" />
-              )}
-              <a
-                href={resolvedUrl}
-                download={isPdf ? `ticket_${Date.now()}.pdf` : `comprobante_${Date.now()}.jpg`}
-                className="mt-4 px-6 py-3 bg-white text-slate-900 rounded-full font-black uppercase text-[10px] tracking-widest active:scale-105 lg:hover:scale-105 transition-transform shadow-xl flex items-center gap-2 touch-action-manipulation"
+          <div 
+            className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-between z-[300] p-4 sm:p-6 animate-in fade-in zoom-in duration-300" 
+            onClick={() => setPreviewAttachment(null)}
+          >
+            {/* Header del visualizador con botón de cerrar visible y seguro en iOS */}
+            <div 
+              className="w-full max-w-4xl flex items-center justify-between pb-3 text-white border-b border-white/10 shrink-0" 
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{isPdf ? '📄' : '🖼️'}</span>
+                <span className="font-bold text-xs uppercase tracking-wider text-slate-200">
+                  {isPdf ? 'Comprobante PDF' : 'Imagen Comprobante'}
+                </span>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setPreviewAttachment(null)} 
+                className="px-3 py-1.5 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white rounded-full text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer touch-action-manipulation"
               >
-                <ArrowUpDown size={14} className="rotate-180" /> {isPdf ? 'Descargar Ticket PDF' : 'Descargar Imagen Original'}
-              </a>
+                <X size={16} /> <span>Cerrar</span>
+              </button>
+            </div>
+
+            {/* Contenedor del documento */}
+            <div 
+              className="relative max-w-4xl w-full flex-1 flex items-center justify-center my-3 overflow-hidden" 
+              onClick={e => e.stopPropagation()}
+            >
+              {isPdf ? (
+                <iframe 
+                  src={resolvedUrl} 
+                  className="w-full h-full rounded-2xl shadow-2xl border-2 border-white/10 bg-white" 
+                  title="Comprobante PDF" 
+                />
+              ) : (
+                <img 
+                  src={resolvedUrl} 
+                  className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl border-2 border-white/10" 
+                  alt="Comprobante" 
+                />
+              )}
+            </div>
+
+            {/* Barra de acciones inferior */}
+            <div 
+              className="w-full max-w-4xl flex items-center justify-center gap-3 pt-2 shrink-0" 
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={handleDownload}
+                className="px-6 py-3 bg-white hover:bg-slate-100 active:scale-95 text-slate-900 rounded-full font-black uppercase text-[10px] tracking-widest transition-all shadow-xl flex items-center gap-2 touch-action-manipulation cursor-pointer"
+              >
+                <Download size={14} /> 
+                {isIOS 
+                  ? 'Guardar / Compartir Documento' 
+                  : (isPdf ? 'Descargar Ticket PDF' : 'Descargar Imagen')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewAttachment(null)}
+                className="px-5 py-3 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white rounded-full font-bold uppercase text-[10px] tracking-widest transition-all flex items-center gap-1.5 touch-action-manipulation cursor-pointer"
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         );
