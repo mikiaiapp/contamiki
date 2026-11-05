@@ -78,10 +78,12 @@ Registrar un movimiento en el día a día es una experiencia inmediata y agradab
 Nunca más perderás una garantía ni un justificante de compra:
 - **Adjunta cualquier comprobante:**  
   Soporta facturas en **PDF**, fotos de tickets en **JPG** o **PNG**.
+- **🧠 Motor de Análisis y Extracción de PDFs Integrado:**  
+  Incorpora un motor nativo de parsing de documentos PDF (basado en `pdf-parse` / Mozilla PDF.js) que descomprime y analiza internamente los flujos de factura digital, extrayendo con total precisión la fecha y el importe total real, incluso en tickets digitales de Mercadona, Amazon, recibos de suministros o facturas complejas sin fecha ni importe en el nombre del archivo.
 - **Visor Interactivo Integrado:**  
   Abre cualquier transacción y previsualiza el PDF o la foto directamente en un visor nativo integrado en la aplicación, con opciones de pantalla completa, zoom y descarga.
 - **📥 Buzón de Tickets Inbox (`tickets_inbox`):**  
-  Deja tus PDFs o fotos en la carpeta compartida de red de tu NAS o envíalos desde tu teléfono móvil. En el barrido diario, ContaMiki analiza el importe y la fecha del documento y lo **empareja automáticamente con el movimiento bancario correspondiente**, eliminándolo del buzón una vez conciliado.
+  Deja tus PDFs o fotos en la carpeta compartida de red de tu NAS o envíalos desde tu teléfono móvil. En el barrido diario (o pulsando el botón **«Conciliar tickets del buzón ahora»**), ContaMiki analiza el documento y lo **empareja automáticamente con el movimiento bancario correspondiente**, archivándolo en el apunte y eliminándolo del buzón una vez conciliado.
 
 ---
 
