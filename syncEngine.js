@@ -264,7 +264,7 @@ export class SyncEngine {
             if (!ticketAmount) continue;
 
             // Search in book transactions: same amount, date +- 3 days
-            const candidate = bookTransactions.find(t => {
+            const candidates = bookTransactions.filter(t => {
                 if (t.attachment) return false; // already has attachment
                 const txAmt = Math.abs(Number(t.amount));
                 if (Math.abs(txAmt - ticketAmount) >= 0.01) return false;
@@ -279,7 +279,13 @@ export class SyncEngine {
                 return diffDays <= 3;
             });
 
-            if (candidate) {
+            if (candidates.length > 0) {
+                // Si hay varios candidatos y tenemos fecha, priorizar la transacción más cercana a la fecha del ticket
+                if (ticketDate && candidates.length > 1) {
+                    const tkDate = new Date(ticketDate);
+                    candidates.sort((a, b) => Math.abs(new Date(a.date) - tkDate) - Math.abs(new Date(b.date) - tkDate));
+                }
+                const candidate = candidates[0];
                 // Convert file to base64 Data URI
                 const fileBuf = fs.readFileSync(filePath);
                 let mime = 'application/pdf';
@@ -578,10 +584,16 @@ export class SyncEngine {
             }
         }
 
-        // 2. Emparejamiento de tickets en los libros afectados
+        // 2. Emparejamiento de tickets en todas las contabilidades del usuario
         let totalMatched = 0;
         let totalPending = 0;
-        for (const bookId of affectedBookIds) {
+        const allBookIds = new Set([
+            ...affectedBookIds,
+            userState.currentBookId,
+            ...Object.keys(userState.booksData || {})
+        ].filter(Boolean));
+
+        for (const bookId of allBookIds) {
             const bData = userState.booksData[bookId];
             if (bData && bData.transactions) {
                 const ticketResult = await this.matchTicketsInbox(bData.transactions);
