@@ -206,9 +206,6 @@ export class SyncEngine {
         let matchedCount = 0;
         const details = [];
 
-        // Match pattern: YYYYMMDD Merchant Amount
-        const namePattern = /^(\d{4})(\d{2})(\d{2})\s+.*?\s+([\d.,]+)/i;
-
         for (const file of files) {
             const filePath = path.join(this.ticketsInboxDir, file);
             const ext = path.extname(file).toLowerCase();
@@ -217,24 +214,38 @@ export class SyncEngine {
             let ticketDate = null;
             let ticketAmount = null;
 
-            const nameMatch = file.match(namePattern);
-            if (nameMatch) {
-                const [_, y, m, d, amtRaw] = nameMatch;
-                ticketDate = `${y}-${m}-${d}`;
-                ticketAmount = Math.abs(parseFloat(amtRaw.replace(',', '.')));
-            } else if (ext === '.pdf') {
-                // Try reading PDF text streams for date & amount
+            // 1. Detección de fecha en el nombre: YYYYMMDD, YYYY-MM-DD o YYYY_MM_DD
+            const dateMatch = file.match(/(?:^|[^0-9])(20\d{2})[-_]?(\d{2})[-_]?(\d{2})(?:[^0-9]|$)/);
+            if (dateMatch) {
+                ticketDate = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+            }
+
+            // 2. Detección de importe en el nombre (soporta decimales con . , o _)
+            const nameWithoutDate = file.replace(/(?:^|[^0-9])(20\d{2})[-_]?(\d{2})[-_]?(\d{2})(?:[^0-9]|$)/, ' ').replace(/\.[^.]+$/, '');
+            const amtDecMatch = nameWithoutDate.match(/(?:^|[^0-9])(\d+)[.,_](\d{1,2})(?:[^0-9]|$)/);
+            if (amtDecMatch) {
+                ticketAmount = parseFloat(`${amtDecMatch[1]}.${amtDecMatch[2]}`);
+            } else {
+                const amtIntMatch = nameWithoutDate.match(/(?:^|[^0-9])(\d+)(?:[^0-9]|$)/);
+                if (amtIntMatch) {
+                    ticketAmount = parseFloat(amtIntMatch[1]);
+                }
+            }
+
+            // Fallback si no se detectó en el nombre y es PDF: leer streams de texto
+            if (!ticketAmount && ext === '.pdf') {
                 try {
                     const buf = fs.readFileSync(filePath);
                     const text = buf.toString('latin1');
-                    // Look for date DD/MM/YYYY or YYYY-MM-DD
-                    const dateMatch = text.match(/\b(\d{2})[\/\.-](\d{2})[\/\.-](\d{4})\b/) || text.match(/\b(\d{4})[\/\.-](\d{2})[\/\.-](\d{2})\b/);
-                    if (dateMatch) {
-                        ticketDate = dateMatch[3] ? `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}` : `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+                    if (!ticketDate) {
+                        const pdfDateMatch = text.match(/\b(\d{2})[\/\.-](\d{2})[\/\.-](\d{4})\b/) || text.match(/\b(\d{4})[\/\.-](\d{2})[\/\.-](\d{2})\b/);
+                        if (pdfDateMatch) {
+                            ticketDate = pdfDateMatch[3] ? `${pdfDateMatch[3]}-${pdfDateMatch[2]}-${pdfDateMatch[1]}` : `${pdfDateMatch[1]}-${pdfDateMatch[2]}-${pdfDateMatch[3]}`;
+                        }
                     }
-                    const amtMatch = text.match(/(?:TOTAL|Total|Importe|IMPORTE)[\s:]*([\d.,]+)\s*(?:€|EUR)?/i);
+                    const amtMatch = text.match(/(?:TOTAL|Total|Importe|IMPORTE)[\s:]*([\d.,_]+)\s*(?:€|EUR)?/i);
                     if (amtMatch) {
-                        ticketAmount = Math.abs(parseFloat(amtMatch[1].replace(',', '.')));
+                        ticketAmount = Math.abs(parseFloat(amtMatch[1].replace('_', '.').replace(',', '.')));
                     }
                 } catch (e) {
                     // Ignore text parse errors
@@ -351,7 +362,39 @@ export class SyncEngine {
             const categories = bookData.categories || [];
             const families = bookData.families || [];
 
+            // Conjunto para evitar que un mismo apunte existente deduplique múltiples movimientos bancarios
+            const matchedExistingIds = new Set();
+
+            // PASO 1: Casar primero todas las coincidencias EXACTAS de fecha e importe
             for (const bTx of bankTxs) {
+                const bookingDate = bTx.booking_date || bTx.value_date || today;
+                const absAmt = Math.abs(parseFloat(bTx.transaction_amount?.amount || bTx.amount || 0));
+                const isDebit = bTx.credit_debit_indicator === 'DBIT' || bTx.amount < 0;
+                const finalAmount = isDebit ? -absAmt : absAmt;
+
+                const match = existingTxs.find(t => {
+                    if (matchedExistingIds.has(t.id)) return false;
+                    const isDirectAcc = t.accountId === mapped.mappedAccountId;
+                    const isTransferAcc = (t.type === 'TRANSFER' && t.transferAccountId === mapped.mappedAccountId);
+                    if (!isDirectAcc && !isTransferAcc) return false;
+
+                    const sameAmount = Math.abs(Math.abs(Number(t.amount)) - absAmt) < 0.005;
+                    const correctFlow = isDebit
+                        ? (t.type === 'EXPENSE' || (t.type === 'TRANSFER' && isDirectAcc))
+                        : (t.type === 'INCOME' || (t.type === 'TRANSFER' && isTransferAcc));
+
+                    return sameAmount && correctFlow && t.date === bookingDate;
+                });
+
+                if (match) {
+                    matchedExistingIds.add(match.id);
+                    bTx._matchedExistingId = match.id;
+                }
+            }
+
+            for (const bTx of bankTxs) {
+                if (bTx._matchedExistingId) continue; // ya casada exactamente por fecha e importe
+
                 const bookingDate = bTx.booking_date || bTx.value_date || today;
                 
                 // Signo e importe correcto según PSD2 / Enable Banking
@@ -375,29 +418,39 @@ export class SyncEngine {
                     desc = bTx.creditor_name || bTx.debtor_name || bTx.additional_information || bTx.details || bTx.description || bTx.entry_reference || 'Movimiento bancario';
                 }
 
-                // Deduplicación inteligente: contempla apunte directo O contrapartida de traspaso (TRANSFER)
-                const isDuplicate = existingTxs.some(t => {
+                // PASO 2: Para movimientos bancarios no casados exactamente, verificar si existe un apunte manual (+-2 días) que coincida en concepto/comercio
+                const manualMatch = existingTxs.find(t => {
+                    if (matchedExistingIds.has(t.id)) return false;
+                    if (t.isFromBankSync) return false; // dos apuntes de banco nunca son duplicados si tienen fechas distintas
+
                     const isDirectAcc = t.accountId === mapped.mappedAccountId;
                     const isTransferAcc = (t.type === 'TRANSFER' && t.transferAccountId === mapped.mappedAccountId);
                     if (!isDirectAcc && !isTransferAcc) return false;
 
+                    const sameAmount = Math.abs(Math.abs(Number(t.amount)) - absAmt) < 0.005;
+                    const correctFlow = isDebit
+                        ? (t.type === 'EXPENSE' || (t.type === 'TRANSFER' && isDirectAcc))
+                        : (t.type === 'INCOME' || (t.type === 'TRANSFER' && isTransferAcc));
+
+                    if (!sameAmount || !correctFlow) return false;
+
                     const tDate = new Date(t.date).getTime();
                     const bDate = new Date(bookingDate).getTime();
                     const diffDays = Math.abs((tDate - bDate) / (1000 * 3600 * 24));
-                    if (diffDays > 1.5) return false;
+                    if (diffDays > 2) return false;
 
-                    const tAmt = Number(t.amount);
-                    if (isDirectAcc) {
-                        if (Math.abs(tAmt - finalAmount) < 0.005) return true;
-                        if (Math.abs(Math.abs(tAmt) - absAmt) < 0.005 && diffDays <= 1) return true;
-                    } else if (isTransferAcc) {
-                        if (Math.abs(Math.abs(tAmt) - absAmt) < 0.005) return true;
-                    }
-                    return false;
+                    const clean = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    const c1 = clean(t.description);
+                    const c2 = clean(desc);
+                    return c1 && c2 && (c1.includes(c2) || c2.includes(c1));
                 });
 
-                if (!isDuplicate) {
-                    // Categorización automática por aprendizaje histórico
+                if (manualMatch) {
+                    matchedExistingIds.add(manualMatch.id);
+                    continue;
+                }
+
+                // Categorización automática por aprendizaje histórico
                     const suggestion = this.findCategorySuggestion(desc, txType, existingTxs, categories, families);
                     const hasCategory = Boolean(suggestion.categoryId);
                     const matchedCat = hasCategory ? categories.find(c => c.id === suggestion.categoryId) : null;
@@ -435,7 +488,6 @@ export class SyncEngine {
                         });
                     }
                 }
-            }
 
             // Obtener saldo bancario en tiempo real para cuadre contable
             let bankBalInfo = null;

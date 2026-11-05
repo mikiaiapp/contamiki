@@ -1674,7 +1674,8 @@ app.post('/api/tickets/inbox/upload', async (req, res) => {
             return res.status(400).json({ error: "Datos del archivo no recibidos" });
         }
 
-        let safeName = filename.replace(/[^a-zA-Z0-9._ -]/g, '_');
+        // Reemplazar comas decimales por puntos antes de sanitizar caracteres especiales
+        let safeName = filename.replace(/,/g, '.').replace(/[^a-zA-Z0-9._ -]/g, '_');
         
         // Si no tiene extensión o termina en punto, detectar el tipo real por cabecera binaria
         if (!path.extname(safeName) || path.extname(safeName) === '.') {
@@ -1701,12 +1702,19 @@ app.post('/api/tickets/inbox/upload', async (req, res) => {
 });
 
 // --- TAREA AUTOMÁTICA DE SINCRONIZACIÓN MATUTINA (Parametrizable, default 06:00 AM) ---
-let lastDailySyncDate = '';
+const completedDailySyncs = new Set();
 setInterval(async () => {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     const hour = now.getHours();
     
+    // Limpiar claves de días anteriores para evitar crecimiento del Set
+    for (const key of completedDailySyncs) {
+        if (!key.startsWith(todayStr)) {
+            completedDailySyncs.delete(key);
+        }
+    }
+
     try {
         const users = await readUsers();
         for (const u of users) {
@@ -1714,8 +1722,8 @@ setInterval(async () => {
             const targetHour = settings.syncHour !== undefined ? settings.syncHour : 6;
             const syncKey = `${todayStr}_${targetHour}_${u.username}`;
             
-            if (hour === targetHour && lastDailySyncDate !== syncKey) {
-                lastDailySyncDate = syncKey;
+            if (hour === targetHour && !completedDailySyncs.has(syncKey)) {
+                completedDailySyncs.add(syncKey);
                 console.log(`[MORNING SYNC] Iniciando barrido automático matutino a las ${hour}:00 para ${u.username}`);
                 await syncEngine.syncUser(u.username, { readFullUserState, saveFullUserState, isScheduled: true });
             }
