@@ -141,33 +141,42 @@ export class SyncEngine {
     }
 
     /**
-     * Extracts official accounting balance from Enable Banking balances payload
+     * Extracts official accounting balance and detects holds (retenciones) from Enable Banking balances payload
      */
     extractBankBalance(balancesResponse) {
         if (!balancesResponse || !Array.isArray(balancesResponse.balances) || balancesResponse.balances.length === 0) {
             return null;
         }
         const balances = balancesResponse.balances;
-        // Prefer CLBD (Closing Booked / Saldo contable oficial)
         const clbd = balances.find(b => b.balance_type === 'CLBD');
-        if (clbd && clbd.balance_amount && clbd.balance_amount.amount !== undefined) {
-            return {
-                amount: parseFloat(clbd.balance_amount.amount),
-                currency: clbd.balance_amount.currency || 'EUR',
-                type: clbd.balance_type,
-                referenceDate: clbd.reference_date || null
-            };
+        const opbd = balances.find(b => b.balance_type === 'OPBD');
+
+        const clbdAmt = (clbd && clbd.balance_amount && clbd.balance_amount.amount !== undefined)
+            ? parseFloat(clbd.balance_amount.amount) : null;
+        const opbdAmt = (opbd && opbd.balance_amount && opbd.balance_amount.amount !== undefined)
+            ? parseFloat(opbd.balance_amount.amount) : null;
+
+        // Si el banco ofrece OPBD (movimientos consolidados) y CLBD (saldo contable tras retenciones de tarjeta),
+        // la diferencia es el importe total de retenciones pendientes
+        let holdsAmount = 0;
+        if (clbdAmt !== null && opbdAmt !== null && Math.abs(clbdAmt - opbdAmt) > 0.005) {
+            holdsAmount = Math.round(Math.abs(opbdAmt - clbdAmt) * 100) / 100;
         }
-        const anyBal = balances.find(b => b.balance_amount && b.balance_amount.amount !== undefined);
-        if (anyBal) {
-            return {
-                amount: parseFloat(anyBal.balance_amount.amount),
-                currency: anyBal.balance_amount.currency || 'EUR',
-                type: anyBal.balance_type || anyBal.name || 'Contable',
-                referenceDate: anyBal.reference_date || null
-            };
-        }
-        return null;
+
+        const primary = clbd || opbd || balances.find(b => b.balance_amount && b.balance_amount.amount !== undefined);
+        if (!primary) return null;
+
+        const primaryAmt = parseFloat(primary.balance_amount.amount);
+
+        return {
+            amount: opbdAmt !== null ? opbdAmt : (clbdAmt !== null ? clbdAmt : primaryAmt),
+            bookedAmount: opbdAmt !== null ? opbdAmt : (clbdAmt !== null ? clbdAmt : primaryAmt),
+            closingAmount: clbdAmt !== null ? clbdAmt : (opbdAmt !== null ? opbdAmt : primaryAmt),
+            holdsAmount,
+            currency: primary.balance_amount.currency || 'EUR',
+            type: primary.balance_type || primary.name || 'Contable',
+            referenceDate: primary.reference_date || (clbd ? clbd.reference_date : null)
+        };
     }
 
     /**
@@ -503,27 +512,47 @@ export class SyncEngine {
             const accountDisplayName = contaAcc ? contaAcc.name : (mapped.name || 'Cuenta Bancaria');
 
             if (bankBalInfo !== null) {
-                const diff = Math.round((contaBalance - bankBalInfo.amount) * 100) / 100;
-                const isCuadrado = Math.abs(diff) < 0.01;
+                let isCuadrado = false;
+                let diff = 0;
+                let targetBankBalance = bankBalInfo.amount;
+
+                // Si el saldo de ContaMiki coincide con los movimientos consolidados (bookedAmount)
+                // o con el saldo contable (closingAmount), la cuenta está totalmente cuadrada
+                if (bankBalInfo.bookedAmount !== null && Math.abs(contaBalance - bankBalInfo.bookedAmount) < 0.01) {
+                    isCuadrado = true;
+                    diff = 0;
+                    targetBankBalance = bankBalInfo.bookedAmount;
+                } else if (bankBalInfo.closingAmount !== null && Math.abs(contaBalance - bankBalInfo.closingAmount) < 0.01) {
+                    isCuadrado = true;
+                    diff = 0;
+                    targetBankBalance = bankBalInfo.closingAmount;
+                } else {
+                    targetBankBalance = bankBalInfo.bookedAmount !== null ? bankBalInfo.bookedAmount : bankBalInfo.closingAmount;
+                    diff = Math.round((contaBalance - targetBankBalance) * 100) / 100;
+                    isCuadrado = Math.abs(diff) < 0.01;
+                }
+
                 balanceReconciliations.push({
                     uid: mapped.uid,
                     connectionId: mapped.connectionId,
                     aspspName: mapped.aspspName,
                     accountName: accountDisplayName,
                     iban: mapped.iban,
-                    bankBalance: bankBalInfo.amount,
+                    bankBalance: targetBankBalance,
                     contaBalance,
                     diff,
                     isCuadrado,
+                    holdsAmount: bankBalInfo.holdsAmount || 0,
                     referenceDate: bankBalInfo.referenceDate
                 });
 
                 if (this.bankService && typeof this.bankService.updateAccountBalanceInfo === 'function') {
                     this.bankService.updateAccountBalanceInfo(username, mapped.connectionId, mapped.uid, {
-                        bankBalance: bankBalInfo.amount,
+                        bankBalance: targetBankBalance,
                         contaBalance,
                         diff,
                         isCuadrado,
+                        holdsAmount: bankBalInfo.holdsAmount || 0,
                         checkedAt: new Date().toISOString()
                     });
                 }
@@ -537,7 +566,8 @@ export class SyncEngine {
                     bankBalance: null,
                     contaBalance,
                     diff: null,
-                    isCuadrado: false
+                    isCuadrado: false,
+                    holdsAmount: 0
                 });
             }
 
@@ -595,10 +625,16 @@ export class SyncEngine {
                     if (rec.bankBalance === null) {
                         lines.push(`• <b>${rec.accountName} (${rec.aspspName}):</b> Saldo no disponible en la API`);
                     } else if (rec.isCuadrado) {
-                        lines.push(`• <b>${rec.accountName}:</b> El saldo de <b>${formatMoney(rec.bankBalance)}</b> está cuadrado ✅`);
+                        const holdsNote = (rec.holdsAmount && rec.holdsAmount > 0)
+                            ? ` <i>(${formatMoney(rec.holdsAmount)} en retenciones pendientes en el banco)</i>`
+                            : '';
+                        lines.push(`• <b>${rec.accountName}:</b> El saldo de <b>${formatMoney(rec.bankBalance)}</b> está cuadrado ✅${holdsNote}`);
                     } else {
                         const diffSign = rec.diff > 0 ? '+' : '';
-                        lines.push(`• <b>${rec.accountName}:</b> Banco ${formatMoney(rec.bankBalance)} vs ContaMiki ${formatMoney(rec.contaBalance)} (Diferencia: <b>${diffSign}${formatMoney(rec.diff)}</b>) ⚠️`);
+                        const holdsNote = (rec.holdsAmount && rec.holdsAmount > 0)
+                            ? ` <i>(Retenciones en el banco: ${formatMoney(rec.holdsAmount)})</i>`
+                            : '';
+                        lines.push(`• <b>${rec.accountName}:</b> Banco ${formatMoney(rec.bankBalance)} vs ContaMiki ${formatMoney(rec.contaBalance)} (Diferencia: <b>${diffSign}${formatMoney(rec.diff)}</b>) ⚠️${holdsNote}`);
                     }
                 }
             }

@@ -109,6 +109,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
       lastContaBalance?: number;
       lastBalanceDiff?: number;
       lastIsCuadrado?: boolean;
+      lastHoldsAmount?: number;
       lastBalanceCheck?: string;
     }> = [];
     if (!status?.connections) return list;
@@ -131,6 +132,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
             lastContaBalance: acc.lastContaBalance,
             lastBalanceDiff: acc.lastBalanceDiff,
             lastIsCuadrado: acc.lastIsCuadrado,
+            lastHoldsAmount: acc.lastHoldsAmount,
             lastBalanceCheck: acc.lastBalanceCheck
           });
         }
@@ -602,6 +604,11 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                             {acc.lastIsCuadrado ? (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
                                 ⚖️ Saldo cuadrado: {new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(acc.lastBankBalance)} €
+                                {Boolean(acc.lastHoldsAmount && acc.lastHoldsAmount > 0) && (
+                                  <span className="text-slate-500 font-normal ml-0.5">
+                                    ({new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(acc.lastHoldsAmount)} € en retenciones)
+                                  </span>
+                                )}
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
@@ -1164,7 +1171,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                           <div className="mt-1">
                             {item.lastIsCuadrado ? (
                               <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100/70 border border-emerald-200 px-1.5 py-0.5 rounded">
-                                ⚖️ Saldo cuadrado ({new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.lastBankBalance)} €)
+                                ⚖️ Saldo cuadrado ({new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.lastBankBalance)} €{Boolean(item.lastHoldsAmount && item.lastHoldsAmount > 0) ? ` · ${new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.lastHoldsAmount)} € retenidos` : ''})
                               </span>
                             ) : (
                               <span className="text-[9px] font-bold text-amber-700 bg-amber-100/70 border border-amber-200 px-1.5 py-0.5 rounded">

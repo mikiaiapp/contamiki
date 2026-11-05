@@ -415,6 +415,7 @@ export class BankService {
                 acc.lastContaBalance = balanceInfo.contaBalance;
                 acc.lastBalanceDiff = balanceInfo.diff;
                 acc.lastIsCuadrado = balanceInfo.isCuadrado;
+                acc.lastHoldsAmount = balanceInfo.holdsAmount || 0;
                 acc.lastBalanceCheck = balanceInfo.checkedAt;
                 this.saveConnections(all);
             }
