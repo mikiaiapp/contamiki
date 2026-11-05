@@ -197,6 +197,18 @@ if (process.env.NODE_ENV === 'production') {
     });
 }
 
+app.get('/pdf.worker.mjs', (req, res) => {
+    let workerPath = path.join(__dirname, 'node_modules', 'pdfjs-dist', 'build', 'pdf.worker.mjs');
+    if (!fsSync.existsSync(workerPath)) {
+        workerPath = path.join(__dirname, 'pdf.worker.mjs');
+    }
+    if (fsSync.existsSync(workerPath)) {
+        res.setHeader('Content-Type', 'application/javascript');
+        return res.sendFile(workerPath);
+    }
+    res.status(404).send('Worker not found');
+});
+
 if (process.env.NODE_ENV === 'production') {
     app.use(express.static(__dirname, { index: false }));
 }

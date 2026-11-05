@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, RecurrentMovement, RecurrenceFrequency, Category, Account, BookMetadata } from './types';
 import { Building2, RefreshCw, Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check, AlertTriangle, FileDown, CircleDot } from 'lucide-react';
 import { getToken } from './services/authService';
+import { PdfViewer } from './components/PdfViewer';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -2108,11 +2109,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
               onClick={e => e.stopPropagation()}
             >
               {isPdf ? (
-                <iframe 
-                  src={resolvedUrl} 
-                  className="w-full h-full rounded-2xl shadow-2xl border-2 border-white/10 bg-white" 
-                  title="Comprobante PDF" 
-                />
+                <PdfViewer url={resolvedUrl} />
               ) : (
                 <img 
                   src={resolvedUrl} 
