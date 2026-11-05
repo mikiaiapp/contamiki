@@ -554,6 +554,15 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
             >
               <Smartphone size={13}/> Atajo iOS
             </button>
+            <button
+              onClick={() => handleManualSync()}
+              disabled={isSyncing}
+              className="col-span-2 py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/60 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5"
+              title="Emparejar ahora todos los tickets del buzón con las transacciones existentes"
+            >
+              <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''}/>
+              {isSyncing ? 'Conciliando buzón...' : 'Conciliar tickets del buzón ahora'}
+            </button>
           </div>
         </div>
       </div>

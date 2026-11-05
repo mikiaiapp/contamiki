@@ -229,35 +229,61 @@ export class SyncEngine {
                 ticketDate = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
             }
 
-            // 2. Detección de importe en el nombre (soporta decimales con . , o _)
+            // 2. Detección de importe en el nombre: SOLO si tiene formato de moneda/decimales (ej. 41.77, 41_77, 41,77 o ' 41 €')
             const nameWithoutDate = file.replace(/(?:^|[^0-9])(20\d{2})[-_]?(\d{2})[-_]?(\d{2})(?:[^0-9]|$)/, ' ').replace(/\.[^.]+$/, '');
-            const amtDecMatch = nameWithoutDate.match(/(?:^|[^0-9])(\d+)[.,_](\d{1,2})(?:[^0-9]|$)/);
+            const amtDecMatch = nameWithoutDate.match(/(?:^|[^0-9])(\d{1,5})[.,_](\d{2})(?:[^0-9]|$)/);
             if (amtDecMatch) {
                 ticketAmount = parseFloat(`${amtDecMatch[1]}.${amtDecMatch[2]}`);
             } else {
-                const amtIntMatch = nameWithoutDate.match(/(?:^|[^0-9])(\d+)(?:[^0-9]|$)/);
-                if (amtIntMatch) {
-                    ticketAmount = parseFloat(amtIntMatch[1]);
+                // Solo aceptar enteros si están explícitamente etiquetados con símbolo de euro
+                const amtEuroMatch = nameWithoutDate.match(/(?:^|[^0-9])(\d{1,4})\s*(?:€|EUR)(?:[^0-9]|$)/i);
+                if (amtEuroMatch) {
+                    ticketAmount = parseFloat(amtEuroMatch[1]);
                 }
             }
 
-            // Fallback si no se detectó en el nombre y es PDF: leer streams de texto
-            if (!ticketAmount && ext === '.pdf') {
+            // 3. Si es PDF, analizar el documento con pdf-parse para extraer fecha e importe oficial
+            if (ext === '.pdf') {
                 try {
                     const buf = fs.readFileSync(filePath);
-                    const text = buf.toString('latin1');
-                    if (!ticketDate) {
-                        const pdfDateMatch = text.match(/\b(\d{2})[\/\.-](\d{2})[\/\.-](\d{4})\b/) || text.match(/\b(\d{4})[\/\.-](\d{2})[\/\.-](\d{2})\b/);
-                        if (pdfDateMatch) {
-                            ticketDate = pdfDateMatch[3] ? `${pdfDateMatch[3]}-${pdfDateMatch[2]}-${pdfDateMatch[1]}` : `${pdfDateMatch[1]}-${pdfDateMatch[2]}-${pdfDateMatch[3]}`;
+                    let pdfText = '';
+                    try {
+                        const { PDFParse } = await import('pdf-parse');
+                        const parser = new PDFParse(new Uint8Array(buf));
+                        const parsed = await parser.getText();
+                        pdfText = parsed.text || parsed || '';
+                    } catch (pErr) {
+                        pdfText = buf.toString('latin1');
+                    }
+
+                    if (pdfText) {
+                        // Extraer fecha del documento si no venía en el nombre
+                        if (!ticketDate) {
+                            const pdfDateMatch = pdfText.match(/(?:Cobrado el|Fecha|FECHA|fecha)[\s:]*(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{2,4})/i)
+                                              || pdfText.match(/\b(\d{1,2})[\/\.-](\d{1,2})[\/\.-](20\d{2})\b/);
+                            if (pdfDateMatch) {
+                                let y = pdfDateMatch[3];
+                                if (y.length === 2) y = '20' + y;
+                                const m = pdfDateMatch[2].padStart(2, '0');
+                                const d = pdfDateMatch[1].padStart(2, '0');
+                                ticketDate = `${y}-${m}-${d}`;
+                            }
+                        }
+
+                        // Extraer importe oficial del documento si no venía explícito en el nombre
+                        if (!ticketAmount) {
+                            const totalMatches = [...pdfText.matchAll(/(?:TOTAL|IMPORTE\s*TOTAL|Total\s*a\s*pagar|Total)[\s:]*([\d.,]+)\s*(?:€|EUR)?/gi)];
+                            for (const m of totalMatches) {
+                                const val = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
+                                if (!isNaN(val) && val > 0) {
+                                    ticketAmount = val;
+                                    if (m[0].startsWith('TOTAL')) break;
+                                }
+                            }
                         }
                     }
-                    const amtMatch = text.match(/(?:TOTAL|Total|Importe|IMPORTE)[\s:]*([\d.,_]+)\s*(?:€|EUR)?/i);
-                    if (amtMatch) {
-                        ticketAmount = Math.abs(parseFloat(amtMatch[1].replace('_', '.').replace(',', '.')));
-                    }
                 } catch (e) {
-                    // Ignore text parse errors
+                    console.warn(`[TICKET PARSER] Error analizando PDF ${file}:`, e.message);
                 }
             }
 
