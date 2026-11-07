@@ -221,3 +221,4 @@ const PdfPageItem: React.FC<PdfPageItemProps> = ({ pdf, pageNum, totalPages, sca
     </div>
   );
 };
+

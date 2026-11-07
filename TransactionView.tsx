@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppState, Transaction, TransactionType, GlobalFilter, FavoriteMovement, RecurrentMovement, RecurrenceFrequency, Category, Account, BookMetadata } from './types';
-import { Building2, RefreshCw, Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check, AlertTriangle, FileDown, CircleDot } from 'lucide-react';
+import { Building2, RefreshCw, Plus, Trash2, Search, ArrowRightLeft, X, Paperclip, ChevronLeft, ChevronRight, Edit3, ArrowUpDown, Tag, Receipt, CheckCircle2, Upload, SortAsc, SortDesc, Heart, Bot, Filter, Eraser, Calendar, Sparkles, ChevronDown, Loader2, Download, MoreVertical, Copy, CalendarClock, Save, Repeat, FileSpreadsheet, FileText, CheckSquare, Square, PenTool, LayoutList, Check, CheckCheck, AlertTriangle, FileDown, CircleDot } from 'lucide-react';
 import { getToken } from './services/authService';
 import { PdfViewer } from './components/PdfViewer';
 import * as XLSX from 'xlsx';
@@ -995,8 +995,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     if (colFilterClip !== 'ALL') chips.push({ id: 'clip', label: `Clip: ${colFilterClip}`, onRemove: () => setColFilterClip('ALL') });
     if (colFilterAmountOp !== 'ALL') chips.push({ id: 'amount', label: `Imp: ${colFilterAmountOp}`, onRemove: () => setColFilterAmountOp('ALL') });
     if (filterPendingOnly) chips.push({ id: 'pendingOnly', label: 'Por Categorizar', onRemove: () => setFilterPendingOnly(false) });
-    if (filterReviewedState === 'PENDING') chips.push({ id: 'reviewedPending', label: 'Sin Revisar / No Punteados', onRemove: () => setFilterReviewedState('ALL') });
-    if (filterReviewedState === 'REVIEWED') chips.push({ id: 'reviewedDone', label: 'Solo Punteados', onRemove: () => setFilterReviewedState('ALL') });
+    if (filterReviewedState === 'PENDING') chips.push({ id: 'reviewedPending', label: 'Solo Por Repasar', onRemove: () => setFilterReviewedState('ALL') });
+    if (filterReviewedState === 'REVIEWED') chips.push({ id: 'reviewedDone', label: 'Solo Ya Repasados', onRemove: () => setFilterReviewedState('ALL') });
     return chips;
   }, [colFilterEntry, colFilterExit, colFilterDesc, colFilterClip, colFilterAmountOp, filterPendingOnly, filterReviewedState, indices]);
 
@@ -1265,6 +1265,29 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
     return (data.transactions || []).filter(t => t.isReviewed === false).length;
   }, [data.transactions]);
 
+  const unreviewedInPeriodCount = useMemo(() => {
+    return timeFilteredList.filter(t => t.isReviewed === false).length;
+  }, [timeFilteredList]);
+
+  const pendingVisibleCount = useMemo(() => {
+    const list = filterReviewedState === 'PENDING' ? sortedTransactions : timeFilteredList;
+    return list.filter(t => t.isReviewed === false).length;
+  }, [filterReviewedState, sortedTransactions, timeFilteredList]);
+
+  const handleReviewAllInView = () => {
+    const targetTxs = (filterReviewedState === 'PENDING' ? sortedTransactions : timeFilteredList).filter(t => t.isReviewed === false);
+    if (targetTxs.length === 0) return;
+    const targetIds = new Set(targetTxs.map(t => t.id));
+    const updatedTxs = data.transactions.map(t => {
+      if (targetIds.has(t.id)) {
+        return { ...t, isReviewed: true };
+      }
+      return t;
+    });
+    onUpdateData({ transactions: updatedTxs });
+    setSelectedIds(new Set());
+  };
+
   const duplicateProps = useMemo(() => proposedTransactions.filter(p => p.isDuplicate), [proposedTransactions]);
   const normalProps = useMemo(() => proposedTransactions.filter(p => !p.isDuplicate), [proposedTransactions]);
 
@@ -1476,7 +1499,7 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-3 mt-4 mb-2 px-1">
               <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl border border-slate-200/70 shadow-inner">
                 <span className="text-[9px] font-black uppercase text-slate-400 px-2 tracking-wider flex items-center gap-1">
-                  <Check size={12} strokeWidth={3} className="text-slate-500"/> Punteo:
+                  <Filter size={11} className="text-slate-500"/> Ver:
                 </span>
                 <button 
                   onClick={() => setFilterReviewedState('ALL')}
@@ -1495,10 +1518,10 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                       ? 'bg-amber-500 text-white shadow-sm ring-2 ring-amber-300' 
                       : 'text-amber-700 hover:bg-amber-50'
                   }`}
-                  title="Ver solo movimientos pendientes de puntear / repasar"
+                  title="Filtrar vista: Mostrar solo movimientos pendientes de puntear / repasar"
                 >
                   <CircleDot size={13} className={filterReviewedState === 'PENDING' ? 'text-white' : 'text-amber-500'} />
-                  <span>Por repasar {unreviewedCount > 0 ? `(${unreviewedCount})` : ''}</span>
+                  <span>Por repasar {unreviewedInPeriodCount > 0 ? `(${unreviewedInPeriodCount})` : ''}</span>
                 </button>
                 <button 
                   onClick={() => setFilterReviewedState('REVIEWED')}
@@ -1507,35 +1530,48 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                       ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300' 
                       : 'text-emerald-700 hover:bg-emerald-50'
                   }`}
-                  title="Ver solo movimientos revisados / punteados"
+                  title="Filtrar vista: Mostrar solo movimientos ya revisados / punteados"
                 >
                   <Check size={13} strokeWidth={3} className={filterReviewedState === 'REVIEWED' ? 'text-white' : 'text-emerald-600'} />
-                  <span>Repasados</span>
+                  <span>Ya repasados</span>
                 </button>
               </div>
 
-              {selectedIds.size > 0 && (
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={handleBulkMarkReviewed}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase shadow-sm transition-all cursor-pointer"
-                    title="Marcar seleccionados como repasados"
-                  >
-                    <Check size={13} strokeWidth={3}/> Puntear ({selectedIds.size})
-                  </button>
-                  <button 
-                    onClick={handleBulkUnmarkReviewed}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 active:bg-amber-700 text-white rounded-xl text-[10px] font-black uppercase shadow-sm transition-all cursor-pointer"
-                    title="Marcar seleccionados como pendientes de repasar"
-                  >
-                    <CircleDot size={13}/> Desmarcar
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                {selectedIds.size > 0 ? (
+                  <>
+                    <button 
+                      onClick={handleBulkMarkReviewed}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-[10px] font-black uppercase shadow-sm transition-all cursor-pointer"
+                      title="Marcar seleccionados como repasados"
+                    >
+                      <CheckCheck size={14} strokeWidth={2.5}/> Puntear seleccionados ({selectedIds.size})
+                    </button>
+                    <button 
+                      onClick={handleBulkUnmarkReviewed}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-xl text-[10px] font-black uppercase shadow-sm transition-all cursor-pointer"
+                      title="Marcar seleccionados como pendientes de repasar"
+                    >
+                      <CircleDot size={13}/> Desmarcar ({selectedIds.size})
+                    </button>
+                  </>
+                ) : (
+                  pendingVisibleCount > 0 && (
+                    <button 
+                      onClick={handleReviewAllInView}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-[10px] font-black uppercase shadow-sm transition-all cursor-pointer"
+                      title={`Marcar todos los movimientos pendientes de esta vista (${pendingVisibleCount}) como repasados en bloque`}
+                    >
+                      <CheckCheck size={14} strokeWidth={2.5}/> 
+                      <span>Revisar todos en bloque ({pendingVisibleCount})</span>
+                    </button>
+                  )
+                )}
+              </div>
             </div>
 
             <div className={`bg-slate-900/5 p-2 md:p-4 rounded-2xl border border-slate-100 ${gridClasses}`}>
-              <div className="flex items-center justify-center"><button onClick={toggleSelectAllPage} className="text-slate-400 active:text-indigo-600 lg:hover:text-indigo-600 cursor-pointer" title="Seleccionar todos">{paginatedTransactions.length > 0 && paginatedTransactions.every(t => selectedIds.has(t.id)) ? <CheckSquare size={16} /> : <Square size={16} />}</button></div>
+              <div className="flex items-center justify-center"><button onClick={toggleSelectAllPage} className="text-slate-400 active:text-indigo-600 lg:hover:text-indigo-600 cursor-pointer" title={paginatedTransactions.length > 0 && paginatedTransactions.every(t => selectedIds.has(t.id)) ? "Deseleccionar todos" : "Seleccionar todos para acción en bloque"}>{paginatedTransactions.length > 0 && paginatedTransactions.every(t => selectedIds.has(t.id)) ? <CheckSquare size={16} /> : <Square size={16} />}</button></div>
               <div className="flex flex-col items-center justify-center">
                 <span className="hidden md:block text-[7px] sm:text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest text-center" title="Revisión / Punteo">Rev</span>
                 <button
@@ -1551,7 +1587,13 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                       ? 'bg-emerald-600 border-emerald-700 text-white shadow-xs'
                       : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
                   }`}
-                  title="Filtro rápido de punteo: Clic para alternar (Todos / Pendientes / Repasados)"
+                  title={
+                    filterReviewedState === 'PENDING'
+                      ? "Filtro rápido: Mostrando solo por repasar. Clic para alternar a ya repasados."
+                      : filterReviewedState === 'REVIEWED'
+                      ? "Filtro rápido: Mostrando solo ya repasados. Clic para ver todos."
+                      : "Filtro rápido: Clic para filtrar solo movimientos por repasar."
+                  }
                 >
                   {filterReviewedState === 'PENDING' ? '⚠️' : filterReviewedState === 'REVIEWED' ? '✓' : '✓?'}
                 </button>
