@@ -666,6 +666,25 @@ const saveFullUserState = async (username, fullState) => {
             for (const [year, txs] of Object.entries(txByYear)) {
                 const filename = `transactions_${year}.json`;
                 const yearFile = path.join(targetDir, filename);
+
+                // PROTECCIÓN DE CONCURRENCIA CONTRA PÉRDIDA DE MOVIMIENTOS BANCARIOS:
+                // Si en disco ya existen movimientos bancarios sincronizados automáticamente
+                // y el cliente (por desfase de caché o sesión abierta) no los incluyó, preservarlos.
+                try {
+                    const diskContent = await fs.readFile(yearFile, 'utf8');
+                    const diskTxs = JSON.parse(diskContent);
+                    if (Array.isArray(diskTxs)) {
+                        const incomingIds = new Set(txs.map(t => t.id));
+                        for (const dt of diskTxs) {
+                            if (dt.isFromBankSync && !incomingIds.has(dt.id)) {
+                                console.log(`[CONCURRENCY PROTECTION] Preservando movimiento bancario en ${filename}: ${dt.id} (${dt.date} - ${dt.description})`);
+                                txs.push(dt);
+                                incomingIds.add(dt.id);
+                            }
+                        }
+                    }
+                } catch { /* archivo nuevo o inexistente */ }
+
                 await fs.writeFile(`${yearFile}.tmp`, JSON.stringify(txs, null, 2));
                 await fs.rename(`${yearFile}.tmp`, yearFile);
                 writtenFiles.add(filename);

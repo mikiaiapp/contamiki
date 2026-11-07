@@ -88,6 +88,32 @@ const App: React.FC = () => {
     }
   }, [isLoggedIn]);
 
+  useEffect(() => {
+    if (!isLoggedIn || !dataLoaded) return;
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        loadData()
+          .then(fetchedData => {
+            const fetchedStr = JSON.stringify(fetchedData);
+            if (fetchedStr !== lastSavedState.current) {
+              setMultiState(fetchedData);
+              lastSavedState.current = fetchedStr;
+            }
+          })
+          .catch(err => console.warn("Background auto-refresh silent error:", err));
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+    };
+  }, [isLoggedIn, dataLoaded]);
+
   const performSave = async (stateToSave: MultiBookState) => {
       setSyncStatus('SAVING');
       setSyncErrorMsg(null);
