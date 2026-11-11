@@ -166,13 +166,33 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=production
-      - JWT_SECRET=cambia_esta_clave_por_una_cadena_larga_y_aleatoria_123456
+      - JWT_SECRET=${JWT_SECRET:?define JWT_SECRET}   # obligatoria: ver «Variables de entorno»
       - APP_URL=https://conta.tudominio.com  # URL pública o IP con protocolo
+      # Necesarias para enviar correos (alta de usuarios, recuperar contraseña…):
+      # - CENTRAL_EMAIL_URL=${CENTRAL_EMAIL_URL:-}
+      # - CENTRAL_EMAIL_KEY=${CENTRAL_EMAIL_KEY:-}
     volumes:
       - /ruta/a/tu/almacenamiento/data:/app/data
 ```
 
-### 2. Levantar el servicio
+### 2. Variables de entorno
+
+ContaMiki lee su configuración de variables de entorno. **Ninguna clave va escrita en el código ni en el repositorio**: defínelas en tu stack (por ejemplo en Portainer, *Environment variables*) o en un fichero `.env` **local que no subas nunca a Git**.
+
+| Variable | ¿Obligatoria? | Descripción |
+|---|---|---|
+| `JWT_SECRET` | **Sí** | Clave con la que se firman las sesiones. Debe ser larga y aleatoria (64 caracteres o más); por ejemplo, `openssl rand -hex 48`. **Sin ella la aplicación no arranca.** Si la cambias, todos los usuarios tendrán que volver a iniciar sesión. |
+| `APP_URL` | Recomendada | URL pública (o IP) con protocolo, por ejemplo `https://conta.tudominio.com`. Se usa en los enlaces de los correos. |
+| `PORT` | No | Puerto interno (por defecto `3000`). |
+| `NODE_ENV` | No | `production` en producción. |
+| `CENTRAL_EMAIL_URL` | Para el correo | Servicio de correo HTTP al que ContaMiki delega **todos los envíos**: verificación de cuenta al darse de alta, recuperación de contraseña, avisos y resumen diario. Debe aceptar `POST <URL>/send` con un JSON `{ to, subject, text, html, key, fromName }` y responder `{ "success": true }`. **Si no la defines no se envía ningún correo** (se escriben en el registro del contenedor), así que los usuarios nuevos no podrán verificar su cuenta. *Está previsto añadir el envío SMTP directo, sin servicio intermedio.* |
+| `CENTRAL_EMAIL_KEY` | Para el correo | Clave que ContaMiki envía en el campo `key` para autorizar el envío en ese servicio. Trátala como una contraseña: larga, aleatoria y distinta en cada instalación. |
+| `ENABLE_BANKING_APP_ID` / `ENABLE_BANKING_KEY_PATH` | No | Credenciales de Open Banking. Lo habitual es configurarlas desde la propia aplicación (ver más abajo). |
+
+> [!IMPORTANT]
+> **Seguridad.** Si despliegas con Docker Compose, el `docker-compose.yml` toma `JWT_SECRET` de las variables del stack y **el despliegue falla si falta**, en lugar de arrancar con una clave por defecto. Nunca subas un `.env` con valores reales al repositorio (ya está en el `.gitignore`); usa `.env.example` como plantilla. Si alguna vez publicaste una clave por error, **cámbiala**: borrarla del repositorio no basta, porque queda en el historial.
+
+### 3. Levantar el servicio
 
 ```bash
 docker compose up -d
