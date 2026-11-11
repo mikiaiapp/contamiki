@@ -7,7 +7,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - JWT_SECRET=un_secreto_muy_seguro_y_largo_cambialo
+      - JWT_SECRET=${JWT_SECRET:?defina JWT_SECRET en las variables del stack}
       - APP_URL=https://conta.mafede.i234.me
+      - CENTRAL_EMAIL_URL=${CENTRAL_EMAIL_URL:-}
+      - CENTRAL_EMAIL_KEY=${CENTRAL_EMAIL_KEY:-}
     volumes:
       - /volume1/docker/contamiki/data:/app/data

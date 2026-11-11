@@ -57,15 +57,19 @@ async function startServer() {
         return value;
     };
 
-    const JWT_SECRET = await getSecret('JWT_SECRET') || 'super_secret_master_key_conta_miki';
+    const JWT_SECRET = await getSecret('JWT_SECRET');
+    if (!JWT_SECRET) {
+        console.error('❌ [CONFIG] Falta JWT_SECRET: defínela como variable de entorno. No arranco.');
+        process.exit(1);
+    }
     const APP_URL = await getSecret('APP_URL') || `http://localhost:${PORT}`;
     
     console.log(`🚀 [CONFIG] APP_URL: ${APP_URL}`);
-    console.log(`🔐 [CONFIG] JWT_SECRET: ${JWT_SECRET === 'super_secret_master_key_conta_miki' ? 'DEFAULT (INSECURE)' : 'CUSTOM'}`);
+    console.log('🔐 [CONFIG] JWT_SECRET: definida');
     
     const sendEmail = async (to, subject, text, html) => {
-        const centralUrl = await getSecret('CENTRAL_EMAIL_URL') || 'https://cartero.mafede.i234.me';
-        const centralKey = await getSecret('CENTRAL_EMAIL_KEY') || 'mikiaiapp';
+        const centralUrl = await getSecret('CENTRAL_EMAIL_URL');
+        const centralKey = await getSecret('CENTRAL_EMAIL_KEY');
 
         if (centralUrl && centralKey) {
             try {

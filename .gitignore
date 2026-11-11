@@ -31,3 +31,9 @@ fetch_debug.ts
 *.njsproj
 *.sln
 *.sw?
+
+# Claves y datos del NAS (nunca al repositorio)
+.env
+.env.*
+!.env.example
+@eaDir/
