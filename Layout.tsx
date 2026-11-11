@@ -257,6 +257,28 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
       }
   };
 
+  // Opciones del menú de usuario (las usan la barra lateral del escritorio y la cabecera del móvil)
+  const renderUserMenuItems = () => (
+    <div className="p-2 space-y-1">
+         <button onClick={() => { setIsUserMenuOpen(false); open2FAModal(); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
+            <ShieldCheck size={16} className="text-emerald-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Seguridad 2FA</span>
+        </button>
+        <button onClick={() => { setIsUserMenuOpen(false); setIsChangePassModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
+            <Key size={16} className="text-amber-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cambiar Clave</span>
+        </button>
+        <button onClick={() => { setIsUserMenuOpen(false); handleTestEmail(); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
+            <Mail size={16} className="text-blue-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Probar Email</span>
+        </button>
+        <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
+            <LogOut size={16} className="text-indigo-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cerrar Sesión</span>
+        </button>
+        <div className="h-px bg-slate-100 my-1"/>
+        <button onClick={() => { setIsUserMenuOpen(false); setIsDeleteAccountModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-rose-50 transition-all active:bg-rose-100 text-rose-500 touch-manipulation">
+            <Trash2 size={16}/> <span className="text-[10px] font-black uppercase tracking-widest">Borrar Cuenta</span>
+        </button>
+    </div>
+  );
+
   const renderNavItem = (item: { id: View; label: string; icon: React.ReactNode; badge?: number }, isMobile = false) => (
     <button
       key={item.id}
@@ -419,24 +441,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setIsUserMenuOpen(false)}></div>
                     <div className="absolute bottom-full left-0 mb-2 w-full bg-white text-slate-900 rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-20 animate-in slide-in-from-bottom-2 fade-in">
-                        <div className="p-2 space-y-1">
-                             <button onClick={() => { setIsUserMenuOpen(false); open2FAModal(); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
-                                <ShieldCheck size={16} className="text-emerald-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Seguridad 2FA</span>
-                            </button>
-                            <button onClick={() => { setIsUserMenuOpen(false); setIsChangePassModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
-                                <Key size={16} className="text-amber-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cambiar Clave</span>
-                            </button>
-                            <button onClick={() => { setIsUserMenuOpen(false); handleTestEmail(); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
-                                <Mail size={16} className="text-blue-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Probar Email</span>
-                            </button>
-                            <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
-                                <LogOut size={16} className="text-indigo-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cerrar Sesión</span>
-                            </button>
-                            <div className="h-px bg-slate-100 my-1"/>
-                            <button onClick={() => { setIsUserMenuOpen(false); setIsDeleteAccountModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-rose-50 transition-all active:bg-rose-100 text-rose-500 touch-manipulation">
-                                <Trash2 size={16}/> <span className="text-[10px] font-black uppercase tracking-widest">Borrar Cuenta</span>
-                            </button>
-                        </div>
+                        {renderUserMenuItems()}
                     </div>
                   </>
               )}
@@ -449,6 +454,24 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
         <BookSelector />
         <div className="flex items-center gap-3">
             <SyncIndicator />
+            <div className="relative">
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                aria-label="Menú de usuario"
+                className="bg-white/10 text-white/70 p-2 rounded-xl border border-white/10 active:bg-white/20 touch-manipulation"
+              >
+                <User size={18} />
+              </button>
+              {isUserMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setIsUserMenuOpen(false)}></div>
+                  <div className="absolute top-full right-0 mt-2 w-64 bg-white text-slate-900 rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-20 animate-in slide-in-from-top-2 fade-in">
+                    <div className="px-6 pt-4 pb-1 text-[9px] font-black uppercase tracking-widest text-slate-400 truncate">{username}</div>
+                    {renderUserMenuItems()}
+                  </div>
+                </>
+              )}
+            </div>
             <button onClick={logout} className="bg-white/10 text-white/70 p-2 rounded-xl border border-white/10 active:bg-white/20 touch-manipulation">
               <LogOut size={18} />
             </button>
