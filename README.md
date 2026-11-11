@@ -185,9 +185,41 @@ ContaMiki lee su configuración de variables de entorno. **Ninguna clave va escr
 | `APP_URL` | Recomendada | URL pública (o IP) con protocolo, por ejemplo `https://conta.tudominio.com`. Se usa en los enlaces de los correos. |
 | `PORT` | No | Puerto interno (por defecto `3000`). |
 | `NODE_ENV` | No | `production` en producción. |
-| `CENTRAL_EMAIL_URL` | Para el correo | Servicio de correo HTTP al que ContaMiki delega **todos los envíos**: verificación de cuenta al darse de alta, recuperación de contraseña, avisos y resumen diario. Debe aceptar `POST <URL>/send` con un JSON `{ to, subject, text, html, key, fromName }` y responder `{ "success": true }`. **Si no la defines no se envía ningún correo** (se escriben en el registro del contenedor), así que los usuarios nuevos no podrán verificar su cuenta. *Está previsto añadir el envío SMTP directo, sin servicio intermedio.* |
-| `CENTRAL_EMAIL_KEY` | Para el correo | Clave que ContaMiki envía en el campo `key` para autorizar el envío en ese servicio. Trátala como una contraseña: larga, aleatoria y distinta en cada instalación. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Para el correo (opción A) | Datos de tu servidor de correo saliente. Ver «Envío de correo» más abajo. |
+| `CENTRAL_EMAIL_URL`, `CENTRAL_EMAIL_KEY` | Para el correo (opción B) | Servicio de correo central que ya tengas montado. Ver «Envío de correo» más abajo. |
 | `ENABLE_BANKING_APP_ID` / `ENABLE_BANKING_KEY_PATH` | No | Credenciales de Open Banking. Lo habitual es configurarlas desde la propia aplicación (ver más abajo). |
+
+#### ✉️ Envío de correo (alta de usuarios, recuperar contraseña, avisos…)
+
+ContaMiki envía correos al **darse de alta un usuario** (verificación de la cuenta), al **recuperar la contraseña** y en los avisos y el resumen diario. Sin configurar el correo, **no se envía nada** (los mensajes se escriben en el registro del contenedor) y los usuarios nuevos no podrán verificar su cuenta. Hay **dos formas** de configurarlo; elige una:
+
+**Opción A · No tengo un gestor de correo propio → usa un servidor SMTP.** Es la más sencilla: pon los datos de tu proveedor (Gmail, el correo de tu dominio, Brevo, etc.).
+
+| Variable | Descripción |
+|---|---|
+| `SMTP_HOST` | Servidor SMTP, por ejemplo `smtp.gmail.com`. **Con ella se activa el envío.** |
+| `SMTP_PORT` | Puerto (por defecto `587`; el `465` usa TLS directo). |
+| `SMTP_SECURE` | `true` fuerza TLS directo; por defecto solo en el puerto `465` (en el `587` se usa STARTTLS). |
+| `SMTP_USER` / `SMTP_PASS` | Usuario y contraseña, si el servidor exige autenticación. En Gmail hay que usar una **contraseña de aplicación** (requiere tener activada la verificación en dos pasos), no la contraseña normal de la cuenta. |
+| `SMTP_FROM` | Dirección del remitente (por defecto, `SMTP_USER`). |
+
+```yaml
+    environment:
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_USER=tu_cuenta@gmail.com
+      - SMTP_PASS=${SMTP_PASS}          # contraseña de aplicación, desde las variables del stack
+      - SMTP_FROM=tu_cuenta@gmail.com
+```
+
+**Opción B · Ya tengo un gestor de correo → ContaMiki le delega el envío.** Si ya dispones de un servicio propio que centraliza el correo de tus aplicaciones, indica su dirección y su clave. Debe aceptar `POST <URL>/send` con un JSON `{ "to", "subject", "text", "html", "key", "fromName" }` y responder `{ "success": true }`.
+
+| Variable | Descripción |
+|---|---|
+| `CENTRAL_EMAIL_URL` | Dirección del servicio de correo (por ejemplo, `http://mi-servicio:3001`). |
+| `CENTRAL_EMAIL_KEY` | Clave que se envía en el campo `key` para autorizar el envío. Trátala como una contraseña: larga, aleatoria y distinta en cada instalación. |
+
+Si defines **las dos**, tiene prioridad la opción B. Para probar la configuración, usa el botón de correo de prueba de la propia aplicación.
 
 > [!IMPORTANT]
 > **Seguridad.** Si despliegas con Docker Compose, el `docker-compose.yml` toma `JWT_SECRET` de las variables del stack y **el despliegue falla si falta**, en lugar de arrancar con una clave por defecto. Nunca subas un `.env` con valores reales al repositorio (ya está en el `.gitignore`); usa `.env.example` como plantilla. Si alguna vez publicaste una clave por error, **cámbiala**: borrarla del repositorio no basta, porque queda en el historial.

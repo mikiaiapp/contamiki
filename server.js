@@ -13,6 +13,7 @@ import dotenv from 'dotenv';
 import { BankService } from './bankService.js';
 import { NotificationService } from './notificationService.js';
 import { SyncEngine } from './syncEngine.js';
+import { loadSmtpConfig, sendViaSmtp } from './mailer.js';
 
 const envConfig = dotenv.config();
 if (envConfig.error) {
@@ -101,6 +102,18 @@ async function startServer() {
                 return false;
             }
         } else {
+            // Sin servicio central: envío SMTP directo si hay SMTP_HOST; si no, modo de prueba (se escribe en el registro)
+            const smtp = await loadSmtpConfig(getSecret);
+            if (smtp) {
+                try {
+                    await sendViaSmtp(smtp, { to, subject, text, html, fromName: 'ContaMiki' });
+                    console.log(`[SMTP] Enviado a ${to}`);
+                    return true;
+                } catch (error) {
+                    console.error("[SMTP ERROR]", error.message);
+                    return false;
+                }
+            }
             console.log("==================================================");
             console.log(`[MOCK EMAIL] To: ${to}`);
             console.log(`Subject: ${subject}`);
