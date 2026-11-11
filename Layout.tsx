@@ -472,9 +472,6 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                 </>
               )}
             </div>
-            <button onClick={logout} className="bg-white/10 text-white/70 p-2 rounded-xl border border-white/10 active:bg-white/20 touch-manipulation">
-              <LogOut size={18} />
-            </button>
         </div>
       </header>
 
