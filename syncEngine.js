@@ -1,6 +1,27 @@
 import fs from 'fs';
 import path from 'path';
 
+// Descripción de un movimiento bancario (Enable Banking / ASPSP)
+function extractBankDescription(bTx) {
+    let desc = '';
+    if (Array.isArray(bTx.remittance_information) && bTx.remittance_information.length > 0) {
+        desc = bTx.remittance_information.filter(Boolean).join(' ').trim();
+    } else if (typeof bTx.remittance_information === 'string' && bTx.remittance_information.trim()) {
+        desc = bTx.remittance_information.trim();
+    } else if (bTx.remittance_information_unstructured) {
+        desc = bTx.remittance_information_unstructured.trim();
+    }
+    if (!desc) {
+        desc = bTx.creditor_name || bTx.debtor_name || bTx.additional_information || bTx.details || bTx.description || bTx.entry_reference || 'Movimiento bancario';
+    }
+    return desc;
+}
+
+const cleanText = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Identificador propio del banco para el movimiento, si lo da (permite reconocerlo aunque cambie la fecha, el signo o el texto)
+const bankRefOf = (bTx) => bTx.entry_reference || bTx.transaction_id || bTx.internal_transaction_id || null;
+
 export class SyncEngine {
     constructor({ bankService, notificationService, ticketsInboxDir }) {
         this.bankService = bankService;
@@ -373,6 +394,7 @@ export class SyncEngine {
         let totalNewTxs = 0;
         const categorizedTxsSummary = [];
         const pendingTxsSummary = [];
+        const signMismatches = [];   // movimientos ya importados pero con el signo/tipo contrario al que da el banco: no se duplican, se avisan para revisar
         const balanceReconciliations = [];
 
         // 1. Fetch transactions for each mapped account
@@ -394,6 +416,12 @@ export class SyncEngine {
                 console.log(`[SYNC] Descargando movimientos para ${mapped.name || mapped.uid} (${dateFrom} -> ${today})...`);
                 bankTxs = await this.bankService.getAccountTransactions(mapped.uid, dateFrom, today, psuContext);
                 console.log(`[SYNC] ${bankTxs.length} movimientos recibidos de ${mapped.aspspName}`);
+                // Los movimientos aún pendientes (PDNG) pueden cambiar al contabilizarse: se importan cuando estén contabilizados
+                const pendientes = bankTxs.filter(t => String(t.status || '').toUpperCase() === 'PDNG').length;
+                if (pendientes > 0) {
+                    console.log(`[SYNC] ${pendientes} movimiento(s) pendiente(s) (PDNG) ignorados hasta que se contabilicen`);
+                    bankTxs = bankTxs.filter(t => String(t.status || '').toUpperCase() !== 'PDNG');
+                }
             } catch (err) {
                 console.error(`[SYNC ERROR] Error fetching transactions for ${mapped.name}:`, err.message);
                 continue;
@@ -413,7 +441,16 @@ export class SyncEngine {
                 const isDebit = bTx.credit_debit_indicator === 'DBIT' || bTx.amount < 0;
                 const finalAmount = isDebit ? -absAmt : absAmt;
 
-                const match = existingTxs.find(t => {
+                // a) Mismo identificador del banco (si lo da): es el mismo movimiento aunque haya cambiado la fecha, el signo o el texto
+                const ref = bankRefOf(bTx);
+                let match = ref
+                    ? existingTxs.find(t => !matchedExistingIds.has(t.id) && t.bankRef === ref && t.accountId === mapped.mappedAccountId)
+                    : null;
+
+                // b) Misma fecha, importe y sentido; si hay varios candidatos, primero el que tiene el mismo concepto (así un pago no «consume» el apunte de su anulación)
+                const conceptoBanco = cleanText(extractBankDescription(bTx));
+                if (!match) {
+                    const candidatos = existingTxs.filter(t => {
                     if (matchedExistingIds.has(t.id)) return false;
                     const isDirectAcc = t.accountId === mapped.mappedAccountId;
                     const isTransferAcc = (t.type === 'TRANSFER' && t.transferAccountId === mapped.mappedAccountId);
@@ -425,9 +462,28 @@ export class SyncEngine {
                         : (t.type === 'INCOME' || (t.type === 'TRANSFER' && isTransferAcc));
 
                     return sameAmount && correctFlow && t.date === bookingDate;
-                });
+                    });
+                    match = candidatos.find(t => conceptoBanco && cleanText(t.description) === conceptoBanco) || candidatos[0] || null;
+                }
+
+                // c) Respaldo: misma fecha, mismo importe y MISMO CONCEPTO, aunque el apunte existente tenga el sentido contrario
+                //    (p. ej. una «ANULACION…» importada antes como gasto). No se duplica; se avisa para corregir el signo.
+                if (!match) {
+                    const dBank = cleanText(extractBankDescription(bTx));
+                    if (dBank) {
+                        const sameConcept = existingTxs.find(t => {
+                            if (matchedExistingIds.has(t.id) || t.accountId !== mapped.mappedAccountId || t.date !== bookingDate) return false;
+                            return Math.abs(Math.abs(Number(t.amount)) - absAmt) < 0.005 && cleanText(t.description) === dBank;
+                        });
+                        if (sameConcept) {
+                            match = sameConcept;
+                            signMismatches.push({ date: bookingDate, amount: finalAmount, desc: extractBankDescription(bTx), existingAmount: Number(sameConcept.amount), existingType: sameConcept.type });
+                        }
+                    }
+                }
 
                 if (match) {
+                    if (ref && !match.bankRef) match.bankRef = ref;
                     matchedExistingIds.add(match.id);
                     bTx._matchedExistingId = match.id;
                 }
@@ -445,19 +501,7 @@ export class SyncEngine {
                 const txType = isDebit ? 'EXPENSE' : 'INCOME';
                 const finalAmount = isDebit ? -absAmt : absAmt;
                 
-                // Extracción exhaustiva de la descripción bancaria (Enable Banking / ASPSP)
-                let desc = '';
-                if (Array.isArray(bTx.remittance_information) && bTx.remittance_information.length > 0) {
-                    desc = bTx.remittance_information.filter(Boolean).join(' ').trim();
-                } else if (typeof bTx.remittance_information === 'string' && bTx.remittance_information.trim()) {
-                    desc = bTx.remittance_information.trim();
-                } else if (bTx.remittance_information_unstructured) {
-                    desc = bTx.remittance_information_unstructured.trim();
-                }
-
-                if (!desc) {
-                    desc = bTx.creditor_name || bTx.debtor_name || bTx.additional_information || bTx.details || bTx.description || bTx.entry_reference || 'Movimiento bancario';
-                }
+                const desc = extractBankDescription(bTx);
 
                 // PASO 2: Para movimientos bancarios no casados exactamente, verificar si existe un apunte manual (+-2 días) que coincida en concepto/comercio
                 const manualMatch = existingTxs.find(t => {
@@ -508,7 +552,8 @@ export class SyncEngine {
                         isValidated: hasCategory,
                         isPendingCategorization: !hasCategory,
                         isReviewed: false,
-                        isFromBankSync: true
+                        isFromBankSync: true,
+                        ...(bankRefOf(bTx) ? { bankRef: bankRefOf(bTx) } : {})
                     };
 
                     existingTxs.push(newTx);
@@ -638,7 +683,7 @@ export class SyncEngine {
 
         // 4. Enviar notificación multicanal si hubo actividad o cuadre de saldos
         const hasDifferences = balanceReconciliations.some(r => r.bankBalance !== null && !r.isCuadrado);
-        const shouldNotify = totalNewTxs > 0 || totalMatched > 0 || totalPending > 0 || hasDifferences || isScheduled;
+        const shouldNotify = totalNewTxs > 0 || totalMatched > 0 || totalPending > 0 || hasDifferences || signMismatches.length > 0 || isScheduled;
 
         if (shouldNotify) {
             const lines = [];
@@ -654,6 +699,13 @@ export class SyncEngine {
                 lines.push(`<b>⚠️ Pendientes de categorizar (${pendingTxsSummary.length}):</b>`);
                 for (const item of pendingTxsSummary) {
                     lines.push(`• ${item.date} | ${item.amount > 0 ? '+' : ''}${item.amount.toFixed(2)} € | ${item.desc} ➔ <i>🔴 Pendiente</i>`);
+                }
+            }
+
+            if (signMismatches.length > 0) {
+                lines.push(`<b>🔁 Ya estaban importados, con el signo contrario (revisar) (${signMismatches.length}):</b>`);
+                for (const m of signMismatches) {
+                    lines.push(`• ${m.date} | banco ${m.amount > 0 ? '+' : ''}${m.amount.toFixed(2)} € | en ContaMiki ${m.existingAmount > 0 ? '+' : ''}${m.existingAmount.toFixed(2)} € (${m.existingType}) | ${m.desc}`);
                 }
             }
 
@@ -706,6 +758,7 @@ export class SyncEngine {
             pendingTickets: totalPending,
             categorizedCount: categorizedTxsSummary.length,
             pendingCategorizationCount: pendingTxsSummary.length,
+            signMismatches,
             syncedAccountsCount: mappedAccounts.length,
             balanceReconciliations
         };
