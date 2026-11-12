@@ -2267,7 +2267,8 @@ export const TransactionView: React.FC<TransactionViewProps> = ({
                         onClick={() => {
                           setFCat(c.id);
                           setFTransferDest('');
-                          setFType(f.family.type);
+                          // Un cobro del banco (ingreso) que se categoriza en una familia de gasto es un reembolso: se queda como ingreso (si pasara a gasto cambiaria de signo y el banco lo volveria a proponer)
+                          setFType(editingTx && editingTx.type === 'INCOME' && (editingTx as any).isFromBankSync && f.family.type === 'EXPENSE' ? 'INCOME' : f.family.type);
                           setSelectorTarget(null);
                           setModalSearchTerm('');
                         }}
