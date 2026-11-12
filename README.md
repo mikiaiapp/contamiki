@@ -63,6 +63,8 @@ ContaMiki no se limita a anotar gastos sueltos: te ofrece un modelo contable de 
 ### 2. ✍️ Entrada de Apuntes Manual y Accesos Rápidos
 Registrar un movimiento en el día a día es una experiencia inmediata y agradable:
 - **Entrada Ultra-Rápida:** Formularios optimizados para móvil y ordenador con selector rápido de fecha, cuenta de cargo/abono, importe e imputación de categoría.
+- **Reembolsos:** un cobro (devolución de una tienda, anulación de un pago, Bizum de un amigo que te paga su parte) que categorizas en una familia de gasto se mantiene como **ingreso** dentro de esa familia y resta del gasto neto; no cambia de signo.
+- **En el móvil:** zoom con la pinza, deslizar hacia abajo desde arriba para actualizar y menú de usuario en la cabecera.
 - **⭐ Apuntes Favoritos:**  
   ¿Compras el pan a diario o tomas café en el mismo bar? Guarda tus gastos e ingresos más repetitivos como apuntes favoritos para generarlos con **un solo toque** en pantalla desde el diario o el resumen, sin volver a rellenar nada.
 - **🔁 Apuntes Recurrentes y Periódicos:**  
@@ -117,7 +119,7 @@ Envía tickets a tu buzón en segundos sin abrir la web:
 - **Sincronización Matutina Silenciosa:**  
   El servidor ejecuta un barrido automático programable (por defecto a las **06:00 AM**) para que cuando te despiertes a las 07:00 AM tengas tus saldos actualizados y las facturas emparejadas.
 - **Protección Anti-Duplicados:**  
-  Algoritmo estricto de triple coincidencia (cuenta, fecha e importe exacto) que garantiza que jamás se duplique un apunte aunque solapen las fechas de consulta.
+  Un movimiento del banco no se importa dos veces aunque solapen las fechas de consulta: se reconoce por el identificador del propio banco (si lo da) o por cuenta, fecha, importe y sentido, dando preferencia al mismo concepto para que un pago no «consuma» el apunte de su anulación. Si ya existe un apunte con el mismo concepto, fecha e importe pero con el signo contrario, no se duplica y se avisa para que lo revises.
 - **Sincronización Manual Selectiva:**  
   Posibilidad de sincronizar todas las cuentas vinculadas a la vez o abrir el selector interactivo para centrarse únicamente en una o dos cuentas específicas, además de contar con un botón de sincronización directa en cada cuenta individual.
 
