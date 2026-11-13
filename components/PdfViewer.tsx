@@ -14,6 +14,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [scale, setScale] = useState<number>(1.2);
+  const [fitScale, setFitScale] = useState<number>(1.2);   // zoom que hace caber la página a lo ancho (el «Ajustar»)
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<any>(null);
 
@@ -39,6 +40,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
         }
 
         const pdf = await loadingTask.promise;
+        if (isCancelled) return;
+
+        // Zoom inicial: que la primera página quepa a lo ancho en la pantalla (en el móvil, un A4 a 120 % se salía por los dos lados)
+        try {
+          const first = await pdf.getPage(1);
+          const anchoPagina = first.getViewport({ scale: 1 }).width;
+          const anchoVisible = (containerRef.current?.clientWidth || window.innerWidth || 360) - 32;   // 16 px de margen a cada lado
+          const ajuste = Math.max(0.3, Math.min(1.6, Math.floor((anchoVisible / anchoPagina) * 100) / 100));
+          if (!isCancelled) { setFitScale(ajuste); setScale(ajuste); }
+        } catch { /* si no se puede medir, se queda el zoom por defecto */ }
         if (isCancelled) return;
 
         pdfDocRef.current = pdf;
@@ -74,7 +85,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
         <div className="flex items-center gap-1.5 bg-white/10 rounded-xl p-1">
           <button
             type="button"
-            onClick={() => setScale(s => Math.max(0.6, Math.round((s - 0.2) * 10) / 10))}
+            onClick={() => setScale(s => Math.max(0.3, Math.round((s - 0.2) * 10) / 10))}
             className="p-1 hover:bg-white/20 active:bg-white/30 rounded-lg text-white transition-colors cursor-pointer touch-action-manipulation"
             title="Reducir zoom"
           >
@@ -85,7 +96,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
           </span>
           <button
             type="button"
-            onClick={() => setScale(s => Math.min(2.5, Math.round((s + 0.2) * 10) / 10))}
+            onClick={() => setScale(s => Math.min(4, Math.round((s + 0.2) * 10) / 10))}
             className="p-1 hover:bg-white/20 active:bg-white/30 rounded-lg text-white transition-colors cursor-pointer touch-action-manipulation"
             title="Aumentar zoom"
           >
@@ -93,9 +104,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
           </button>
           <button
             type="button"
-            onClick={() => setScale(1.2)}
+            onClick={() => setScale(fitScale)}
             className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider hover:bg-white/20 active:bg-white/30 rounded-lg text-indigo-300 transition-colors cursor-pointer touch-action-manipulation ml-1"
-            title="Restablecer tamaño normal"
+            title="Ajustar al ancho de la pantalla"
           >
             Ajustar
           </button>
@@ -105,7 +116,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ url }) => {
       {/* Área de visualización con scroll continuo de todas las páginas */}
       <div 
         ref={containerRef} 
-        className="flex-1 overflow-y-auto overflow-x-auto p-4 flex flex-col items-center gap-6 bg-slate-900/60 custom-scrollbar"
+        className="flex-1 overflow-y-auto overflow-x-auto p-4 flex flex-col gap-6 bg-slate-900/60 custom-scrollbar"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {loading && (
@@ -204,7 +215,7 @@ const PdfPageItem: React.FC<PdfPageItemProps> = ({ pdf, pageNum, totalPages, sca
   }, [pdf, pageNum, scale]);
 
   return (
-    <div className="flex flex-col items-center gap-1.5 shrink-0">
+    <div className="flex flex-col items-center gap-1.5 shrink-0 mx-auto">
       <div className="flex items-center justify-between w-full px-2 text-[10px] font-bold text-slate-400">
         <span className="bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700/60 text-slate-300">
           Página {pageNum} de {totalPages}
