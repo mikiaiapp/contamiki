@@ -243,6 +243,10 @@ export class SyncEngine {
 
             let ticketDate = null;
             let ticketAmount = null;
+            // Importes y fechas que además da el propio documento (p. ej. «Total a pagar» o «Fecha estimada de cargo»): sirven para casar aunque el nombre del fichero
+            // lleve otro importe (el bruto de la factura, sin el descuento) o la fecha de emisión quede lejos del cargo en el banco.
+            const extraAmounts = [];
+            const extraDates = [];
 
             // 1. Detección de fecha en el nombre: YYYYMMDD, YYYY-MM-DD o YYYY_MM_DD
             const dateMatch = file.match(/(?:^|[^0-9])(20\d{2})[-_]?(\d{2})[-_]?(\d{2})(?:[^0-9]|$)/);
@@ -262,6 +266,8 @@ export class SyncEngine {
                     ticketAmount = parseFloat(amtEuroMatch[1]);
                 }
             }
+
+            const nameAmount = ticketAmount;   // importe que dice el nombre del fichero (si lo dice)
 
             // 3. Si es PDF, analizar el documento con pdf-parse para extraer fecha e importe oficial
             if (ext === '.pdf') {
@@ -291,6 +297,15 @@ export class SyncEngine {
                             }
                         }
 
+                        // Importes y fechas del documento, siempre (además de los del nombre)
+                        for (const m of pdfText.matchAll(/Total\s*a\s*pagar[^\d]{0,200}?(\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:€|EUR)?/gi)) {
+                            const val = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
+                            if (!isNaN(val) && val > 0) extraAmounts.push(val);
+                        }
+                        for (const m of pdfText.matchAll(/(?:Fecha\s+estimada\s+de\s+cargo|Fecha\s+de\s+cargo|Fecha\s+de\s+emisi[oó]n)[^\d]{0,20}(\d{1,2})[\/\.-](\d{1,2})[\/\.-](20\d{2})/gi)) {
+                            extraDates.push(`${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`);
+                        }
+
                         // Extraer importe oficial del documento si no venía explícito en el nombre
                         if (!ticketAmount) {
                             const totalMatches = [...pdfText.matchAll(/(?:TOTAL|IMPORTE\s*TOTAL|Total\s*a\s*pagar|Total)[\s:]*([\d.,]+)\s*(?:€|EUR)?/gi)];
@@ -308,29 +323,36 @@ export class SyncEngine {
                 }
             }
 
-            if (!ticketAmount) continue;
+            const amountsToTry = [...new Set([ticketAmount, ...extraAmounts].filter(Boolean))];
+            if (amountsToTry.length === 0) continue;
+            const ticketDates = [...new Set([ticketDate, ...extraDates].filter(Boolean))];
+            const dayMs = 1000 * 60 * 60 * 24;
+            // Distancia en días entre un movimiento y la fecha más cercana del ticket (null si el ticket no tiene fecha)
+            const distToTicket = (t) => ticketDates.length ? Math.min(...ticketDates.map(d => Math.abs((new Date(t.date) - new Date(d)) / dayMs))) : null;
 
-            // Search in book transactions: same amount, date +- 3 days
+            // Search in book transactions: same amount (la del nombre o la del documento), date +- 3 days
+            // o, si es un PDF (factura), hasta 15 días DESPUÉS de su fecha: los recibos se cargan días después de emitirse la factura
             const candidates = bookTransactions.filter(t => {
                 if (t.attachment) return false; // already has attachment
                 const txAmt = Math.abs(Number(t.amount));
-                if (Math.abs(txAmt - ticketAmount) >= 0.01) return false;
+                const amtOk = amountsToTry.find(a => Math.abs(txAmt - a) < 0.01);
+                if (amtOk === undefined) return false;
+                // La ventana de «hasta 15 días después» solo vale si el importe viene del documento (no del nombre del fichero): así un importe escrito a mano no casa con cualquier cargo posterior
+                const importeDelDocumento = ext === '.pdf' && extraAmounts.some(a => Math.abs(a - amtOk) < 0.01) && !(nameAmount && Math.abs(nameAmount - amtOk) < 0.01);
 
-                if (!ticketDate) return true; // match purely by exact amount if date unavailable
-                if (t.date === ticketDate) return true;
+                if (ticketDates.length === 0) return true; // match purely by exact amount if date unavailable
+                if (ticketDates.includes(t.date)) return true;
 
-                // check +- 3 days
-                const tDate = new Date(t.date);
-                const tkDate = new Date(ticketDate);
-                const diffDays = Math.abs((tDate - tkDate) / (1000 * 60 * 60 * 24));
-                return diffDays <= 3;
+                return ticketDates.some(d => {
+                    const diff = (new Date(t.date) - new Date(d)) / dayMs;
+                    return Math.abs(diff) <= 3 || (importeDelDocumento && diff > 0 && diff <= 15);
+                });
             });
 
             if (candidates.length > 0) {
                 // Si hay varios candidatos y tenemos fecha, priorizar la transacción más cercana a la fecha del ticket
-                if (ticketDate && candidates.length > 1) {
-                    const tkDate = new Date(ticketDate);
-                    candidates.sort((a, b) => Math.abs(new Date(a.date) - tkDate) - Math.abs(new Date(b.date) - tkDate));
+                if (ticketDates.length && candidates.length > 1) {
+                    candidates.sort((a, b) => distToTicket(a) - distToTicket(b));
                 }
                 const candidate = candidates[0];
                 // Convert file to base64 Data URI
