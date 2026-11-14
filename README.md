@@ -360,28 +360,81 @@ npm run dev
 
 ### Variables de entorno en desarrollo
 
-Son **las mismas** que se describen en [«Variables de entorno»](#2-variables-de-entorno) del despliegue con Docker; aquí, en lugar de ponerlas en el stack o en el `docker-compose.yml`, se escriben en un fichero **`.env` en la carpeta del proyecto** (junto a `package.json`). La aplicación lo lee al arrancar; si cambias algo, **reinicia** `npm run dev`.
+ContaMiki lee su configuración de **variables de entorno**, igual que en Docker; la diferencia es dónde se escriben. En Docker van en el stack o en el `docker-compose.yml`; en local van en un fichero de texto llamado **`.env`**, que debes crear **en la carpeta del proyecto** (junto a `package.json`). **Ninguna clave va escrita en el código ni en el repositorio.**
 
-1. Copia la plantilla: `cp .env.example .env`.
-2. Abre `.env`, **quita la `#` inicial** de las líneas que necesites y rellena su valor.
-3. **Mínimo imprescindible:** `JWT_SECRET`. Sin ella el servidor se niega a arrancar. Genera una con `openssl rand -hex 48` o, si no tienes `openssl` (por ejemplo en Windows), con Node: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`:
+#### Paso a paso
+
+1. **Crea tu `.env`** a partir de la plantilla: `cp .env.example .env` (en Windows PowerShell: `Copy-Item .env.example .env`).
+2. **Genera una clave para `JWT_SECRET`** (una cadena larga y aleatoria, 64 caracteres o más):
+   - con `openssl`: `openssl rand -hex 48`
+   - o con Node (sirve en cualquier sistema, también en Windows): `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`
+3. **Edita `.env`** con cualquier editor de texto. Cada línea tiene el formato `NOMBRE=valor`, **sin espacios** alrededor del `=` y **sin comillas**. Las líneas que empiezan por `#` son comentarios: **quita la `#`** de las que quieras activar. Un `.env` mínimo es:
 
 ```ini
-JWT_SECRET=pega_aquí_la_cadena_aleatoria
+JWT_SECRET=pega_aquí_la_cadena_generada_en_el_paso_2
 APP_URL=http://localhost:3000
 ```
 
-| Variable | En desarrollo |
-|---|---|
-| `JWT_SECRET` | **Obligatoria.** Distinta de la de producción. |
-| `APP_URL` | Opcional: si no la defines, usa `http://localhost:3000`. Aparece en los enlaces de los correos. |
-| `SMTP_*` o `CENTRAL_EMAIL_*` | **Opcionales.** Sin ellas no se envía ningún correo: los mensajes (verificación de cuenta, recuperar contraseña…) se escriben en la **consola** donde ejecutas `npm run dev`. Si quieres envíos reales, consulta el apartado «Envío de correo» (más arriba, en el despliegue con Docker). |
-| `DATA_DIR` | Opcional: carpeta donde guardar los datos (por defecto, `data/` dentro del proyecto). |
-| `ENABLE_BANKING_*` | Opcionales. Lo habitual es configurar Open Banking desde la propia aplicación. |
+4. **Arranca** con `npm run dev`. Al iniciar, la consola debe mostrar `✅ [ENV] Archivo .env cargado correctamente` y `🔐 [CONFIG] JWT_SECRET: definida`. Si cambias el `.env` más tarde, **para el servidor (Ctrl+C) y vuelve a lanzar `npm run dev`**: solo se lee al arrancar.
 
-> **Seguridad.** El fichero `.env` contiene secretos: **nunca lo subas a Git** (está en el `.gitignore`; usa `.env.example` como plantilla, sin valores reales). Para compilar el paquete de producción del navegador: `npm run build`.
+> Si ves `❌ [CONFIG] Falta JWT_SECRET` y el servidor se detiene, el `.env` no está en la carpeta correcta, la línea sigue comentada con `#`, o el valor está vacío.
+
+#### Qué variables hay
+
+| Variable | ¿Obligatoria? | Descripción |
+|---|---|---|
+| `JWT_SECRET` | **Sí** | Clave con la que se firman las sesiones. Debe ser larga y aleatoria (64 caracteres o más). **Sin ella la aplicación no arranca.** Si la cambias, todos los usuarios tendrán que volver a iniciar sesión. Usa una **distinta** de la de producción. |
+| `APP_URL` | Recomendada | URL con la que accedes a la aplicación, con protocolo: en local, `http://localhost:3000`. Se usa en los enlaces de los correos (verificar cuenta, recuperar contraseña). Si no la defines, se usa `http://localhost:3000`. |
+| `DATA_DIR` | No | Carpeta donde se guardan los datos (usuarios, apuntes, tickets…). Por defecto, `data/` dentro del proyecto (ya está en el `.gitignore`). Ejemplo: `DATA_DIR=/home/tu_usuario/contamiki-datos`. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Para el correo (opción A) | Datos de tu servidor de correo saliente. Ver «Envío de correo» más abajo. |
+| `CENTRAL_EMAIL_URL`, `CENTRAL_EMAIL_KEY` | Para el correo (opción B) | Servicio de correo central que ya tengas montado. Ver «Envío de correo» más abajo. |
+| `ENABLE_BANKING_APP_ID` / `ENABLE_BANKING_KEY_PATH` | No | Credenciales de Open Banking. Lo habitual es configurarlas desde la propia aplicación (ver más arriba «Configuración de Open Banking»). |
+
+#### ✉️ Envío de correo en desarrollo (alta de usuarios, recuperar contraseña, avisos…)
+
+El correo es **opcional en desarrollo**. Si no lo configuras, **no se envía nada**: los mensajes (verificación de cuenta, recuperar contraseña…) se escriben en la **consola** donde ejecutas `npm run dev`, y los usuarios nuevos no podrán verificar su cuenta por correo. Para que se envíen de verdad, elige **una** de las dos formas:
+
+**Opción A · No tengo un gestor de correo propio → usa un servidor SMTP** (Gmail, el correo de tu dominio, Brevo, etc.). Añade esto a tu `.env`:
+
+```ini
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=tu_cuenta@gmail.com
+SMTP_PASS=contraseña_de_aplicación
+SMTP_FROM=tu_cuenta@gmail.com
+```
+
+| Variable | Descripción |
+|---|---|
+| `SMTP_HOST` | Servidor SMTP, por ejemplo `smtp.gmail.com`. **Con ella se activa el envío.** |
+| `SMTP_PORT` | Puerto (por defecto `587`; el `465` usa TLS directo). |
+| `SMTP_SECURE` | `true` fuerza TLS directo; por defecto solo en el puerto `465` (en el `587` se usa STARTTLS). |
+| `SMTP_USER` / `SMTP_PASS` | Usuario y contraseña, si el servidor exige autenticación. En Gmail hay que usar una **contraseña de aplicación** (requiere tener activada la verificación en dos pasos), no la contraseña normal de la cuenta. |
+| `SMTP_FROM` | Dirección del remitente (por defecto, `SMTP_USER`). |
+
+**Opción B · Ya tengo un gestor de correo → ContaMiki le delega el envío.** Debe aceptar `POST <URL>/send` con un JSON `{ "to", "subject", "text", "html", "key", "fromName" }` y responder `{ "success": true }`. Añade a tu `.env`:
+
+```ini
+CENTRAL_EMAIL_URL=http://localhost:3001
+CENTRAL_EMAIL_KEY=clave_larga_y_aleatoria
+```
+
+| Variable | Descripción |
+|---|---|
+| `CENTRAL_EMAIL_URL` | Dirección del servicio de correo (por ejemplo, `http://localhost:3001`). |
+| `CENTRAL_EMAIL_KEY` | Clave que se envía en el campo `key` para autorizar el envío. Trátala como una contraseña: larga, aleatoria y distinta en cada instalación. |
+
+> **Seguridad.** El fichero `.env` contiene secretos: **nunca lo subas a Git** (está en el `.gitignore`; usa `.env.example` como plantilla, sin valores reales). Si alguna vez publicaste una clave por error, **cámbiala**: borrarla del repositorio no basta, porque queda en el historial. Para compilar el paquete de producción del navegador: `npm run build`.
 
 </details>
+
+---
+
+## 👤 Sobre el autor
+
+Soy **Miguel Ángel Fernández**, Director Financiero (CFO) con más de 20 años en la alta dirección de empresas industriales. Combino la visión estratégica de las finanzas —tesorería, financiación, presupuestos y reporting— con el desarrollo de software y la inteligencia artificial aplicada a la gestión. Estas aplicaciones nacen para resolver necesidades reales de mi día a día y las comparto como código abierto.
+
+🌐 **Web:** [mafede.i234.me](https://mafede.i234.me/) · 💼 **LinkedIn:** [linkedin.com/in/miguelangelfernandezdelgado](https://www.linkedin.com/in/miguelangelfernandezdelgado/)
 
 ---
 
