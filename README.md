@@ -129,8 +129,8 @@ Envía tickets a tu buzón en segundos sin abrir la web:
 Elige cómo quieres recibir tu resumen financiero matutino:
 - **🤖 Bot de Telegram:** Recibe un mensaje diario formateado con el número de movimientos nuevos descargados, facturas emparejadas y tickets pendientes.
   > **¿Cómo configurarlo en 2 minutos?**
-  > 1. Abre Telegram y escribe a [@BotFather](https://t.me/BotFather) el comando `/newbot`. Te dará tu **Bot Token** (ej. `123456789:AA...`).
-  > 2. Escribe a [@userinfobot](https://t.me/userinfobot) y pulsa *Iniciar* para obtener tu **Chat ID** (ej. `987654321`).
+  > 1. Abre Telegram y escribe a [@BotFather](https://t.me/BotFather) el comando `/newbot`. Te dará tu **Bot Token** (ej. `**********:AA*******`).
+  > 2. Escribe a [@userinfobot](https://t.me/userinfobot) y pulsa *Iniciar* para obtener tu **Chat ID** (ej. `*********`).
   > 3. ¡Importante! Abre el chat de tu nuevo bot y pulsa **«Iniciar»** (`/start`). Pega ambos datos en ContaMiki y pulsa *Probar Telegram*.
 - **✉️ Envío de Email:** Envío automático del resumen matutino a tu correo electrónico personal.
 

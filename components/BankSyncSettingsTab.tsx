@@ -1253,7 +1253,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                     <li>Escribe un alias terminado en bot (ej. <code>mi_contamiki_bot</code>)</li>
                   </ul>
                   <p className="text-[11px] text-slate-700">
-                    BotFather te responderá con tu <strong>HTTP API Token</strong> (ej. <code>123456789:AAExampleToken...</code>). Cópialo y pégalo en el campo <strong>Bot Token</strong>.
+                    BotFather te responderá con tu <strong>HTTP API Token</strong> (ej. <code>**********:AA*******</code>). Cópialo y pégalo en el campo <strong>Bot Token</strong>.
                   </p>
                 </div>
               </div>
@@ -1266,7 +1266,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
                     En Telegram, busca a <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" className="text-sky-600 font-bold underline">@userinfobot ↗</a> y pulsa en <strong>Iniciar</strong>.
                   </p>
                   <p className="text-[11px] text-slate-700">
-                    Te responderá con tu identificador numérico (ej. <code>987654321</code>). Cópialo en el campo <strong>Chat ID</strong>.
+                    Te responderá con tu identificador numérico (ej. <code>*********</code>). Cópialo en el campo <strong>Chat ID</strong>.
                   </p>
                 </div>
               </div>
