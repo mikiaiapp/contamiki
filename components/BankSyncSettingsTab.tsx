@@ -24,7 +24,6 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
   const [notifSettings, setNotifSettings] = useState<any>({
     email: { enabled: true, address: '' },
     telegram: { enabled: false, botToken: '', chatId: '' },
-    inApp: { enabled: true },
     syncHour: 6
   });
 
@@ -762,7 +761,7 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
             )}
           </div>
 
-          {/* Cartero Email & In-App */}
+          {/* Cartero Email */}
           <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs uppercase">
@@ -789,19 +788,6 @@ export const BankSyncSettingsTab: React.FC<BankSyncSettingsTabProps> = ({
               })}
               className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"
             />
-
-            <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-700">Avisos dentro de la App</span>
-              <input
-                type="checkbox"
-                checked={notifSettings.inApp?.enabled ?? true}
-                onChange={(e) => setNotifSettings({
-                  ...notifSettings,
-                  inApp: { ...notifSettings.inApp, enabled: e.target.checked }
-                })}
-                className="w-4 h-4 rounded text-indigo-600"
-              />
-            </div>
           </div>
         </div>
 

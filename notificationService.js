@@ -26,7 +26,6 @@ export class NotificationService {
         return all[username] || {
             email: { enabled: true, address: username },
             telegram: { enabled: false, botToken: '', chatId: '' },
-            inApp: { enabled: true },
             syncHour: 6
         };
     }
@@ -42,9 +41,6 @@ export class NotificationService {
                 enabled: settings.telegram?.enabled ?? false,
                 botToken: (settings.telegram?.botToken || '').trim(),
                 chatId: (settings.telegram?.chatId || '').trim()
-            },
-            inApp: {
-                enabled: settings.inApp?.enabled ?? true
             },
             syncHour: settings.syncHour !== undefined ? parseInt(settings.syncHour, 10) : 6
         };
@@ -77,11 +73,11 @@ export class NotificationService {
     }
 
     /**
-     * Dispatches notification across configured channels (Telegram, Email, In-App)
+     * Dispatches notification across configured channels (Telegram, Email)
      */
     async notifyUser(username, { title, summary, stats, lines = [] }) {
         const settings = this.getUserSettings(username);
-        const results = { email: false, telegram: false, inApp: false };
+        const results = { email: false, telegram: false };
 
         // 1. Telegram Notification
         if (settings.telegram?.enabled && settings.telegram?.botToken && settings.telegram?.chatId) {
@@ -145,34 +141,6 @@ export class NotificationService {
                 console.log(`[NOTIFY] Email enviado a ${targetEmail}`);
             } catch (err) {
                 console.error(`[NOTIFY ERROR Email] ${username}:`, err.message);
-            }
-        }
-
-        // 3. In-App Notification
-        if (settings.inApp?.enabled) {
-            try {
-                const notifDir = path.join(this.dataDir, 'notifications');
-                if (!fs.existsSync(notifDir)) fs.mkdirSync(notifDir, { recursive: true });
-                const userNotifFile = path.join(notifDir, `${username.replace(/[^a-zA-Z0-9]/g, '_')}.json`);
-                let userNotifs = [];
-                if (fs.existsSync(userNotifFile)) {
-                    try { userNotifs = JSON.parse(fs.readFileSync(userNotifFile, 'utf8')); } catch { }
-                }
-                userNotifs.unshift({
-                    id: `notif_${Date.now()}`,
-                    title,
-                    summary,
-                    stats,
-                    lines,
-                    read: false,
-                    date: new Date().toISOString()
-                });
-                // Keep last 30
-                if (userNotifs.length > 30) userNotifs = userNotifs.slice(0, 30);
-                fs.writeFileSync(userNotifFile, JSON.stringify(userNotifs, null, 2), 'utf8');
-                results.inApp = true;
-            } catch (err) {
-                console.error(`[NOTIFY ERROR In-App] ${username}:`, err.message);
             }
         }
 
