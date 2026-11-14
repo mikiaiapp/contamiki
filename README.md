@@ -295,7 +295,30 @@ Al guardar, **solo se reescriben los ficheros que han cambiado** (por ejemplo, s
 
 ## 💻 Desarrollo Local
 
-Para ejecutar o contribuir al código fuente:
+Para ejecutar o contribuir al código fuente.
+
+### Requisitos previos
+
+Necesitas **Git** (para clonar el repositorio) y **Node.js 20 o superior** (incluye `npm`; es la versión de la imagen Docker). Comprueba si ya los tienes:
+
+```bash
+git --version
+node --version     # debe indicar v20 o superior
+```
+
+Si falta alguno, instálalo según tu sistema (después **cierra y vuelve a abrir la terminal**):
+
+| Sistema | Comandos |
+|---|---|
+| **Windows** (PowerShell) | `winget install --id Git.Git -e`<br>`winget install --id OpenJS.NodeJS.LTS -e` |
+| **macOS** ([Homebrew](https://brew.sh)) | `brew install git node@20`<br>`brew link --overwrite node@20` |
+| **Debian / Ubuntu** | `sudo apt update && sudo apt install -y git curl`<br>`curl -fsSL https://deb.nodesource.com/setup_20.x \| sudo -E bash -`<br>`sudo apt install -y nodejs` |
+| **Fedora** | `sudo dnf install -y git nodejs` |
+
+> También puedes descargarlos desde [git-scm.com](https://git-scm.com/downloads) y [nodejs.org](https://nodejs.org) (elige la versión LTS).
+
+
+> **¿Qué se levanta?** Un servidor (Node/Express) **en el propio equipo donde lo ejecutas**, igual que el contenedor Docker pero sin contenedor: sirve la web y la API en **http://localhost:3000** y guarda los datos en la carpeta `data/` del proyecto (ya está en el `.gitignore`). Al parar el proceso, la aplicación deja de estar disponible.
 
 ```bash
 # 1. Clonar el repositorio
@@ -305,9 +328,35 @@ cd contamiki
 # 2. Instalar dependencias
 npm install
 
-# 3. Iniciar entorno de desarrollo
+# 3. Crear tu configuración local (ver más abajo) y definir JWT_SECRET
+cp .env.example .env
+
+# 4. Iniciar entorno de desarrollo
 npm run dev
 ```
+
+### Variables de entorno en desarrollo
+
+Son **las mismas** que se describen en [«Variables de entorno»](#2-variables-de-entorno) del despliegue con Docker; aquí, en lugar de ponerlas en el stack o en el `docker-compose.yml`, se escriben en un fichero **`.env` en la carpeta del proyecto** (junto a `package.json`). La aplicación lo lee al arrancar; si cambias algo, **reinicia** `npm run dev`.
+
+1. Copia la plantilla: `cp .env.example .env`.
+2. Abre `.env`, **quita la `#` inicial** de las líneas que necesites y rellena su valor.
+3. **Mínimo imprescindible:** `JWT_SECRET`. Sin ella el servidor se niega a arrancar. Genera una con `openssl rand -hex 48` o, si no tienes `openssl` (por ejemplo en Windows), con Node: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`:
+
+```ini
+JWT_SECRET=pega_aquí_la_cadena_aleatoria
+APP_URL=http://localhost:3000
+```
+
+| Variable | En desarrollo |
+|---|---|
+| `JWT_SECRET` | **Obligatoria.** Distinta de la de producción. |
+| `APP_URL` | Opcional: si no la defines, usa `http://localhost:3000`. Aparece en los enlaces de los correos. |
+| `SMTP_*` o `CENTRAL_EMAIL_*` | **Opcionales.** Sin ellas no se envía ningún correo: los mensajes (verificación de cuenta, recuperar contraseña…) se escriben en la **consola** donde ejecutas `npm run dev`. Si quieres envíos reales, consulta el apartado «Envío de correo» (más arriba, en el despliegue con Docker). |
+| `DATA_DIR` | Opcional: carpeta donde guardar los datos (por defecto, `data/` dentro del proyecto). |
+| `ENABLE_BANKING_*` | Opcionales. Lo habitual es configurar Open Banking desde la propia aplicación. |
+
+> **Seguridad.** El fichero `.env` contiene secretos: **nunca lo subas a Git** (está en el `.gitignore`; usa `.env.example` como plantilla, sin valores reales). Para compilar el paquete de producción del navegador: `npm run build`.
 
 ---
 
