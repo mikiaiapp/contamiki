@@ -17,6 +17,11 @@
   </p>
 </div>
 
+<p align="center">
+  <img src="docs/contamiki_demo.gif" width="300" alt="Demostración animada de ContaMiki con datos ficticios: conexión bancaria, sincronización diaria, categorización automática, tickets, importador, favoritos y recurrentes" />
+  <br /><sub>Demostración con datos ficticios (conexión bancaria, volcado diario con categorización automática, tickets, importador, favoritos y recurrentes).</sub>
+</p>
+
 ---
 
 ## ✨ ¿Por qué ContaMiki?
