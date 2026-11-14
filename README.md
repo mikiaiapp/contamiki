@@ -243,56 +243,6 @@ Accede desde tu navegador a `http://tu-ip:3000` (o a través de tu proxy inverso
 
 ---
 
-## 🔑 Configuración de Open Banking (Enable Banking)
-
-Todo el proceso de credenciales se gestiona **directamente desde la interfaz web de ContaMiki** (en **Ajustes ➔ Bancos & Tickets ➔ Ajustar Credenciales**):
-
-1. **Alta gratuita:** Regístrate como desarrollador en [enablebanking.com](https://enablebanking.com) (el servicio es gratuito para uso personal y sustituye la antigua API de GoCardless).
-2. **Crear aplicación:**
-   - En el panel de Enable Banking ve a **API applications** ➔ **Add a new application**.
-   - Entorno: **Production**.
-   - Generar clave en el navegador: se descargará automáticamente tu archivo **`enablebanking.pem`**.
-   - Allowed redirect URLs (puedes copiarlas desde el botón de la app):
-     ```text
-     https://tu-dominio.com/api/bank/callback
-     https://tu-dominio.com/
-     ```
-3. **Activar en producción:**
-   - En el panel de Enable Banking, selecciona tu banco en el cuadro desplegable y pulsa **Link** para autorizar tu primera cuenta personal (la app pasará de `Inactive` a `Active`).
-4. **Guardar en ContaMiki:**
-   - Entra en ContaMiki en **Ajustes ➔ Bancos & Tickets ➔ Ajustar Credenciales**.
-   - Pega tu **Application ID**, carga o pega tu clave **`enablebanking.pem`** y pulsa **Guardar y Verificar**.
-   - Pulsa el botón negro **«Vincular Banco»**, autoriza tu entidad y asigna cada cuenta a tu contabilidad correspondiente.
-
----
-
-## 📁 Estructura del Almacenamiento Persistente
-
-Todos tus datos se almacenan de forma ordenada dentro del volumen `/app/data`:
-
-```text
-data/
-├── users.json                 # Registro de usuarios y credenciales seguras
-├── bank_config.json           # Configuración activa de Open Banking
-├── bank_connections.json      # Conexiones bancarias autorizadas y mapeos
-├── enablebanking.pem          # Clave RSA privada para Open Banking
-├── tickets_inbox/             # Buzón temporal de facturas y tickets pendientes
-│   └── factura_mercadona.pdf
-└── users/
-    └── usuario_email_com/
-        ├── metadata.json      # Contabilidades y permisos del usuario
-        ├── backups/           # Copias de seguridad automáticas diarias
-        └── default_book_1/
-            ├── config.json    # Cuentas, familias, categorías, favoritos y periódicos
-            ├── transactions_2024.json
-            ├── transactions_2025.json
-            └── transactions_2026.json
-```
-
-Al guardar, **solo se reescriben los ficheros que han cambiado** (por ejemplo, solo el año con movimientos nuevos o modificados); la app guarda 1 segundo después de tu último cambio y, además, al instante si la pasas a segundo plano o la cierras.
-
----
-
 ## 💻 Desarrollo Local
 
 Para ejecutar o contribuir al código fuente.
@@ -357,6 +307,56 @@ APP_URL=http://localhost:3000
 | `ENABLE_BANKING_*` | Opcionales. Lo habitual es configurar Open Banking desde la propia aplicación. |
 
 > **Seguridad.** El fichero `.env` contiene secretos: **nunca lo subas a Git** (está en el `.gitignore`; usa `.env.example` como plantilla, sin valores reales). Para compilar el paquete de producción del navegador: `npm run build`.
+
+---
+
+## 🔑 Configuración de Open Banking (Enable Banking)
+
+Todo el proceso de credenciales se gestiona **directamente desde la interfaz web de ContaMiki** (en **Ajustes ➔ Bancos & Tickets ➔ Ajustar Credenciales**):
+
+1. **Alta gratuita:** Regístrate como desarrollador en [enablebanking.com](https://enablebanking.com) (el servicio es gratuito para uso personal y sustituye la antigua API de GoCardless).
+2. **Crear aplicación:**
+   - En el panel de Enable Banking ve a **API applications** ➔ **Add a new application**.
+   - Entorno: **Production**.
+   - Generar clave en el navegador: se descargará automáticamente tu archivo **`enablebanking.pem`**.
+   - Allowed redirect URLs (puedes copiarlas desde el botón de la app):
+     ```text
+     https://tu-dominio.com/api/bank/callback
+     https://tu-dominio.com/
+     ```
+3. **Activar en producción:**
+   - En el panel de Enable Banking, selecciona tu banco en el cuadro desplegable y pulsa **Link** para autorizar tu primera cuenta personal (la app pasará de `Inactive` a `Active`).
+4. **Guardar en ContaMiki:**
+   - Entra en ContaMiki en **Ajustes ➔ Bancos & Tickets ➔ Ajustar Credenciales**.
+   - Pega tu **Application ID**, carga o pega tu clave **`enablebanking.pem`** y pulsa **Guardar y Verificar**.
+   - Pulsa el botón negro **«Vincular Banco»**, autoriza tu entidad y asigna cada cuenta a tu contabilidad correspondiente.
+
+---
+
+## 📁 Estructura del Almacenamiento Persistente
+
+Todos tus datos se almacenan de forma ordenada dentro del volumen `/app/data`:
+
+```text
+data/
+├── users.json                 # Registro de usuarios y credenciales seguras
+├── bank_config.json           # Configuración activa de Open Banking
+├── bank_connections.json      # Conexiones bancarias autorizadas y mapeos
+├── enablebanking.pem          # Clave RSA privada para Open Banking
+├── tickets_inbox/             # Buzón temporal de facturas y tickets pendientes
+│   └── factura_mercadona.pdf
+└── users/
+    └── usuario_email_com/
+        ├── metadata.json      # Contabilidades y permisos del usuario
+        ├── backups/           # Copias de seguridad automáticas diarias
+        └── default_book_1/
+            ├── config.json    # Cuentas, familias, categorías, favoritos y periódicos
+            ├── transactions_2024.json
+            ├── transactions_2025.json
+            └── transactions_2026.json
+```
+
+Al guardar, **solo se reescriben los ficheros que han cambiado** (por ejemplo, solo el año con movimientos nuevos o modificados); la app guarda 1 segundo después de tu último cambio y, además, al instante si la pasas a segundo plano o la cierras.
 
 ---
 
