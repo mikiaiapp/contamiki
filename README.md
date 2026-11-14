@@ -44,7 +44,7 @@
 
 ## 🎯 Operativa y Funcionalidades en Detalle
 
-<details>
+<details open>
 <summary><b>Mostrar / ocultar</b></summary>
 
 ```mermaid
@@ -163,7 +163,7 @@ Elige cómo quieres recibir tu resumen financiero matutino:
 
 ## 🔑 Configuración de Open Banking (Enable Banking)
 
-<details>
+<details open>
 <summary><b>Mostrar / ocultar</b></summary>
 
 Todo el proceso de credenciales se gestiona **directamente desde la interfaz web de ContaMiki** (en **Ajustes ➔ Bancos & Tickets ➔ Ajustar Credenciales**):
@@ -191,7 +191,7 @@ Todo el proceso de credenciales se gestiona **directamente desde la interfaz web
 
 ## 📁 Estructura del Almacenamiento Persistente
 
-<details>
+<details open>
 <summary><b>Mostrar / ocultar</b></summary>
 
 Todos tus datos se almacenan de forma ordenada dentro del volumen `/app/data`:
@@ -223,7 +223,7 @@ Al guardar, **solo se reescriben los ficheros que han cambiado** (por ejemplo, s
 
 ## 🐳 Despliegue con Docker en 2 minutos
 
-<details>
+<details open>
 <summary><b>Mostrar / ocultar</b></summary>
 
 La forma recomendada de desplegar ContaMiki en un NAS (Synology, QNAP, Unraid), servidor doméstico o VPS es mediante **Docker Compose**.
@@ -315,7 +315,7 @@ Accede desde tu navegador a `http://tu-ip:3000` (o a través de tu proxy inverso
 
 ## 💻 Desarrollo Local
 
-<details>
+<details open>
 <summary><b>Mostrar / ocultar</b></summary>
 
 Para ejecutar o contribuir al código fuente.
@@ -387,7 +387,7 @@ APP_URL=http://localhost:3000
 
 ## 📄 Licencia
 
-<details>
+<details open>
 <summary><b>Mostrar / ocultar</b></summary>
 
 Este proyecto está publicado bajo la licencia de código abierto [MIT](LICENSE). Siéntete libre de utilizarlo, modificarlo y compartirlo.
