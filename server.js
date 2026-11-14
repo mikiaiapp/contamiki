@@ -501,6 +501,17 @@ const readFullUserState = async (username) => {
 };
 
 // Guarda el estado fragmentándolo en archivos
+// Escribe el fichero (de forma atómica) solo si su contenido cambia: guardar no reescribe lo que no se ha tocado.
+const writeIfChanged = async (file, content, previous = null) => {
+    if (previous === null) {
+        try { previous = await fs.readFile(file, 'utf8'); } catch { previous = null; }
+    }
+    if (previous === content) return false;
+    await fs.writeFile(`${file}.tmp`, content);
+    await fs.rename(`${file}.tmp`, file);
+    return true;
+};
+
 const saveFullUserState = async (username, fullState) => {
     const userDir = getUserDir(username);
     await fs.mkdir(userDir, { recursive: true });
@@ -567,7 +578,7 @@ const saveFullUserState = async (username, fullState) => {
         booksMetadata: ownBooksMeta,
         currentBookId: fullState.currentBookId || ''
     };
-    await fs.writeFile(path.join(userDir, 'metadata.json'), JSON.stringify(rootState, null, 2));
+    await writeIfChanged(path.join(userDir, 'metadata.json'), JSON.stringify(rootState, null, 2));
 
     // 1.5 Actualizar metadatos de libros compartidos (si han cambiado)
     const sharedAccess = await readSharedAccess();
@@ -659,8 +670,7 @@ const saveFullUserState = async (username, fullState) => {
 
             // Guardar Configuración (Overwrite atomic)
             const configFile = path.join(targetDir, 'config.json');
-            await fs.writeFile(`${configFile}.tmp`, JSON.stringify(configData, null, 2));
-            await fs.rename(`${configFile}.tmp`, configFile);
+            await writeIfChanged(configFile, JSON.stringify(configData, null, 2));
 
             // Identificar archivos existentes para limpieza posterior
             let existingFiles = [];
@@ -687,8 +697,9 @@ const saveFullUserState = async (username, fullState) => {
                 // PROTECCIÓN DE CONCURRENCIA CONTRA PÉRDIDA DE MOVIMIENTOS BANCARIOS:
                 // Si en disco ya existen movimientos bancarios sincronizados automáticamente
                 // y el cliente (por desfase de caché o sesión abierta) no los incluyó, preservarlos.
+                let diskContent = null;
                 try {
-                    const diskContent = await fs.readFile(yearFile, 'utf8');
+                    diskContent = await fs.readFile(yearFile, 'utf8');
                     const diskTxs = JSON.parse(diskContent);
                     if (Array.isArray(diskTxs)) {
                         const incomingIds = new Set(txs.map(t => t.id));
@@ -702,8 +713,8 @@ const saveFullUserState = async (username, fullState) => {
                     }
                 } catch { /* archivo nuevo o inexistente */ }
 
-                await fs.writeFile(`${yearFile}.tmp`, JSON.stringify(txs, null, 2));
-                await fs.rename(`${yearFile}.tmp`, yearFile);
+                // Solo se reescribe el año si ha cambiado (nuevo o modificado): el resto se queda como está
+                await writeIfChanged(yearFile, JSON.stringify(txs, null, 2), diskContent);
                 writtenFiles.add(filename);
             }
             

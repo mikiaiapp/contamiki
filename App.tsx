@@ -43,6 +43,8 @@ const App: React.FC = () => {
   });
   const [pendingSpecificFilters, setPendingSpecificFilters] = useState<any>(null);
   const saveTimeoutRef = useRef<number | null>(null);
+  const multiStateRef = useRef<any>(null);   // último estado, para guardarlo ya si la app pasa a segundo plano
+  const savingRef = useRef(false);
 
   // Efecto para cargar la configuración de la API (IA)
   useEffect(() => {
@@ -91,7 +93,15 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isLoggedIn || !dataLoaded) return;
 
-    const handleVisibilityOrFocus = () => {
+    const handleVisibilityOrFocus = (ev?: Event) => {
+      // Al pasar a segundo plano (o cerrar) se guarda ya, sin esperar el segundo de reposo: el iPhone congela la página y la cola de guardado se perdería
+      if (document.visibilityState === 'hidden' || ev?.type === 'pagehide') {
+        if (!savingRef.current && multiStateRef.current && JSON.stringify(multiStateRef.current) !== lastSavedState.current) {
+          if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
+          performSave(multiStateRef.current);
+        }
+        return;
+      }
       if (document.visibilityState === 'visible') {
         loadData()
           .then(fetchedData => {
@@ -107,16 +117,19 @@ const App: React.FC = () => {
 
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
     window.addEventListener('focus', handleVisibilityOrFocus);
+    window.addEventListener('pagehide', handleVisibilityOrFocus);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       window.removeEventListener('focus', handleVisibilityOrFocus);
+      window.removeEventListener('pagehide', handleVisibilityOrFocus);
     };
   }, [isLoggedIn, dataLoaded]);
 
   const performSave = async (stateToSave: MultiBookState) => {
       setSyncStatus('SAVING');
       setSyncErrorMsg(null);
+      savingRef.current = true;
       try {
           await saveData(stateToSave);
           setSyncStatus('SAVED');
@@ -125,18 +138,21 @@ const App: React.FC = () => {
           setSyncStatus('ERROR');
           setSyncErrorMsg(err.message || "Error desconocido");
           console.error(err);
+      } finally {
+          savingRef.current = false;
       }
   };
 
   useEffect(() => {
     if (isLoggedIn && dataLoaded && !loadError) {
+      multiStateRef.current = multiState;
       const currentStateStr = JSON.stringify(multiState);
       if (currentStateStr === lastSavedState.current) return;
 
       if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
       
       setSyncStatus('SAVING');
-      saveTimeoutRef.current = window.setTimeout(() => performSave(multiState), 4000);
+      saveTimeoutRef.current = window.setTimeout(() => performSave(multiState), 1000);     // 1 s de reposo tras el último cambio (antes 4 s)
     }
   }, [multiState, dataLoaded, isLoggedIn, loadError]);
 

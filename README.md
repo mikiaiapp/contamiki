@@ -281,6 +281,8 @@ data/
             └── transactions_2026.json
 ```
 
+Al guardar, **solo se reescriben los ficheros que han cambiado** (por ejemplo, solo el año con movimientos nuevos o modificados); la app guarda 1 segundo después de tu último cambio y, además, al instante si la pasas a segundo plano o la cierras.
+
 ---
 
 ## 💻 Desarrollo Local

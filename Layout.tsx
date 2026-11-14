@@ -371,7 +371,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
 
   const SyncIndicator = () => {
       if (syncStatus === 'SAVING') {
-          return <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-full text-white/80 select-none"><RefreshCw size={14} className="animate-spin"/><span className="text-[9px] font-black uppercase tracking-wider">Guardando...</span></div>;
+          return <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-400 rounded-full text-slate-900 select-none shadow-lg shadow-amber-500/30"><RefreshCw size={14} className="animate-spin"/><span className="text-[10px] font-black uppercase tracking-wider">Guardando…</span></div>;
       }
       if (syncStatus === 'ERROR') {
           return (
