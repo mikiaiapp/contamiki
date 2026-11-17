@@ -328,6 +328,11 @@ export class SyncEngine {
             const ticketDates = [...new Set([ticketDate, ...extraDates].filter(Boolean))];
             const dayMs = 1000 * 60 * 60 * 24;
             // Distancia en días entre un movimiento y la fecha más cercana del ticket (null si el ticket no tiene fecha)
+            // Comercio que dice el nombre del fichero («2026-11-12 Rituals 31.80 EUR.pdf» → «rituals»): si el concepto del cargo lo contiene, el importe exacto + el comercio bastan
+            // para casar aunque el banco cargue la compra varios días después (fines de semana, cargos diferidos de tarjeta)
+            const normTxt = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+            const comercioMatch = file.match(/^\d{4}-\d{2}-\d{2}\s+(.+?)\s+\d{1,5}[.,]\d{2}\s*EUR/i);
+            const comercioNorm = comercioMatch ? normTxt(comercioMatch[1]) : '';
             const distToTicket = (t) => ticketDates.length ? Math.min(...ticketDates.map(d => Math.abs((new Date(t.date) - new Date(d)) / dayMs))) : null;
 
             // Search in book transactions: same amount (la del nombre o la del documento), date +- 3 days
@@ -340,12 +345,14 @@ export class SyncEngine {
                 // La ventana de «hasta 15 días después» solo vale si el importe viene del documento (no del nombre del fichero): así un importe escrito a mano no casa con cualquier cargo posterior
                 const importeDelDocumento = ext === '.pdf' && extraAmounts.some(a => Math.abs(a - amtOk) < 0.01) && !(nameAmount && Math.abs(nameAmount - amtOk) < 0.01);
 
+                const comercioCoincide = comercioNorm.length >= 4 && comercioNorm !== 'ticket' && normTxt(t.description).includes(comercioNorm);
+
                 if (ticketDates.length === 0) return true; // match purely by exact amount if date unavailable
                 if (ticketDates.includes(t.date)) return true;
 
                 return ticketDates.some(d => {
                     const diff = (new Date(t.date) - new Date(d)) / dayMs;
-                    return Math.abs(diff) <= 3 || (importeDelDocumento && diff > 0 && diff <= 15);
+                    return Math.abs(diff) <= 3 || (importeDelDocumento && diff > 0 && diff <= 15) || (comercioCoincide && diff > 0 && diff <= 10);
                 });
             });
 
