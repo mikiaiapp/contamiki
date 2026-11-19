@@ -97,6 +97,7 @@ Nunca más perderás una garantía ni un justificante de compra:
   Abre cualquier transacción y previsualiza el PDF o la foto directamente en un visor nativo integrado en la aplicación, con opciones de pantalla completa, zoom y descarga. Al abrir un PDF se **ajusta al ancho de la pantalla** (también en el móvil); el botón «Ajustar» vuelve a ese tamaño.
 - **📥 Buzón de Tickets Inbox (`tickets_inbox`):**  
   Deja tus PDFs o fotos en la carpeta compartida de red de tu NAS o envíalos desde tu teléfono móvil. En el barrido diario (o pulsando el botón **«Conciliar tickets del buzón ahora»**), ContaMiki analiza el documento y lo **empareja automáticamente con el movimiento bancario correspondiente**, archivándolo en el apunte y eliminándolo del buzón una vez conciliado.
+  Si el fichero llega **sin extensión** (p. ej. desde el atajo del iPhone, con un nombre como «20261118 Mercadona 74,96 €»), ContaMiki detecta por su cabecera si es PDF, JPG o PNG y le añade la extensión; un punto decimal del nombre (74.96) ya no se confunde con una extensión.
   El emparejamiento exige el **mismo importe** y una fecha cercana (±3 días); si el nombre del fichero indica el comercio («2026-11-12 Rituals 31.80 EUR.pdf») y el concepto del cargo lo contiene, acepta además cargos de **hasta 10 días después** (compras con tarjeta que el banco carga con retraso).
 
 ---

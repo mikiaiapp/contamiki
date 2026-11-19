@@ -1737,7 +1737,8 @@ app.post('/api/tickets/inbox/upload', async (req, res) => {
         let safeName = filename.replace(/,/g, '.').replace(/[^a-zA-Z0-9._ -]/g, '_');
         
         // Si no tiene extensión o termina en punto, detectar el tipo real por cabecera binaria
-        if (!path.extname(safeName) || path.extname(safeName) === '.') {
+        // path.extname() daría por buena una «extensión» falsa como «.96 _» en «20261118 Mercadona 74.96 _»: solo cuentan las extensiones de archivo reales
+        if (!/\.(pdf|jpe?g|png|heic|heif|webp|gif|tiff?)$/i.test(safeName)) {
             const header = fileBuffer.slice(0, 8).toString('latin1');
             if (header.startsWith('%PDF')) {
                 safeName += '.pdf';
