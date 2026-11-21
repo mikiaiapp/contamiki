@@ -35,7 +35,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     // Línea de estado de Face ID en el acceso (explica por qué no salta, en vez de fallar en silencio)
     const [estadoFaceId, setEstadoFaceId] = useState('');
     const preparar = async () => {
-        if (!passkeysSupported() || !deviceHasPasskey()) return;
+        if (!passkeysSupported()) return;
         try { prepRef.current = { ...(await prepararPasskey()), t: Date.now() }; } catch { prepRef.current = null; }
     };
     // Importante: sin ningún await antes de loginWithPasskey, para no perder el gesto del usuario cuando viene de un toque.
@@ -49,7 +49,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             .then(() => onLoginSuccess())
             .catch((err: any) => {
                 if (err.noReconocida) setError('La clave de Face ID de este dispositivo ya no es válida. Entra con contraseña y vuelve a activarla.');
-                else if (err.cancelado) setEstadoFaceId('Face ID no se completó. Toca el campo del email o el botón para repetirlo.');
+                else if (err.cancelado) setEstadoFaceId(deviceHasPasskey() ? 'Face ID no se completó. Pulsa «Entrar con Face ID» para repetirlo.' : 'No se encontró una clave de Face ID para este sitio. Entra con contraseña y código y actívala.');
                 else setEstadoFaceId('No se pudo usar Face ID: ' + err.message);
             })
             .finally(() => { setLoading(false); preparar(); });
@@ -76,13 +76,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     useEffect(() => {
         if (new URLSearchParams(window.location.search).get('action')) return;
         if (!passkeysSupported()) { setEstadoFaceId('Este navegador no permite Face ID / claves de acceso aquí.'); return; }
-        if (!deviceHasPasskey()) { setEstadoFaceId('Face ID no está activado en este dispositivo: entra con contraseña y código y actívalo.'); return; }
-        // Al abrir el acceso con Face ID activado: se prepara el reto y se pide Face ID directamente
-        setEstadoFaceId('Preparando Face ID…');
-        preparar().then(() => {
-            if (prepRef.current) { setEstadoFaceId(''); entrarConClave(true); }
-            else setEstadoFaceId('No se pudo preparar Face ID (sin respuesta del servidor). Entra con contraseña.');
-        });
+        // Siempre se deja el reto preparado para el botón «Entrar con Face ID»; si el dispositivo ya lo tiene activado, además se pide solo
+        preparar().then(() => { if (deviceHasPasskey() && prepRef.current) entrarConClave(true); });
     }, []);
 
     // Detección de parámetros URL (Verificación / Reset / Invite)
@@ -388,6 +383,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                         <p className="text-[10px] font-bold text-slate-400 text-center mb-4">{estadoFaceId}</p>
                     )}
 
+                    {mode === 'LOGIN' && passkeysSupported() && (
+                        <button
+                            type="button"
+                            disabled={loading}
+                            onClick={() => entrarConClave(false)}
+                            className="w-full flex items-center justify-center gap-2 mb-6 py-5 rounded-2xl bg-indigo-600 text-white font-black uppercase tracking-widest text-[11px] shadow-xl active:scale-95 lg:hover:bg-indigo-700 transition-all disabled:opacity-50"
+                        >
+                            <KeyRound size={18} /> Entrar con Face ID / huella
+                        </button>
+                    )}
+
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {error && (
                             <div className="bg-rose-50 text-rose-600 p-4 rounded-2xl text-[10px] font-bold text-center border border-rose-100 flex flex-col items-center justify-center gap-2 animate-in slide-in-from-top-2">
@@ -418,7 +424,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                                         type="email" 
                                         required
                                         autoComplete="email"
-                                        onClick={() => { if (mode === 'LOGIN' && !email && deviceHasPasskey() && prepRef.current) entrarConClave(false); }}
                                         disabled={mode === 'REGISTER_INVITE'}
                                         className={`w-full pl-14 pr-6 py-5 bg-slate-50 border-2 border-transparent rounded-2xl focus:outline-none focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-800 ${mode === 'REGISTER_INVITE' ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         placeholder="usuario@email.com"
@@ -546,16 +551,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     
                     {/* Botones Auxiliares */}
                     <div className="space-y-4">
-                        {mode === 'LOGIN' && passkeysSupported() && deviceHasPasskey() && (
-                            <button
-                                type="button"
-                                disabled={loading}
-                                onClick={() => entrarConClave(false)}
-                                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-indigo-600 text-white font-black uppercase tracking-widest text-[10px] shadow-xl active:scale-95 lg:hover:bg-indigo-700 transition-all disabled:opacity-50"
-                            >
-                                <KeyRound size={16} /> Entrar con Face ID / huella
-                            </button>
-                        )}
                         {mode === 'LOGIN' && (
                              <button onClick={() => resetState('FORGOT')} className="w-full text-center text-[9px] font-black text-slate-400 active:text-indigo-600 lg:hover:text-indigo-600 uppercase tracking-widest transition-colors touch-manipulation">
                                 ¿Olvidaste tu contraseña?
