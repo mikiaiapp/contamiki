@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification, acceptInvite, setup2FA, verifySetup2FA, loginWithPasskey, passkeysSupported } from './services/authService';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification, acceptInvite, setup2FA, verifySetup2FA, loginWithPasskey, passkeysSupported, deviceHasPasskey } from './services/authService';
 import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles, Check, XCircle, CheckCircle2, Mail, ArrowLeft, KeyRound, Send, ShieldCheck, QrCode } from 'lucide-react';
 
 interface LoginViewProps {
@@ -28,6 +28,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const [loading, setLoading] = useState(false);
     const [resetToken, setResetToken] = useState<string | null>(null);
     const [showResend, setShowResend] = useState(false);
+
+    // Clave de acceso (Face ID / huella): si este dispositivo ya tiene una, se pide sola al abrir el acceso
+    const entrarConClave = async (auto: boolean) => {
+        setError(''); setSuccessMsg(''); setLoading(true);
+        try { await loginWithPasskey(); onLoginSuccess(); }
+        catch (err: any) { if (!(auto && err.cancelado)) setError(err.message); }
+        finally { setLoading(false); }
+    };
+    const autoIntentado = useRef(false);
+    useEffect(() => {
+        const p = new URLSearchParams(window.location.search);
+        if (autoIntentado.current || p.get('action') || !passkeysSupported() || !deviceHasPasskey()) return;
+        autoIntentado.current = true;
+        const t = setTimeout(() => entrarConClave(true), 300);
+        return () => clearTimeout(t);
+    }, []);
 
     // Detección de parámetros URL (Verificación / Reset / Invite)
     useEffect(() => {
@@ -456,15 +472,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             <button
                                 type="button"
                                 disabled={loading}
-                                onClick={async () => {
-                                    setError(''); setSuccessMsg(''); setLoading(true);
-                                    try { await loginWithPasskey(); onLoginSuccess(); }
-                                    catch (err: any) { setError(err.message); }
-                                    finally { setLoading(false); }
-                                }}
-                                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border border-slate-200 text-slate-700 font-black uppercase tracking-widest text-[10px] active:scale-95 lg:hover:bg-slate-50 transition-all disabled:opacity-50"
+                                onClick={() => entrarConClave(false)}
+                                className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] active:scale-95 transition-all disabled:opacity-50 ${deviceHasPasskey() ? 'bg-indigo-600 text-white shadow-xl lg:hover:bg-indigo-700' : 'border border-slate-200 text-slate-700 lg:hover:bg-slate-50'}`}
                             >
-                                <KeyRound size={16} /> Entrar con clave de acceso
+                                <KeyRound size={16} /> {deviceHasPasskey() ? 'Entrar con Face ID / huella' : 'Entrar con clave de acceso'}
                             </button>
                         )}
                         {mode === 'LOGIN' && (

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle, ShieldCheck, QrCode, PieChart, Mail, Users } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
-import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus, testEmail, listPasskeys, registerPasskey, deletePasskey, passkeysSupported } from './services/authService';
+import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus, testEmail, listPasskeys, registerPasskey, deletePasskey, passkeysSupported, deviceName } from './services/authService';
 
 interface LayoutProps {
   currentView: View;
@@ -221,12 +221,15 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
   };
 
   const addPasskey = async () => {
-      const name = (window.prompt('Nombre para esta clave (por ejemplo, «iPhone de Miki»):', '') || '').trim();
+      // El nombre sale solo del dispositivo («iPhone · Safari»); si ya hay otra con ese nombre, se numera
+      const base = deviceName();
+      const repetidas = passkeys.filter(p => p.name === base || p.name.startsWith(base + ' (')).length;
+      const name = repetidas ? base + ' (' + (repetidas + 1) + ')' : base;
       setPasskeyBusy(true); setPasskeyMsg('');
       try {
           await registerPasskey(name);
           setPasskeys(await listPasskeys());
-          setPasskeyMsg('Clave de acceso añadida.');
+          setPasskeyMsg('Listo: este dispositivo ya entra con Face ID o huella.');
       } catch (err: any) {
           setPasskeyMsg(err.message);
       } finally {
@@ -592,7 +595,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                                            <button onClick={() => removePasskey(p.id, p.name)} className="p-2 text-rose-400 active:text-rose-600 lg:hover:text-rose-600 touch-manipulation" aria-label="Eliminar clave"><Trash2 size={16}/></button>
                                        </div>
                                    ))}
-                                   <button onClick={addPasskey} disabled={passkeyBusy} className="w-full py-3 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl font-black uppercase text-[10px] tracking-widest active:bg-indigo-100 lg:hover:bg-indigo-100 touch-manipulation disabled:opacity-50">{passkeyBusy ? 'Esperando al dispositivo…' : 'Añadir clave de acceso'}</button>
+                                   <button onClick={addPasskey} disabled={passkeyBusy} className="w-full py-3 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl font-black uppercase text-[10px] tracking-widest active:bg-indigo-100 lg:hover:bg-indigo-100 touch-manipulation disabled:opacity-50">{passkeyBusy ? 'Esperando al dispositivo…' : 'Activar Face ID / huella en este dispositivo'}</button>
                                    {passkeyMsg && <p className="text-[10px] font-bold text-slate-500 text-center">{passkeyMsg}</p>}
                                </div>
                            )}

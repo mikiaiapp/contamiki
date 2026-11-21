@@ -396,10 +396,30 @@ const bufAB64u = (buf: ArrayBuffer): string => {
 export const passkeysSupported = () =>
     typeof window !== 'undefined' && !!window.PublicKeyCredential && !!navigator.credentials && window.isSecureContext;
 
-const mensajeWebAuthn = (err: any) =>
-    err?.name === 'NotAllowedError' ? 'Operación cancelada o sin tiempo.' :
-    err?.name === 'InvalidStateError' ? 'Esta clave ya está registrada en este dispositivo.' :
-    err?.message || 'No se pudo usar la clave de acceso.';
+// Este dispositivo tiene una clave de acceso de la app: al abrir el acceso se pide Face ID / huella directamente
+const PASSKEY_DEVICE_KEY = 'contamiki_passkey_device';
+export const deviceHasPasskey = () => { try { return localStorage.getItem(PASSKEY_DEVICE_KEY) === '1'; } catch { return false; } };
+const marcarDispositivo = (si: boolean) => { try { si ? localStorage.setItem(PASSKEY_DEVICE_KEY, '1') : localStorage.removeItem(PASSKEY_DEVICE_KEY); } catch { /* sin almacenamiento */ } };
+
+// Nombre automático del dispositivo para la clave («iPhone · Safari»): el usuario no tiene que escribirlo
+export const deviceName = () => {
+    const ua = navigator.userAgent || '';
+    const tactil = (navigator.maxTouchPoints || 0) > 1;
+    const equipo = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) || (/Macintosh/.test(ua) && tactil) ? 'iPad' : /Android/.test(ua) ? 'Android'
+        : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'Dispositivo';
+    const nav = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox|FxiOS/.test(ua) ? 'Firefox' : /Chrome|CriOS/.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : '';
+    return nav ? equipo + ' · ' + nav : equipo;
+};
+
+const mensajeWebAuthn = (err: any) => {
+    const e: any = new Error(
+        err?.name === 'NotAllowedError' ? 'Operación cancelada o sin tiempo.' :
+        err?.name === 'InvalidStateError' ? 'Esta clave ya está registrada en este dispositivo.' :
+        err?.message || 'No se pudo usar la clave de acceso.');
+    e.cancelado = err?.name === 'NotAllowedError';
+    e.noReconocida = /no reconocida/i.test(err?.message || '');
+    return e;
+};
 
 export const loginWithPasskey = async () => {
     try {
@@ -435,9 +455,12 @@ export const loginWithPasskey = async () => {
         const data = await v.json().catch(() => ({}));
         if (!v.ok) throw new Error(data.error || 'No se pudo verificar la clave');
         setSession(data.token, data.username);
+        marcarDispositivo(true);
         return data;
     } catch (err: any) {
-        throw new Error(mensajeWebAuthn(err));
+        const e = mensajeWebAuthn(err);
+        if (e.noReconocida) marcarDispositivo(false);   // la clave de este dispositivo ya no existe: se vuelve al acceso normal
+        throw e;
     }
 };
 
@@ -482,9 +505,10 @@ export const registerPasskey = async (name: string) => {
         };
         const v = await fetch('/api/passkeys/register/verify', { method: 'POST', headers, body: JSON.stringify({ name, response }) });
         if (!v.ok) throw new Error((await v.json().catch(() => ({}))).error || 'No se pudo registrar la clave');
+        marcarDispositivo(true);
         return true;
     } catch (err: any) {
-        throw new Error(mensajeWebAuthn(err));
+        throw mensajeWebAuthn(err);
     }
 };
 
