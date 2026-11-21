@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification, acceptInvite, setup2FA, verifySetup2FA, loginWithPasskey, passkeysSupported, deviceHasPasskey, registerPasskey, deviceName } from './services/authService';
+import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification, acceptInvite, setup2FA, verifySetup2FA, loginWithPasskey, prepararPasskey, passkeysSupported, deviceHasPasskey, registerPasskey, deviceName } from './services/authService';
 import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles, Check, XCircle, CheckCircle2, Mail, ArrowLeft, KeyRound, Send, ShieldCheck, QrCode } from 'lucide-react';
 
 interface LoginViewProps {
@@ -29,22 +29,29 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const [resetToken, setResetToken] = useState<string | null>(null);
     const [showResend, setShowResend] = useState(false);
 
-    // Clave de acceso (Face ID / huella): si este dispositivo ya tiene una, se pide sola al abrir el acceso
-    const entrarConClave = async (auto: boolean) => {
+    // Clave de acceso (Face ID / huella). Si este dispositivo ya tiene una, el reto se pide al abrir el acceso y Face ID se lanza EN EL TOQUE sobre
+    // el campo del email (o sobre el botón): así iOS no pregunta «¿Usar llave de acceso?», va directo a Face ID.
+    const prepRef = useRef<{ options: any; challengeId: string; t: number } | null>(null);
+    const preparar = async () => {
+        if (!passkeysSupported() || !deviceHasPasskey()) return;
+        try { prepRef.current = { ...(await prepararPasskey()), t: Date.now() }; } catch { prepRef.current = null; }
+    };
+    // Importante: sin ningún await antes de loginWithPasskey, para no perder el gesto del usuario
+    const entrarConClave = () => {
+        const prep = prepRef.current;
+        if (!prep || Date.now() - prep.t > 4 * 60 * 1000) { setLoading(true); preparar().then(() => { setLoading(false); }); return; }   // reto caducado: se renueva y vale el siguiente toque
+        prepRef.current = null;
         setError(''); setSuccessMsg(''); setLoading(true);
-        try { await loginWithPasskey(); onLoginSuccess(); }
-        catch (err: any) { if (!auto) setError(err.message); }
-        finally { setLoading(false); }
+        loginWithPasskey(prep)
+            .then(() => onLoginSuccess())
+            .catch((err: any) => { if (!err.cancelado && !err.noReconocida) setError(err.message); })
+            .finally(() => { setLoading(false); preparar(); });
     };
     // En la pantalla del código del autenticador: «Entrar con Face ID la próxima vez» (activa la clave de este dispositivo al verificar)
     const [recordarFaceId, setRecordarFaceId] = useState(true);
-    const autoIntentado = useRef(false);
     useEffect(() => {
-        const p = new URLSearchParams(window.location.search);
-        if (autoIntentado.current || p.get('action') || !passkeysSupported() || !deviceHasPasskey()) return;
-        autoIntentado.current = true;
-        const t = setTimeout(() => entrarConClave(true), 300);
-        return () => clearTimeout(t);
+        if (new URLSearchParams(window.location.search).get('action')) return;
+        preparar();
     }, []);
 
     // Detección de parámetros URL (Verificación / Reset / Invite)
@@ -356,6 +363,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                                         type="email" 
                                         required
                                         autoComplete="email"
+                                        onClick={() => { if (mode === 'LOGIN' && !email && deviceHasPasskey() && prepRef.current) entrarConClave(); }}
                                         disabled={mode === 'REGISTER_INVITE'}
                                         className={`w-full pl-14 pr-6 py-5 bg-slate-50 border-2 border-transparent rounded-2xl focus:outline-none focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-800 ${mode === 'REGISTER_INVITE' ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         placeholder="usuario@email.com"
@@ -487,7 +495,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             <button
                                 type="button"
                                 disabled={loading}
-                                onClick={() => entrarConClave(false)}
+                                onClick={entrarConClave}
                                 className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-indigo-600 text-white font-black uppercase tracking-widest text-[10px] shadow-xl active:scale-95 lg:hover:bg-indigo-700 transition-all disabled:opacity-50"
                             >
                                 <KeyRound size={16} /> Entrar con Face ID / huella

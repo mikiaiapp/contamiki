@@ -425,11 +425,18 @@ const mensajeWebAuthn = (err: any) => {
     return e;
 };
 
-export const loginWithPasskey = async () => {
+// Pide al servidor el reto de la clave de acceso. Se hace ANTES del toque del usuario para poder lanzar Face ID dentro del propio toque
+// (Safari solo se salta su cuadro de confirmación «¿Iniciar sesión…?» si Face ID se pide justo tras un gesto del usuario).
+export const prepararPasskey = async () => {
+    const r = await fetch('/api/passkeys/login/options', { method: 'POST' });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'No se pudo iniciar el acceso con clave');
+    return await r.json() as { options: any; challengeId: string };
+};
+
+// prep: reto ya pedido con prepararPasskey(); con él no hay ninguna espera antes de navigator.credentials.get (se conserva el gesto del usuario)
+export const loginWithPasskey = async (prep?: { options: any; challengeId: string }) => {
     try {
-        const r = await fetch('/api/passkeys/login/options', { method: 'POST' });
-        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'No se pudo iniciar el acceso con clave');
-        const { options, challengeId } = await r.json();
+        const { options, challengeId } = prep || await prepararPasskey();
         const cred: any = await navigator.credentials.get({
             publicKey: {
                 challenge: b64uABuf(options.challenge),
