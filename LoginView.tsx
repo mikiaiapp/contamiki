@@ -36,22 +36,27 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         if (!passkeysSupported() || !deviceHasPasskey()) return;
         try { prepRef.current = { ...(await prepararPasskey()), t: Date.now() }; } catch { prepRef.current = null; }
     };
-    // Importante: sin ningún await antes de loginWithPasskey, para no perder el gesto del usuario
-    const entrarConClave = () => {
+    // Importante: sin ningún await antes de loginWithPasskey, para no perder el gesto del usuario cuando viene de un toque.
+    // auto = al abrir el acceso, sin toque (iOS pedirá confirmar «Usar llave de acceso» y luego Face ID).
+    const entrarConClave = (auto?: boolean) => {
         const prep = prepRef.current;
         if (!prep || Date.now() - prep.t > 4 * 60 * 1000) { setLoading(true); preparar().then(() => { setLoading(false); }); return; }   // reto caducado: se renueva y vale el siguiente toque
         prepRef.current = null;
         setError(''); setSuccessMsg(''); setLoading(true);
         loginWithPasskey(prep)
             .then(() => onLoginSuccess())
-            .catch((err: any) => { if (!err.cancelado && !err.noReconocida) setError(err.message); })
+            .catch((err: any) => {
+                if (err.noReconocida) setError('La clave de Face ID de este dispositivo ya no es válida. Entra con contraseña y vuelve a activarla.');
+                else if (!auto && !err.cancelado) setError(err.message);
+            })
             .finally(() => { setLoading(false); preparar(); });
     };
     // En la pantalla del código del autenticador: «Entrar con Face ID la próxima vez» (activa la clave de este dispositivo al verificar)
     const [recordarFaceId, setRecordarFaceId] = useState(true);
     useEffect(() => {
         if (new URLSearchParams(window.location.search).get('action')) return;
-        preparar();
+        // Al abrir el acceso con Face ID activado: se prepara el reto y se pide Face ID directamente
+        preparar().then(() => { if (prepRef.current) entrarConClave(true); });
     }, []);
 
     // Detección de parámetros URL (Verificación / Reset / Invite)
@@ -363,7 +368,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                                         type="email" 
                                         required
                                         autoComplete="email"
-                                        onClick={() => { if (mode === 'LOGIN' && !email && deviceHasPasskey() && prepRef.current) entrarConClave(); }}
+                                        onClick={() => { if (mode === 'LOGIN' && !email && deviceHasPasskey() && prepRef.current) entrarConClave(false); }}
                                         disabled={mode === 'REGISTER_INVITE'}
                                         className={`w-full pl-14 pr-6 py-5 bg-slate-50 border-2 border-transparent rounded-2xl focus:outline-none focus:bg-white focus:border-indigo-500 transition-all font-bold text-slate-800 ${mode === 'REGISTER_INVITE' ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         placeholder="usuario@email.com"
@@ -495,7 +500,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             <button
                                 type="button"
                                 disabled={loading}
-                                onClick={entrarConClave}
+                                onClick={() => entrarConClave(false)}
                                 className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-indigo-600 text-white font-black uppercase tracking-widest text-[10px] shadow-xl active:scale-95 lg:hover:bg-indigo-700 transition-all disabled:opacity-50"
                             >
                                 <KeyRound size={16} /> Entrar con Face ID / huella
