@@ -403,7 +403,10 @@ export const deviceHasPasskey = () => { try { return localStorage.getItem(PASSKE
 const PASSKEY_NO_KEY = 'contamiki_passkey_no';
 export const passkeyOfferDeclined = () => { try { return localStorage.getItem(PASSKEY_NO_KEY) === '1'; } catch { return false; } };
 export const declinePasskeyOffer = () => { try { localStorage.setItem(PASSKEY_NO_KEY, '1'); } catch { /* sin almacenamiento */ } };
-const marcarDispositivo = (si: boolean) => { try { si ? localStorage.setItem(PASSKEY_DEVICE_KEY, '1') : localStorage.removeItem(PASSKEY_DEVICE_KEY); } catch { /* sin almacenamiento */ } };
+const marcarDispositivo = (si: boolean, id?: string) => { try { si ? localStorage.setItem(PASSKEY_DEVICE_KEY, id || '1') : localStorage.removeItem(PASSKEY_DEVICE_KEY); } catch { /* sin almacenamiento */ } };
+// Id de la clave de este dispositivo (null si no se conoce: dispositivos activados antes de guardarlo)
+export const devicePasskeyId = (): string | null => { try { const v = localStorage.getItem(PASSKEY_DEVICE_KEY); return v && v !== '1' ? v : null; } catch { return null; } };
+export const forgetDevicePasskey = () => marcarDispositivo(false);
 
 // Nombre automático del dispositivo para la clave («iPhone · Safari»): el usuario no tiene que escribirlo
 export const deviceName = () => {
@@ -460,7 +463,7 @@ export const loginWithPasskey = async () => {
         const data = await v.json().catch(() => ({}));
         if (!v.ok) throw new Error(data.error || 'No se pudo verificar la clave');
         setSession(data.token, data.username);
-        marcarDispositivo(true);
+        marcarDispositivo(true, cred.id);
         return data;
     } catch (err: any) {
         const e = mensajeWebAuthn(err);
@@ -510,7 +513,7 @@ export const registerPasskey = async (name: string) => {
         };
         const v = await fetch('/api/passkeys/register/verify', { method: 'POST', headers, body: JSON.stringify({ name, response }) });
         if (!v.ok) throw new Error((await v.json().catch(() => ({}))).error || 'No se pudo registrar la clave');
-        marcarDispositivo(true);
+        marcarDispositivo(true, cred.id);
         try { localStorage.removeItem(PASSKEY_NO_KEY); } catch { /* sin almacenamiento */ }
         return true;
     } catch (err: any) {

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle, ShieldCheck, QrCode, PieChart, Mail, Users } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
-import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus, testEmail, listPasskeys, registerPasskey, deletePasskey, passkeysSupported, deviceName, deviceHasPasskey } from './services/authService';
+import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus, testEmail, listPasskeys, registerPasskey, deletePasskey, passkeysSupported, deviceName, deviceHasPasskey, devicePasskeyId, forgetDevicePasskey } from './services/authService';
 
 interface LayoutProps {
   currentView: View;
@@ -230,6 +230,31 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
           await registerPasskey(name);
           setPasskeys(await listPasskeys());
           setPasskeyMsg('Listo: este dispositivo ya entra con Face ID o huella.');
+      } catch (err: any) {
+          setPasskeyMsg(err.message);
+      } finally {
+          setPasskeyBusy(false);
+      }
+  };
+
+  // La clave de ESTE dispositivo: por su id guardado o, en dispositivos activados antes, por el nombre automático
+  const claveEsteDispositivo = () => {
+      const id = devicePasskeyId();
+      if (id) return passkeys.find(p => p.id === id);
+      if (!deviceHasPasskey()) return undefined;
+      const base = deviceName();
+      return passkeys.find(p => p.name === base || p.name.startsWith(base + ' ('));
+  };
+
+  const alternarPasskey = async () => {
+      const mia = claveEsteDispositivo();
+      if (!mia) { await addPasskey(); return; }
+      setPasskeyBusy(true); setPasskeyMsg('');
+      try {
+          await deletePasskey(mia.id);
+          forgetDevicePasskey();
+          setPasskeys(await listPasskeys());
+          setPasskeyMsg('Face ID / huella desactivado en este dispositivo.');
       } catch (err: any) {
           setPasskeyMsg(err.message);
       } finally {
@@ -585,18 +610,31 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                            {passkeysSupported() && (
                                <div className="pt-4 border-t border-slate-100 space-y-3 text-left">
                                    <p className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2"><Key size={14} className="text-indigo-500"/> Claves de acceso</p>
-                                   <p className="text-[10px] text-slate-400">Entra con huella, Face ID o el PIN del dispositivo, sin contraseña ni código del autenticador.</p>
-                                   {passkeys.map(p => (
-                                       <div key={p.id} className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                           <div className="min-w-0">
-                                               <p className="text-xs font-bold text-slate-700 truncate">{p.name}</p>
-                                               <p className="text-[10px] text-slate-400">Creada el {new Date(p.createdAt).toLocaleDateString('es-ES')}{p.lastUsed ? ' · usada el ' + new Date(p.lastUsed).toLocaleDateString('es-ES') : ''}</p>
-                                           </div>
-                                           <button onClick={() => removePasskey(p.id, p.name)} className="p-2 text-rose-400 active:text-rose-600 lg:hover:text-rose-600 touch-manipulation" aria-label="Eliminar clave"><Trash2 size={16}/></button>
+                                   <p className="text-[10px] text-slate-400">Al iniciar sesión, Face ID, la huella o el PIN del dispositivo sustituyen a la contraseña y al código del autenticador.</p>
+                                   <div className="flex items-center justify-between gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                       <div className="min-w-0">
+                                           <p className="text-xs font-black text-slate-800">Face ID / huella en este dispositivo</p>
+                                           <p className={`text-[10px] font-bold ${claveEsteDispositivo() ? 'text-emerald-600' : 'text-slate-400'}`}>{passkeyBusy ? 'Esperando al dispositivo…' : claveEsteDispositivo() ? 'Activado' : 'Desactivado'}</p>
                                        </div>
-                                   ))}
-                                   <button onClick={addPasskey} disabled={passkeyBusy} className="w-full py-3 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl font-black uppercase text-[10px] tracking-widest active:bg-indigo-100 lg:hover:bg-indigo-100 touch-manipulation disabled:opacity-50">{passkeyBusy ? 'Esperando al dispositivo…' : 'Activar Face ID / huella en este dispositivo'}</button>
-                                   {deviceHasPasskey() && !passkeyMsg && <p className="text-[10px] font-bold text-emerald-600 text-center">Face ID / huella activado en este dispositivo.</p>}
+                                       <button type="button" role="switch" aria-checked={!!claveEsteDispositivo()} disabled={passkeyBusy} onClick={alternarPasskey}
+                                           className={`relative shrink-0 w-14 h-8 rounded-full transition-colors touch-manipulation disabled:opacity-50 ${claveEsteDispositivo() ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                                           <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${claveEsteDispositivo() ? 'translate-x-6' : ''}`} />
+                                       </button>
+                                   </div>
+                                   {passkeys.filter(p => p.id !== claveEsteDispositivo()?.id).length > 0 && (
+                                       <div className="space-y-2">
+                                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Otros dispositivos</p>
+                                           {passkeys.filter(p => p.id !== claveEsteDispositivo()?.id).map(p => (
+                                               <div key={p.id} className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                                   <div className="min-w-0">
+                                                       <p className="text-xs font-bold text-slate-700 truncate">{p.name}</p>
+                                                       <p className="text-[10px] text-slate-400">Creada el {new Date(p.createdAt).toLocaleDateString('es-ES')}{p.lastUsed ? ' · usada el ' + new Date(p.lastUsed).toLocaleDateString('es-ES') : ''}</p>
+                                                   </div>
+                                                   <button onClick={() => removePasskey(p.id, p.name)} className="p-2 text-rose-400 active:text-rose-600 lg:hover:text-rose-600 touch-manipulation" aria-label="Eliminar clave"><Trash2 size={16}/></button>
+                                               </div>
+                                           ))}
+                                       </div>
+                                   )}
                                    {passkeyMsg && <p className="text-[10px] font-bold text-slate-500 text-center">{passkeyMsg}</p>}
                                </div>
                            )}
