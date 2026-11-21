@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification, acceptInvite, setup2FA, verifySetup2FA } from './services/authService';
+import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification, acceptInvite, setup2FA, verifySetup2FA, loginWithPasskey, passkeysSupported } from './services/authService';
 import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles, Check, XCircle, CheckCircle2, Mail, ArrowLeft, KeyRound, Send, ShieldCheck, QrCode } from 'lucide-react';
 
 interface LoginViewProps {
@@ -452,6 +452,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     
                     {/* Botones Auxiliares */}
                     <div className="space-y-4">
+                        {mode === 'LOGIN' && passkeysSupported() && (
+                            <button
+                                type="button"
+                                disabled={loading}
+                                onClick={async () => {
+                                    setError(''); setSuccessMsg(''); setLoading(true);
+                                    try { await loginWithPasskey(); onLoginSuccess(); }
+                                    catch (err: any) { setError(err.message); }
+                                    finally { setLoading(false); }
+                                }}
+                                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border border-slate-200 text-slate-700 font-black uppercase tracking-widest text-[10px] active:scale-95 lg:hover:bg-slate-50 transition-all disabled:opacity-50"
+                            >
+                                <KeyRound size={16} /> Entrar con clave de acceso
+                            </button>
+                        )}
                         {mode === 'LOGIN' && (
                              <button onClick={() => resetState('FORGOT')} className="w-full text-center text-[9px] font-black text-slate-400 active:text-indigo-600 lg:hover:text-indigo-600 uppercase tracking-widest transition-colors touch-manipulation">
                                 ¿Olvidaste tu contraseña?

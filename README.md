@@ -156,6 +156,8 @@ Elige cómo quieres recibir tu resumen financiero matutino:
   Invita a tu pareja, familiares o socios. Puedes asignar permisos de edición completa o acceso de solo lectura sobre contabilidades específicas.
 - **Máxima Seguridad:**  
   Autenticación con tokens JWT, contraseñas hasheadas con bcrypt y soporte nativo de **Doble Factor de Autenticación (2FA / TOTP)** compatible con Google Authenticator, Authy o 1Password.
+- **Claves de acceso (passkeys):**  
+  Además de la contraseña y el 2FA, cada usuario puede **entrar con huella, Face ID o el PIN de su dispositivo** (WebAuthn), sin escribir contraseña ni código: la verificación del dispositivo cuenta como los dos factores. Se gestionan desde el menú de usuario → *Seguridad 2FA* → *Claves de acceso* (añadir varias, ponerles nombre, eliminarlas). Requiere **https** (o `localhost`); el dominio sale de `APP_URL` y, si hace falta, se fija con `WEBAUTHN_RP_ID` y `WEBAUTHN_ORIGIN`. Si cambias de dominio, las claves ya creadas dejan de valer (la contraseña y el 2FA siguen funcionando).
 - **Copias de Seguridad Automáticas Diarias:**  
   Sistema de backups rotativos automáticos locales por cada contabilidad para que nunca pierdas un solo dato.
 

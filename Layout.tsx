@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle, ShieldCheck, QrCode, PieChart, Mail, Users } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
-import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus, testEmail } from './services/authService';
+import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus, testEmail, listPasskeys, registerPasskey, deletePasskey, passkeysSupported } from './services/authService';
 
 interface LayoutProps {
   currentView: View;
@@ -99,6 +99,9 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
   const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
   const [twoFactorStep, setTwoFactorStep] = useState<'INITIAL' | 'SETUP' | 'VERIFY'>('INITIAL');
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [passkeys, setPasskeys] = useState<{ id: string; name: string; createdAt: string; lastUsed: string | null }[]>([]);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [passkeyMsg, setPasskeyMsg] = useState('');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [setupCode, setSetupCode] = useState('');
   const [setupError, setSetupError] = useState('');
@@ -212,6 +215,33 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
           setTwoFactorEnabled(status.enabled);
       } catch (e) {
           console.error(e);
+      }
+      setPasskeyMsg('');
+      setPasskeys(await listPasskeys().catch(() => []));
+  };
+
+  const addPasskey = async () => {
+      const name = (window.prompt('Nombre para esta clave (por ejemplo, «iPhone de Miki»):', '') || '').trim();
+      setPasskeyBusy(true); setPasskeyMsg('');
+      try {
+          await registerPasskey(name);
+          setPasskeys(await listPasskeys());
+          setPasskeyMsg('Clave de acceso añadida.');
+      } catch (err: any) {
+          setPasskeyMsg(err.message);
+      } finally {
+          setPasskeyBusy(false);
+      }
+  };
+
+  const removePasskey = async (id: string, name: string) => {
+      if (!window.confirm('¿Eliminar la clave «' + name + '»? Con ella ya no podrás entrar.')) return;
+      try {
+          await deletePasskey(id);
+          setPasskeys(await listPasskeys());
+          setPasskeyMsg('Clave eliminada.');
+      } catch (err: any) {
+          setPasskeyMsg(err.message);
       }
   };
 
@@ -548,6 +578,24 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                            )}
                            
                            <p className="text-[10px] text-slate-400">Compatible con Google Authenticator, Microsoft Auth y otros.</p>
+
+                           {passkeysSupported() && (
+                               <div className="pt-4 border-t border-slate-100 space-y-3 text-left">
+                                   <p className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2"><Key size={14} className="text-indigo-500"/> Claves de acceso</p>
+                                   <p className="text-[10px] text-slate-400">Entra con huella, Face ID o el PIN del dispositivo, sin contraseña ni código del autenticador.</p>
+                                   {passkeys.map(p => (
+                                       <div key={p.id} className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                           <div className="min-w-0">
+                                               <p className="text-xs font-bold text-slate-700 truncate">{p.name}</p>
+                                               <p className="text-[10px] text-slate-400">Creada el {new Date(p.createdAt).toLocaleDateString('es-ES')}{p.lastUsed ? ' · usada el ' + new Date(p.lastUsed).toLocaleDateString('es-ES') : ''}</p>
+                                           </div>
+                                           <button onClick={() => removePasskey(p.id, p.name)} className="p-2 text-rose-400 active:text-rose-600 lg:hover:text-rose-600 touch-manipulation" aria-label="Eliminar clave"><Trash2 size={16}/></button>
+                                       </div>
+                                   ))}
+                                   <button onClick={addPasskey} disabled={passkeyBusy} className="w-full py-3 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl font-black uppercase text-[10px] tracking-widest active:bg-indigo-100 lg:hover:bg-indigo-100 touch-manipulation disabled:opacity-50">{passkeyBusy ? 'Esperando al dispositivo…' : 'Añadir clave de acceso'}</button>
+                                   {passkeyMsg && <p className="text-[10px] font-bold text-slate-500 text-center">{passkeyMsg}</p>}
+                               </div>
+                           )}
                       </div>
                   )}
 

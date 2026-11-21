@@ -378,3 +378,119 @@ export const deleteBook = async (bookId: string) => {
     }
     return await res.json();
 };
+
+// CLAVES DE ACCESO (PASSKEYS / WEBAUTHN): huella, Face ID o PIN del dispositivo, sin contraseña ni código del autenticador
+
+const b64uABuf = (s: string): ArrayBuffer => {
+    const b = atob(s.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(s.length / 4) * 4, '='));
+    const u = new Uint8Array(b.length);
+    for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+    return u.buffer;
+};
+const bufAB64u = (buf: ArrayBuffer): string => {
+    let s = '';
+    new Uint8Array(buf).forEach(x => { s += String.fromCharCode(x); });
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+
+export const passkeysSupported = () =>
+    typeof window !== 'undefined' && !!window.PublicKeyCredential && !!navigator.credentials && window.isSecureContext;
+
+const mensajeWebAuthn = (err: any) =>
+    err?.name === 'NotAllowedError' ? 'Operación cancelada o sin tiempo.' :
+    err?.name === 'InvalidStateError' ? 'Esta clave ya está registrada en este dispositivo.' :
+    err?.message || 'No se pudo usar la clave de acceso.';
+
+export const loginWithPasskey = async () => {
+    try {
+        const r = await fetch('/api/passkeys/login/options', { method: 'POST' });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'No se pudo iniciar el acceso con clave');
+        const { options, challengeId } = await r.json();
+        const cred: any = await navigator.credentials.get({
+            publicKey: {
+                challenge: b64uABuf(options.challenge),
+                rpId: options.rpId,
+                timeout: options.timeout,
+                userVerification: 'required',
+            },
+        });
+        if (!cred) throw new Error('Operación cancelada.');
+        const response = {
+            id: cred.id,
+            rawId: bufAB64u(cred.rawId),
+            type: cred.type,
+            clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+            response: {
+                clientDataJSON: bufAB64u(cred.response.clientDataJSON),
+                authenticatorData: bufAB64u(cred.response.authenticatorData),
+                signature: bufAB64u(cred.response.signature),
+                userHandle: cred.response.userHandle ? bufAB64u(cred.response.userHandle) : undefined,
+            },
+        };
+        const v = await fetch('/api/passkeys/login/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ challengeId, response }),
+        });
+        const data = await v.json().catch(() => ({}));
+        if (!v.ok) throw new Error(data.error || 'No se pudo verificar la clave');
+        setSession(data.token, data.username);
+        return data;
+    } catch (err: any) {
+        throw new Error(mensajeWebAuthn(err));
+    }
+};
+
+export const listPasskeys = async (): Promise<{ id: string; name: string; createdAt: string; lastUsed: string | null }[]> => {
+    const token = getToken();
+    if (token?.startsWith('local_') || token?.startsWith('guest_')) return [];
+    const res = await fetch('/api/passkeys', { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!res.ok) return [];
+    return (await res.json()).passkeys || [];
+};
+
+export const registerPasskey = async (name: string) => {
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+    try {
+        const r = await fetch('/api/passkeys/register/options', { method: 'POST', headers });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'No se pudo iniciar el registro');
+        const o = await r.json();
+        const cred: any = await navigator.credentials.create({
+            publicKey: {
+                challenge: b64uABuf(o.challenge),
+                rp: o.rp,
+                user: { id: b64uABuf(o.user.id), name: o.user.name, displayName: o.user.displayName || o.user.name },
+                pubKeyCredParams: o.pubKeyCredParams,
+                timeout: o.timeout,
+                attestation: 'none',
+                excludeCredentials: (o.excludeCredentials || []).map((c: any) => ({ id: b64uABuf(c.id), type: 'public-key', transports: c.transports })),
+                authenticatorSelection: o.authenticatorSelection,
+            },
+        });
+        if (!cred) throw new Error('Operación cancelada.');
+        const response = {
+            id: cred.id,
+            rawId: bufAB64u(cred.rawId),
+            type: cred.type,
+            clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+            response: {
+                clientDataJSON: bufAB64u(cred.response.clientDataJSON),
+                attestationObject: bufAB64u(cred.response.attestationObject),
+                transports: cred.response.getTransports ? cred.response.getTransports() : [],
+            },
+        };
+        const v = await fetch('/api/passkeys/register/verify', { method: 'POST', headers, body: JSON.stringify({ name, response }) });
+        if (!v.ok) throw new Error((await v.json().catch(() => ({}))).error || 'No se pudo registrar la clave');
+        return true;
+    } catch (err: any) {
+        throw new Error(mensajeWebAuthn(err));
+    }
+};
+
+export const deletePasskey = async (id: string) => {
+    const token = getToken();
+    const res = await fetch('/api/passkeys/' + encodeURIComponent(id), { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'No se pudo eliminar la clave');
+    return true;
+};

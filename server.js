@@ -14,6 +14,7 @@ import { BankService } from './bankService.js';
 import { NotificationService } from './notificationService.js';
 import { SyncEngine } from './syncEngine.js';
 import { loadSmtpConfig, sendViaSmtp } from './mailer.js';
+import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
 
 const envConfig = dotenv.config();
 if (envConfig.error) {
@@ -66,6 +67,23 @@ async function startServer() {
     const APP_URL = await getSecret('APP_URL') || `http://localhost:${PORT}`;
     
     console.log(`🚀 [CONFIG] APP_URL: ${APP_URL}`);
+
+    // Claves de acceso (passkeys / WebAuthn): el dominio y el origen salen de APP_URL (se pueden fijar con WEBAUTHN_RP_ID y WEBAUTHN_ORIGIN).
+    // Los navegadores solo las permiten en https o en localhost.
+    const RP_ID = await getSecret('WEBAUTHN_RP_ID') || new URL(APP_URL).hostname;
+    const RP_ORIGIN = await getSecret('WEBAUTHN_ORIGIN') || new URL(APP_URL).origin;
+    const RP_NAME = 'ContaMiki';
+    const retosPasskey = new Map(); // clave -> { challenge, expira }; solo en memoria, un solo uso, 5 minutos
+    const guardarReto = (clave, challenge) => {
+        const ahora = Date.now();
+        for (const [k, v] of retosPasskey) if (v.expira < ahora) retosPasskey.delete(k);
+        retosPasskey.set(clave, { challenge, expira: ahora + 5 * 60 * 1000 });
+    };
+    const tomarReto = (clave) => {
+        const r = retosPasskey.get(clave);
+        retosPasskey.delete(clave);
+        return r && r.expira > Date.now() ? r.challenge : null;
+    };
     console.log('🔐 [CONFIG] JWT_SECRET: definida');
     
     const sendEmail = async (to, subject, text, html) => {
@@ -1146,6 +1164,122 @@ app.get('/api/2fa/status', authenticateToken, async (req, res) => {
         res.json({ enabled: !!user?.twoFactorEnabled });
     } catch (err) {
         res.status(500).json({ error: "Error obteniendo estado 2FA" });
+    }
+});
+
+// --- CLAVES DE ACCESO (PASSKEYS / WEBAUTHN) ---
+// Entrar con huella, Face ID o el PIN del dispositivo, sin contraseña ni código del autenticador: la verificación del usuario
+// (userVerification: required) ya cuenta como los dos factores. La contraseña + 2FA siguen funcionando como hasta ahora.
+
+app.get('/api/passkeys', authenticateToken, async (req, res) => {
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.username === req.user.username);
+        res.json({ passkeys: (user?.passkeys || []).map(p => ({ id: p.id, name: p.name, createdAt: p.createdAt, lastUsed: p.lastUsed || null })) });
+    } catch (err) { res.status(500).json({ error: "Error obteniendo las claves de acceso" }); }
+});
+
+app.post('/api/passkeys/register/options', authenticateToken, async (req, res) => {
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.username === req.user.username);
+        if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+        const options = await generateRegistrationOptions({
+            rpName: RP_NAME,
+            rpID: RP_ID,
+            userName: user.username,
+            userID: crypto.createHash('sha256').update('contamiki:' + user.username).digest(),
+            attestationType: 'none',
+            excludeCredentials: (user.passkeys || []).map(p => ({ id: p.id, transports: p.transports })),
+            authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
+        });
+        guardarReto('reg:' + user.username, options.challenge);
+        res.json(options);
+    } catch (err) {
+        console.error("passkeys/register/options:", err);
+        res.status(500).json({ error: "No se pudo preparar el registro de la clave" });
+    }
+});
+
+app.post('/api/passkeys/register/verify', authenticateToken, async (req, res) => {
+    const { response, name } = req.body || {};
+    try {
+        const expectedChallenge = tomarReto('reg:' + req.user.username);
+        if (!expectedChallenge) return res.status(400).json({ error: "La operación ha caducado. Inténtalo de nuevo." });
+        const v = await verifyRegistrationResponse({
+            response, expectedChallenge, expectedOrigin: RP_ORIGIN, expectedRPID: RP_ID, requireUserVerification: true,
+        });
+        if (!v.verified || !v.registrationInfo) return res.status(400).json({ error: "No se pudo verificar la clave" });
+        const { credential, credentialDeviceType, credentialBackedUp } = v.registrationInfo;
+        const users = await readUsers();
+        const user = users.find(u => u.username === req.user.username);
+        if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+        user.passkeys = user.passkeys || [];
+        if (users.some(u => (u.passkeys || []).some(p => p.id === credential.id))) return res.status(409).json({ error: "Esa clave ya está registrada" });
+        user.passkeys.push({
+            id: credential.id,
+            publicKey: Buffer.from(credential.publicKey).toString('base64url'),
+            counter: credential.counter,
+            transports: credential.transports || response?.response?.transports || [],
+            deviceType: credentialDeviceType,
+            backedUp: credentialBackedUp,
+            name: String(name || '').replace(/[<>]/g, '').trim().slice(0, 40) || 'Mi dispositivo',
+            createdAt: new Date().toISOString(),
+        });
+        await saveUsers(users);
+        res.json({ success: true });
+    } catch (err) {
+        console.error("passkeys/register/verify:", err?.message);
+        res.status(400).json({ error: "No se pudo registrar la clave de acceso" });
+    }
+});
+
+app.delete('/api/passkeys/:id', authenticateToken, async (req, res) => {
+    try {
+        const users = await readUsers();
+        const user = users.find(u => u.username === req.user.username);
+        const antes = (user?.passkeys || []).length;
+        if (!user || !antes) return res.status(404).json({ error: "Clave no encontrada" });
+        user.passkeys = user.passkeys.filter(p => p.id !== req.params.id);
+        if (user.passkeys.length === antes) return res.status(404).json({ error: "Clave no encontrada" });
+        await saveUsers(users);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: "Error eliminando la clave" }); }
+});
+
+// Entrada sin escribir nada (credenciales «descubribles»): el navegador ofrece las claves de este sitio.
+app.post('/api/passkeys/login/options', async (req, res) => {
+    try {
+        const options = await generateAuthenticationOptions({ rpID: RP_ID, userVerification: 'required' });
+        const challengeId = crypto.randomBytes(16).toString('hex');
+        guardarReto('login:' + challengeId, options.challenge);
+        res.json({ options, challengeId });
+    } catch (err) { res.status(500).json({ error: "No se pudo preparar el acceso con clave" }); }
+});
+
+app.post('/api/passkeys/login/verify', async (req, res) => {
+    const { challengeId, response } = req.body || {};
+    try {
+        const expectedChallenge = tomarReto('login:' + String(challengeId || ''));
+        if (!expectedChallenge || !response?.id) return res.status(401).json({ error: "La operación ha caducado. Inténtalo de nuevo." });
+        const users = await readUsers();
+        const user = users.find(u => (u.passkeys || []).some(p => p.id === response.id));
+        const pk = user?.passkeys.find(p => p.id === response.id);
+        if (!user || !pk) return res.status(401).json({ error: "Clave de acceso no reconocida" });
+        const v = await verifyAuthenticationResponse({
+            response, expectedChallenge, expectedOrigin: RP_ORIGIN, expectedRPID: RP_ID, requireUserVerification: true,
+            credential: { id: pk.id, publicKey: Buffer.from(pk.publicKey, 'base64url'), counter: pk.counter, transports: pk.transports },
+        });
+        if (!v.verified) return res.status(401).json({ error: "No se pudo verificar la clave" });
+        if (user.isVerified === false) return res.status(403).json({ error: "Cuenta no verificada. Revisa tu email." });
+        pk.counter = v.authenticationInfo.newCounter;
+        pk.lastUsed = new Date().toISOString();
+        await saveUsers(users);
+        const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '30d' });
+        res.json({ token, username: user.username });
+    } catch (err) {
+        console.error("passkeys/login/verify:", err?.message);
+        res.status(401).json({ error: "No se pudo verificar la clave de acceso" });
     }
 });
 

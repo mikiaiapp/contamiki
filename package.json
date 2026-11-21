@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.42.0",
+    "@simplewebauthn/server": "^11.0.0",
     "bcryptjs": "^2.4.3",
     "dompurify": "^3.4.17",
     "dotenv": "^17.3.1",
