@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { LayoutDashboard, Receipt, Settings, Wallet, LogOut, ChevronDown, Plus, Edit2, Check, Cloud, CloudOff, RefreshCw, Save, User, Key, Trash2, X, AlertCircle, ShieldCheck, QrCode, PieChart, Mail, Users } from 'lucide-react';
 import { View, AppState, BookMetadata } from './types';
-import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus, testEmail, listPasskeys, registerPasskey, deletePasskey, passkeysSupported, deviceName } from './services/authService';
+import { logout, getUsername, changePassword, deleteAccount, setup2FA, verifySetup2FA, disable2FA, get2FAStatus, testEmail, listPasskeys, registerPasskey, deletePasskey, passkeysSupported, deviceName, deviceHasPasskey } from './services/authService';
 
 interface LayoutProps {
   currentView: View;
@@ -596,6 +596,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
                                        </div>
                                    ))}
                                    <button onClick={addPasskey} disabled={passkeyBusy} className="w-full py-3 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl font-black uppercase text-[10px] tracking-widest active:bg-indigo-100 lg:hover:bg-indigo-100 touch-manipulation disabled:opacity-50">{passkeyBusy ? 'Esperando al dispositivo…' : 'Activar Face ID / huella en este dispositivo'}</button>
+                                   {deviceHasPasskey() && !passkeyMsg && <p className="text-[10px] font-bold text-emerald-600 text-center">Face ID / huella activado en este dispositivo.</p>}
                                    {passkeyMsg && <p className="text-[10px] font-bold text-slate-500 text-center">{passkeyMsg}</p>}
                                </div>
                            )}

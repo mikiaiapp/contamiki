@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification, acceptInvite, setup2FA, verifySetup2FA, loginWithPasskey, passkeysSupported, deviceHasPasskey } from './services/authService';
+import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification, acceptInvite, setup2FA, verifySetup2FA, loginWithPasskey, passkeysSupported, deviceHasPasskey, getToken, registerPasskey, deviceName, passkeyOfferDeclined, declinePasskeyOffer } from './services/authService';
 import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles, Check, XCircle, CheckCircle2, Mail, ArrowLeft, KeyRound, Send, ShieldCheck, QrCode } from 'lucide-react';
 
 interface LoginViewProps {
     onLoginSuccess: () => void;
 }
 
-type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT' | 'RESET_PASSWORD' | 'TWO_FACTOR' | 'REGISTER_INVITE' | 'SETUP_2FA_MANDATORY';
+type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT' | 'RESET_PASSWORD' | 'TWO_FACTOR' | 'REGISTER_INVITE' | 'SETUP_2FA_MANDATORY' | 'OFFER_PASSKEY';
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const [mode, setMode] = useState<AuthMode>('LOGIN');
@@ -34,6 +34,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         setError(''); setSuccessMsg(''); setLoading(true);
         try { await loginWithPasskey(); onLoginSuccess(); }
         catch (err: any) { if (!(auto && err.cancelado)) setError(err.message); }
+        finally { setLoading(false); }
+    };
+    // Tras entrar con contraseña (y código), se ofrece activar Face ID / huella en este dispositivo una sola vez
+    const finalizarLogin = () => {
+        if (passkeysSupported() && !deviceHasPasskey() && !passkeyOfferDeclined() && !getToken()?.startsWith('local_') && !getToken()?.startsWith('guest_')) setMode('OFFER_PASSKEY');
+        else onLoginSuccess();
+    };
+    const activarPasskey = async () => {
+        setError(''); setLoading(true);
+        try { await registerPasskey(deviceName()); onLoginSuccess(); }
+        catch (err: any) { setError(err.message); }
         finally { setLoading(false); }
     };
     const autoIntentado = useRef(false);
@@ -128,7 +139,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             try {
                 if (mode === 'TWO_FACTOR') {
                     await login2FA(tempToken!, twoFactorCode);
-                    onLoginSuccess();
+                    finalizarLogin();
                 } else {
                     // SETUP 2FA
                     await verifySetup2FA(twoFactorCode);
@@ -171,7 +182,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     setMode('TWO_FACTOR');
                     setSuccessMsg('');
                 } else {
-                    onLoginSuccess();
+                    finalizarLogin();
                 }
             } else if (mode === 'REGISTER') {
                 await register(email, password);
@@ -239,6 +250,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         setShowResend(false);
         setTwoFactorCode('');
     };
+
+    if (mode === 'OFFER_PASSKEY') {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 md:p-10 font-sans">
+                <div className="bg-white rounded-[2.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.06)] w-full max-w-lg overflow-hidden border border-slate-100 p-10 text-center space-y-6">
+                    <KeyRound className="w-14 h-14 text-indigo-600 mx-auto" />
+                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">¿Entrar con Face ID o huella?</h3>
+                    <p className="text-sm text-slate-500">La próxima vez entrarás directamente con Face ID, la huella o el PIN de este dispositivo, sin contraseña ni código del autenticador.</p>
+                    {error && <div className="bg-rose-50 text-rose-600 p-4 rounded-2xl text-[10px] font-bold border border-rose-100 flex items-center justify-center gap-2"><AlertCircle size={14} /> {error}</div>}
+                    <button type="button" disabled={loading} onClick={activarPasskey} className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] shadow-xl active:scale-95 lg:hover:bg-indigo-700 transition-all disabled:opacity-50">
+                        <KeyRound size={18} /> {loading ? 'Esperando al dispositivo…' : 'Activar Face ID / huella'}
+                    </button>
+                    <button type="button" disabled={loading} onClick={() => { declinePasskeyOffer(); onLoginSuccess(); }} className="w-full text-center text-[9px] font-black text-slate-400 active:text-slate-600 lg:hover:text-slate-600 uppercase tracking-widest">
+                        Ahora no
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 md:p-10 font-sans">

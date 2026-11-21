@@ -399,6 +399,10 @@ export const passkeysSupported = () =>
 // Este dispositivo tiene una clave de acceso de la app: al abrir el acceso se pide Face ID / huella directamente
 const PASSKEY_DEVICE_KEY = 'contamiki_passkey_device';
 export const deviceHasPasskey = () => { try { return localStorage.getItem(PASSKEY_DEVICE_KEY) === '1'; } catch { return false; } };
+// «Ahora no» en la oferta de activar Face ID al entrar: no se vuelve a ofrecer en este dispositivo (se sigue pudiendo activar en Seguridad 2FA)
+const PASSKEY_NO_KEY = 'contamiki_passkey_no';
+export const passkeyOfferDeclined = () => { try { return localStorage.getItem(PASSKEY_NO_KEY) === '1'; } catch { return false; } };
+export const declinePasskeyOffer = () => { try { localStorage.setItem(PASSKEY_NO_KEY, '1'); } catch { /* sin almacenamiento */ } };
 const marcarDispositivo = (si: boolean) => { try { si ? localStorage.setItem(PASSKEY_DEVICE_KEY, '1') : localStorage.removeItem(PASSKEY_DEVICE_KEY); } catch { /* sin almacenamiento */ } };
 
 // Nombre automático del dispositivo para la clave («iPhone · Safari»): el usuario no tiene que escribirlo
@@ -417,6 +421,7 @@ const mensajeWebAuthn = (err: any) => {
         err?.name === 'InvalidStateError' ? 'Esta clave ya está registrada en este dispositivo.' :
         err?.message || 'No se pudo usar la clave de acceso.');
     e.cancelado = err?.name === 'NotAllowedError';
+    e.yaRegistrada = err?.name === 'InvalidStateError';
     e.noReconocida = /no reconocida/i.test(err?.message || '');
     return e;
 };
@@ -506,9 +511,12 @@ export const registerPasskey = async (name: string) => {
         const v = await fetch('/api/passkeys/register/verify', { method: 'POST', headers, body: JSON.stringify({ name, response }) });
         if (!v.ok) throw new Error((await v.json().catch(() => ({}))).error || 'No se pudo registrar la clave');
         marcarDispositivo(true);
+        try { localStorage.removeItem(PASSKEY_NO_KEY); } catch { /* sin almacenamiento */ }
         return true;
     } catch (err: any) {
-        throw mensajeWebAuthn(err);
+        const e = mensajeWebAuthn(err);
+        if (e.yaRegistrada) { marcarDispositivo(true); return true; }   // este dispositivo ya tenía la clave (sincronizada): vale como activado
+        throw e;
     }
 };
 
