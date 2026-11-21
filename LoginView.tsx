@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification, acceptInvite, setup2FA, verifySetup2FA, loginWithPasskey, prepararPasskey, passkeysSupported, deviceHasPasskey, registerPasskey, deviceName } from './services/authService';
+import { login, login2FA, register, loginAsGuest, verifyEmail, requestPasswordReset, resetPassword, resendVerification, acceptInvite, setup2FA, verifySetup2FA, loginWithPasskey, prepararPasskey, passkeysSupported, deviceHasPasskey, registerPasskey, prepararRegistro, deviceName } from './services/authService';
 import { Wallet, Lock, User, UserPlus, LogIn, AlertCircle, Sparkles, Check, XCircle, CheckCircle2, Mail, ArrowLeft, KeyRound, Send, ShieldCheck, QrCode } from 'lucide-react';
 
 interface LoginViewProps {
     onLoginSuccess: () => void;
 }
 
-type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT' | 'RESET_PASSWORD' | 'TWO_FACTOR' | 'REGISTER_INVITE' | 'SETUP_2FA_MANDATORY';
+type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT' | 'RESET_PASSWORD' | 'TWO_FACTOR' | 'REGISTER_INVITE' | 'SETUP_2FA_MANDATORY' | 'OFFER_PASSKEY';
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const [mode, setMode] = useState<AuthMode>('LOGIN');
@@ -50,6 +50,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 else if (!auto && !err.cancelado) setError(err.message);
             })
             .finally(() => { setLoading(false); preparar(); });
+    };
+    // Pantalla de un toque para activar Face ID (cuando Safari no deja crear la clave sin un gesto del usuario)
+    const regPrepRef = useRef<any>(null);
+    useEffect(() => {
+        if (mode !== 'OFFER_PASSKEY') return;
+        regPrepRef.current = null;
+        prepararRegistro().then(o => { regPrepRef.current = o; }).catch(() => { regPrepRef.current = null; });
+    }, [mode]);
+    // Sin ningún await antes de registerPasskey: se conserva el toque
+    const activarFaceId = () => {
+        const prep = regPrepRef.current;
+        if (!prep) { setError('Un momento… vuelve a pulsar.'); prepararRegistro().then(o => { regPrepRef.current = o; setError(''); }).catch(() => {}); return; }
+        regPrepRef.current = null;
+        setError(''); setLoading(true);
+        registerPasskey(deviceName(), prep)
+            .then(() => onLoginSuccess())
+            .catch((err: any) => { setLoading(false); if (!err.cancelado) setError(err.message); });
     };
     // En la pantalla del código del autenticador: «Entrar con Face ID la próxima vez» (activa la clave de este dispositivo al verificar)
     const [recordarFaceId, setRecordarFaceId] = useState(true);
@@ -143,7 +160,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 if (mode === 'TWO_FACTOR') {
                     await login2FA(tempToken!, twoFactorCode);
                     if (recordarFaceId && passkeysSupported() && !deviceHasPasskey()) {
-                        try { await registerPasskey(deviceName()); } catch { /* si se cancela, se entra igual; se puede activar en Seguridad 2FA */ }
+                        try { await registerPasskey(deviceName()); }
+                        catch { setMode('OFFER_PASSKEY'); return; }   // Safari exige un toque para crear la clave: se pide con un botón
                     }
                     onLoginSuccess();
                 } else {
@@ -256,6 +274,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         setShowResend(false);
         setTwoFactorCode('');
     };
+
+    if (mode === 'OFFER_PASSKEY') {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 md:p-10 font-sans">
+                <div className="bg-white rounded-[2.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.06)] w-full max-w-lg overflow-hidden border border-slate-100 p-10 text-center space-y-6">
+                    <KeyRound className="w-14 h-14 text-indigo-600 mx-auto" />
+                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Activar Face ID / huella</h3>
+                    <p className="text-sm text-slate-500">Pulsa el botón y confirma con Face ID: la próxima vez entrarás directamente, sin usuario, contraseña ni código.</p>
+                    {error && <div className="bg-rose-50 text-rose-600 p-4 rounded-2xl text-[10px] font-bold border border-rose-100 flex items-center justify-center gap-2"><AlertCircle size={14} /> {error}</div>}
+                    <button type="button" disabled={loading} onClick={activarFaceId} className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] shadow-xl active:scale-95 lg:hover:bg-indigo-700 transition-all disabled:opacity-50">
+                        <KeyRound size={18} /> {loading ? 'Esperando al dispositivo…' : 'Activar Face ID / huella'}
+                    </button>
+                    <button type="button" disabled={loading} onClick={() => onLoginSuccess()} className="w-full text-center text-[9px] font-black text-slate-400 active:text-slate-600 lg:hover:text-slate-600 uppercase tracking-widest">
+                        Ahora no
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 md:p-10 font-sans">

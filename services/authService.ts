@@ -483,13 +483,18 @@ export const listPasskeys = async (): Promise<{ id: string; name: string; create
     return (await res.json()).passkeys || [];
 };
 
-export const registerPasskey = async (name: string) => {
+// Reto de registro pedido de antemano: así la creación de la clave se lanza dentro del toque del usuario (Safari lo exige)
+export const prepararRegistro = async () => {
+    const r = await fetch('/api/passkeys/register/options', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` } });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'No se pudo iniciar el registro');
+    return await r.json();
+};
+
+export const registerPasskey = async (name: string, prep?: any) => {
     const token = getToken();
     const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
     try {
-        const r = await fetch('/api/passkeys/register/options', { method: 'POST', headers });
-        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'No se pudo iniciar el registro');
-        const o = await r.json();
+        const o = prep || await prepararRegistro();
         const cred: any = await navigator.credentials.create({
             publicKey: {
                 challenge: b64uABuf(o.challenge),
