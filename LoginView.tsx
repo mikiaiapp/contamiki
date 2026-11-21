@@ -32,6 +32,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     // Clave de acceso (Face ID / huella). Si este dispositivo ya tiene una, el reto se pide al abrir el acceso y Face ID se lanza EN EL TOQUE sobre
     // el campo del email (o sobre el botón): así iOS no pregunta «¿Usar llave de acceso?», va directo a Face ID.
     const prepRef = useRef<{ options: any; challengeId: string; t: number } | null>(null);
+    // Línea de estado de Face ID en el acceso (explica por qué no salta, en vez de fallar en silencio)
+    const [estadoFaceId, setEstadoFaceId] = useState('');
     const preparar = async () => {
         if (!passkeysSupported() || !deviceHasPasskey()) return;
         try { prepRef.current = { ...(await prepararPasskey()), t: Date.now() }; } catch { prepRef.current = null; }
@@ -47,7 +49,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             .then(() => onLoginSuccess())
             .catch((err: any) => {
                 if (err.noReconocida) setError('La clave de Face ID de este dispositivo ya no es válida. Entra con contraseña y vuelve a activarla.');
-                else if (!auto && !err.cancelado) setError(err.message);
+                else if (err.cancelado) setEstadoFaceId('Face ID no se completó. Toca el campo del email o el botón para repetirlo.');
+                else setEstadoFaceId('No se pudo usar Face ID: ' + err.message);
             })
             .finally(() => { setLoading(false); preparar(); });
     };
@@ -72,8 +75,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const [recordarFaceId, setRecordarFaceId] = useState(true);
     useEffect(() => {
         if (new URLSearchParams(window.location.search).get('action')) return;
+        if (!passkeysSupported()) { setEstadoFaceId('Este navegador no permite Face ID / claves de acceso aquí.'); return; }
+        if (!deviceHasPasskey()) { setEstadoFaceId('Face ID no está activado en este dispositivo: entra con contraseña y código y actívalo.'); return; }
         // Al abrir el acceso con Face ID activado: se prepara el reto y se pide Face ID directamente
-        preparar().then(() => { if (prepRef.current) entrarConClave(true); });
+        setEstadoFaceId('Preparando Face ID…');
+        preparar().then(() => {
+            if (prepRef.current) { setEstadoFaceId(''); entrarConClave(true); }
+            else setEstadoFaceId('No se pudo preparar Face ID (sin respuesta del servidor). Entra con contraseña.');
+        });
     }, []);
 
     // Detección de parámetros URL (Verificación / Reset / Invite)
@@ -373,6 +382,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             <h3 className="text-lg font-black text-slate-900 uppercase">Completar Registro</h3>
                             <p className="text-xs text-slate-500 mt-1">Crea tu contraseña para aceptar la invitación</p>
                         </div>
+                    )}
+
+                    {mode === 'LOGIN' && estadoFaceId && (
+                        <p className="text-[10px] font-bold text-slate-400 text-center mb-4">{estadoFaceId}</p>
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-6">
