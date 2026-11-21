@@ -263,7 +263,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
   };
 
   const removePasskey = async (id: string, name: string) => {
-      if (!window.confirm('¿Eliminar la clave «' + name + '»? Con ella ya no podrás entrar.')) return;
+      if (!window.confirm('¿Eliminar la clave de acceso «' + name + '»? Con ella ya no podrás entrar con Face ID o huella.')) return;
       try {
           await deletePasskey(id);
           setPasskeys(await listPasskeys());
@@ -322,7 +322,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
             <ShieldCheck size={16} className="text-emerald-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Seguridad 2FA</span>
         </button>
         <button onClick={() => { setIsUserMenuOpen(false); setIsChangePassModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
-            <Key size={16} className="text-amber-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cambiar Clave</span>
+            <Key size={16} className="text-amber-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Cambiar contraseña</span>
         </button>
         <button onClick={() => { setIsUserMenuOpen(false); handleTestEmail(); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl lg:hover:bg-slate-50 transition-all active:bg-slate-100 text-slate-600 touch-manipulation">
             <Mail size={16} className="text-blue-500"/> <span className="text-[10px] font-black uppercase tracking-widest">Probar Email</span>
@@ -674,7 +674,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, chi
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
               <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 text-center relative">
                   <button onClick={() => setIsChangePassModalOpen(false)} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-full active:bg-slate-100 lg:hover:bg-slate-100 touch-manipulation"><X size={20}/></button>
-                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-6 flex items-center justify-center gap-2"><Key className="text-amber-500"/> Cambiar Clave</h3>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-6 flex items-center justify-center gap-2"><Key className="text-amber-500"/> Cambiar contraseña</h3>
                   <div className="space-y-4">
                       <input type="password" placeholder="Contraseña Actual" className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" value={currentPass} onChange={e => setCurrentPass(e.target.value)} />
                       <input type="password" placeholder="Nueva Contraseña" className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" value={newPass} onChange={e => setNewPass(e.target.value)} />

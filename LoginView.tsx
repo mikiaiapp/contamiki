@@ -324,7 +324,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     {mode === 'RESET_PASSWORD' && (
                          <div className="text-center mb-4">
                             <h3 className="text-lg font-black text-slate-900 uppercase">Nueva Contraseña</h3>
-                            <p className="text-xs text-slate-500 mt-1">Introduce tu nueva clave segura.</p>
+                            <p className="text-xs text-slate-500 mt-1">Introduce tu nueva contraseña segura.</p>
                         </div>
                     )}
                     {mode === 'TWO_FACTOR' && (
@@ -488,7 +488,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                                     {mode === 'TWO_FACTOR' && <><ShieldCheck size={18} /> Verificar</>}
                                     {mode === 'REGISTER' && <><UserPlus size={18} /> Registrarse</>}
                                     {mode === 'FORGOT' && <><Mail size={18} /> Enviar Enlace</>}
-                                    {mode === 'RESET_PASSWORD' && <><KeyRound size={18} /> Cambiar Clave</>}
+                                    {mode === 'RESET_PASSWORD' && <><KeyRound size={18} /> Cambiar contraseña</>}
                                     {mode === 'REGISTER_INVITE' && <><UserPlus size={18} /> Completar Registro</>}
                                     {mode === 'SETUP_2FA_MANDATORY' && <><ShieldCheck size={18} /> Activar 2FA</>}
                                 </>
