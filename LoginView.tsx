@@ -35,7 +35,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     // Línea de estado de Face ID en el acceso (explica por qué no salta, en vez de fallar en silencio)
     const [estadoFaceId, setEstadoFaceId] = useState('');
     const preparar = async () => {
-        if (!passkeysSupported()) return;
+        if (!passkeysSupported() || !deviceHasPasskey()) return;
         try { prepRef.current = { ...(await prepararPasskey()), t: Date.now() }; } catch { prepRef.current = null; }
     };
     // Importante: sin ningún await antes de loginWithPasskey, para no perder el gesto del usuario cuando viene de un toque.
@@ -76,8 +76,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     useEffect(() => {
         if (new URLSearchParams(window.location.search).get('action')) return;
         if (!passkeysSupported()) { setEstadoFaceId('Este navegador no permite Face ID / claves de acceso aquí.'); return; }
-        // Siempre se deja el reto preparado para el botón «Entrar con Face ID»; si el dispositivo ya lo tiene activado, además se pide solo
-        preparar().then(() => { if (deviceHasPasskey() && prepRef.current) entrarConClave(true); });
+        if (!deviceHasPasskey()) { setEstadoFaceId('Face ID no está activado en este dispositivo: entra con contraseña y código y actívalo.'); return; }
+        // Con Face ID activado: se prepara el reto (para el botón) y se pide solo al abrir
+        preparar().then(() => { if (prepRef.current) entrarConClave(true); });
     }, []);
 
     // Detección de parámetros URL (Verificación / Reset / Invite)
@@ -386,9 +387,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     {mode === 'LOGIN' && passkeysSupported() && (
                         <button
                             type="button"
-                            disabled={loading}
+                            disabled={loading || !deviceHasPasskey()}
                             onClick={() => entrarConClave(false)}
-                            className="w-full flex items-center justify-center gap-2 mb-6 py-5 rounded-2xl bg-indigo-600 text-white font-black uppercase tracking-widest text-[11px] shadow-xl active:scale-95 lg:hover:bg-indigo-700 transition-all disabled:opacity-50"
+                            className={`w-full flex items-center justify-center gap-2 mb-6 py-5 rounded-2xl font-black uppercase tracking-widest text-[11px] transition-all ${deviceHasPasskey() ? 'bg-indigo-600 text-white shadow-xl active:scale-95 lg:hover:bg-indigo-700 disabled:opacity-50' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
                         >
                             <KeyRound size={18} /> Entrar con Face ID / huella
                         </button>
